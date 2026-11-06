@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpotVault — Precision Offline Audio Infrastructure</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307080a'/%3E%3Cpath d='M6 16h3v-3h2v7H9v-2H6v-2zm7-7h2v14h-2V9zm4 4h2v8h-2v-2h-1v-4h1v-2zm4 3h2v4h-2v-4z' fill='%231ed760'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #07080a;
+      --card-bg: rgba(14, 16, 22, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #1ed760;
+      --accent-dim: rgba(30, 215, 96, 0.2);
+      --text: #ffffff;
+      --text-muted: #8a8f98;
+      --font-display: 'Cinzel', serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+
+    /* Fixed Three.js Background Canvas */
+    #webgl-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Subtle Film Grain & Radial Vignette Overlay */
+    .grain-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at 50% 50%, transparent 50%, rgba(7, 8, 10, 0.88) 100%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Giant Background Typography (Transforms on Scroll - KAGE Architecture) */
+    .huge-backdrop-text {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-display);
+      font-size: clamp(5.5rem, 18vw, 22rem);
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      color: rgba(255, 255, 255, 0.032);
+      text-transform: uppercase;
+      user-select: none;
+      z-index: 1;
+      pointer-events: none;
+      white-space: nowrap;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+    }
+
+    /* Top Navigation */
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 1.8rem 3.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2.2rem;
+      list-style: none;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    /* Fixed Bottom Layer: Chapters + Spectrogram Monitor */
+    .fixed-footer-layer {
+      position: fixed;
+      bottom: 2.5rem;
+      left: 3.5rem;
+      right: 3.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .chapter-indicator {
+      display: flex;
+      gap: 1.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      pointer-events: auto;
+    }
+
+    .chapter-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: color 0.3s ease;
+    }
+
+    .chapter-btn.active {
+      color: var(--accent);
+    }
+
+    .chapter-bar {
+      width: 24px;
+      height: 2px;
+      background: currentColor;
+      transition: width 0.3s ease;
+    }
+
+    .chapter-btn.active .chapter-bar {
+      width: 44px;
+    }
+
+    /* Bottom-Right Audio Monitor (Matching video mini-widget) */
+    .mini-monitor {
+      pointer-events: auto;
+      background: rgba(14, 16, 22, 0.88);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(14px);
+      padding: 1.2rem;
+      border-radius: 8px;
+      width: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 16px 32px rgba(0,0,0,0.5);
+    }
+
+    .mini-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .pulse-meter {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 32px;
+      padding: 4px 0;
+    }
+
+    .meter-bar {
+      flex: 1;
+      background: var(--accent);
+      border-radius: 1px;
+      height: 20%;
+      transition: height 0.15s ease;
+    }
+
+    /* Content Stream */
+    .content-container {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+    }
+
+    section.scroll-scene {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 6rem 8vw;
+      position: relative;
+    }
+
+    /* Hero Layout (Scene 01) */
+    .scene-hero-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      width: 100%;
+      align-items: center;
+      gap: 4rem;
+    }
+
+    .scene-tagline {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.25em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .scene-tagline::before {
+      content: '';
+      width: 24px;
+      height: 1px;
+      background: var(--accent);
+    }
+
+    .main-heading {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 5vw, 4.4rem);
+      font-weight: 700;
+      line-height: 1.12;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+      margin-bottom: 2rem;
+    }
+
+    .scene-desc {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--text-muted);
+      max-width: 520px;
+      margin-bottom: 3rem;
+      font-weight: 300;
+    }
+
+    .cta-row {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
+
+    .btn-architect {
+      background: var(--accent);
+      color: #000000;
+      text-decoration: none;
+      padding: 1rem 2rem;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      transition: background 0.3s ease, transform 0.2s ease;
+      box-shadow: 0 4px 18px rgba(30, 215, 96, 0.25);
+    }
+
+    .btn-architect:hover {
+      background: #25ef6d;
+      transform: translateY(-2px);
+    }
+
+    .btn-ghost {
+      color: var(--text);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 4px;
+      transition: border-color 0.3s ease;
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--text);
+    }
+
+    /* Scene 02: Engine Specification Grid */
+    .specs-matrix {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+      width: 100%;
+    }
+
+    .spec-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 2.5rem;
+      backdrop-filter: blur(16px);
+      transition: border-color 0.3s ease, transform 0.3s ease;
+    }
+
+    .spec-card:hover {
+      border-color: rgba(30, 215, 96, 0.4);
+      transform: translateY(-4px);
+    }
+
+    .spec-id {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
+      display: block;
+    }
+
+    .spec-title {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .spec-body {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    /* Scene 03: Architecture Terminal */
+    .terminal-container {
+      width: 100%;
+      background: rgba(10, 11, 15, 0.92);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+    }
+
+    .terminal-header {
+      background: rgba(18, 20, 26, 0.85);
+      padding: 0.9rem 1.5rem;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .terminal-body {
+      padding: 2rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.9;
+      color: #b5bcc7;
+    }
+
+    .terminal-highlight {
+      color: var(--accent);
+    }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(20px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .modal-box {
+      background: #0f1115;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      max-width: 720px;
+      width: 100%;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-family: var(--font-display);
+      font-size: 1.3rem;
+      text-transform: uppercase;
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .modal-body {
+      padding: 2rem;
+      overflow-y: auto;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+
+    @media (max-width: 900px) {
+      .scene-hero-grid { grid-template-columns: 1fr; }
+      .specs-matrix { grid-template-columns: 1fr; }
+      .fixed-footer-layer { display: none; }
+      header { padding: 1.5rem 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Three.js Dimensional Background Canvas -->
+  <canvas id="webgl-canvas"></canvas>
+  <div class="grain-overlay"></div>
+
+  <!-- Giant Backdrop Typography (Transforms on Scroll - VAULT -> ENGINE -> AUDIO) -->
+  <div class="huge-backdrop-text" id="backdrop-text">VAULT</div>
+
+  <!-- Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-dot"></div>
+      SpotVault v1.0
+    </div>
+    <ul class="nav-links">
+      <li><a href="#scene-01">Threshold</a></li>
+      <li><a href="#scene-02">Engine</a></li>
+      <li><a href="#scene-03">Architecture</a></li>
+      <li><a href="#" onclick="openModal('privacy'); return false;">Privacy</a></li>
+      <li><a href="#" onclick="openModal('terms'); return false;">Terms</a></li>
+    </ul>
+  </header>
+
+  <!-- Content Stream -->
+  <div class="content-container">
+
+    <!-- Scene 01: Hero / Threshold -->
+    <section class="scroll-scene" id="scene-01">
+      <div class="scene-hero-grid">
+        <div>
+          <div class="scene-tagline">Chapter 00 // Zero Loss Offline Audio</div>
+          <h1 class="main-heading">Where Acoustic Fidelity Meets Total Sovereignty.</h1>
+          <p class="scene-desc">
+            Direct high-bitrate audio extraction engine built on Python and PyInstaller. No subscription telemetry, zero cloud locks, and resilient multi-provider redundancy.
+          </p>
+          <div class="cta-row">
+            <a href="SpotVault_Setup.exe" class="btn-architect" download>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Download Setup (v1.0)
+            </a>
+            <a href="#scene-02" class="btn-ghost">Read Specifications &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scene 02: The Engine / Specifications -->
+    <section class="scroll-scene" id="scene-02">
+      <div style="width: 100%;">
+        <div class="scene-tagline">Chapter 01 // Structural Framework</div>
+        <h2 class="main-heading" style="margin-bottom: 3.5rem;">Engineered For Permanence.</h2>
+        <div class="specs-matrix">
+          <div class="spec-card">
+            <span class="spec-id">01 // METADATA PARSER</span>
+            <h3 class="spec-title">Lossless Tags</h3>
+            <p class="spec-body">Automatic embedding of high-resolution cover artwork, dynamic track sequencing, artist credits, and year stamps directly into audio containers.</p>
+          </div>
+          <div class="spec-card">
+            <span class="spec-id">02 // MULTI-SOURCE SYNC</span>
+            <h3 class="spec-title">Dual Streams</h3>
+            <p class="spec-body">Redundant fallback network scanning across YouTube Music and SoundCloud streams, ensuring no missing tracks even during provider regional blocks.</p>
+          </div>
+          <div class="spec-card">
+            <span class="spec-id">03 // FOLDER INTEGRITY</span>
+            <h3 class="spec-title">Dead-Link Recovery</h3>
+            <p class="spec-body">Subsystem state monitoring detects deleted or altered playlist directories, prompting safe re-indexing rather than silent corruption.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scene 03: Architecture Terminal -->
+    <section class="scroll-scene" id="scene-03">
+      <div style="width: 100%;">
+        <div class="scene-tagline">Chapter 02 // Environment Diagnostics</div>
+        <h2 class="main-heading" style="margin-bottom: 2.5rem;">Self-Contained Binaries.</h2>
+        <div class="terminal-container">
+          <div class="terminal-header">
+            <div class="terminal-dots">
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            </div>
+            <div>RUNTIME CONFIGURATION // x86_64</div>
+          </div>
+          <div class="terminal-body">
+            <div><span class="terminal-highlight">$</span> spotvault --verify-integrity</div>
+            <div>[OK] Core Executable: SpotVault_V1.exe (46.7 MB PE32+ standalone)</div>
+            <div>[OK] Audio Conversion Engine: FFmpeg (Dynamic AppData bootstrap)</div>
+            <div>[OK] Identity Decoupling: SetCurrentProcessExplicitAppUserModelID ("spotvault.1.0")</div>
+            <div>[OK] Network Boundary: Zero outbound user metrics / 100% local library state</div>
+            <br />
+            <div><span class="terminal-highlight">STATUS:</span> System ready for deployment. Requires 64-bit Windows environment.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Persistent Lower Dashboard Layer (Directly mirroring KAGE navigation) -->
+  <div class="fixed-footer-layer">
+    <div class="chapter-indicator">
+      <button class="chapter-btn active" onclick="scrollToScene('scene-01')">
+        <span>01</span>
+        <div class="chapter-bar"></div>
+      </button>
+      <button class="chapter-btn" onclick="scrollToScene('scene-02')">
+        <span>02</span>
+        <div class="chapter-bar"></div>
+      </button>
+      <button class="chapter-btn" onclick="scrollToScene('scene-03')">
+        <span>03</span>
+        <div class="chapter-bar"></div>
+      </button>
+    </div>
+
+    <div class="mini-monitor">
+      <div class="mini-header">
+        <span>Acoustic Waveform</span>
+        <span style="color: var(--accent);">LIVE SYNC</span>
+      </div>
+      <div class="pulse-meter" id="spectrogram">
+        <!-- Javascript fills dynamic waveform bars -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Legal Modals -->
+  <div class="modal-overlay" id="legal-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title-target">Document</h3>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body-target"></div>
+    </div>
+  </div>
+
+  <!-- Interactive 3D Audio Visualizer Engine -->
+  <script>
+    // -------------------------------------------------------------
+    // Three.js Dynamic Audio Landscape Setup
+    // -------------------------------------------------------------
+    const canvas = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x07080a, 0.04);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 4, 14);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    // Dynamic Geometric Audio Mesh (Sound Terrain)
+    const geometry = new THREE.PlaneGeometry(60, 60, 64, 64);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x111317,
+      wireframe: true,
+      roughness: 0.8,
+      metalness: 0.3
+    });
+
+    const terrain = new THREE.Mesh(geometry, material);
+    terrain.rotation.x = -Math.PI / 2.3;
+    terrain.position.y = -3;
+    scene.add(terrain);
+
+    // Audio Particle Nodes
+    const particleCount = 200;
+    const particleGeo = new THREE.BufferGeometry();
+    const particlePositions = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount * 3; i += 3) {
+      particlePositions[i] = (Math.random() - 0.5) * 30;
+      particlePositions[i + 1] = Math.random() * 8 - 2;
+      particlePositions[i + 2] = (Math.random() - 0.5) * 20;
+    }
+
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    const particleMat = new THREE.PointsMaterial({
+      color: 0x1ed760,
+      size: 0.08,
+      transparent: true,
+      opacity: 0.6
+    });
+
+    const particles = new THREE.Points(particleGeo, particleMat);
+    scene.add(particles);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const accentLight = new THREE.PointLight(0x1ed760, 4, 40);
+    accentLight.position.set(0, 5, 2);
+    scene.add(accentLight);
+
+    // Dynamic Waveform Calculation
+    const posAttr = geometry.attributes.position;
+    const originalZ = [];
+    for (let i = 0; i < posAttr.count; i++) {
+      originalZ.push(posAttr.getZ(i));
+    }
+
+    // Scroll Transformation Hooks
+    let scrollY = 0;
+    window.addEventListener('scroll', () => {
+      scrollY = window.scrollY;
+    });
+
+    // Animate Loop
+    const clock = new THREE.Clock();
+
+    function renderLoop() {
+      const time = clock.getElapsedTime();
+
+      // Transform terrain wireframe into oscillating audio waves
+      for (let i = 0; i < posAttr.count; i++) {
+        const u = posAttr.getX(i);
+        const v = posAttr.getY(i);
+        const wave = Math.sin(u * 0.4 + time * 1.5) * Math.cos(v * 0.3 + time * 1.2) * 1.4;
+        posAttr.setZ(i, wave);
+      }
+      posAttr.needsUpdate = true;
+
+      // Camera responds dynamically to scroll progression
+      const scrollFraction = scrollY / (document.body.scrollHeight - window.innerHeight || 1);
+      camera.position.z = 14 - scrollFraction * 6;
+      camera.position.y = 4 - scrollFraction * 2;
+      accentLight.intensity = 2 + Math.sin(time * 2) * 1.2;
+
+      // Giant background typography parallax and shift
+      const backdrop = document.getElementById('backdrop-text');
+      if (backdrop) {
+        backdrop.style.transform = `translate(-50%, calc(-50% + ${scrollY * 0.25}px))`;
+        if (scrollFraction < 0.33) {
+          backdrop.innerText = "VAULT";
+        } else if (scrollFraction < 0.66) {
+          backdrop.innerText = "ENGINE";
+        } else {
+          backdrop.innerText = "AUDIO";
+        }
+      }
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(renderLoop);
+    }
+    renderLoop();
+
+    // Resize Handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // -------------------------------------------------------------
+    // Bottom-Right Spectrogram Simulation
+    // -------------------------------------------------------------
+    const meter = document.getElementById('spectrogram');
+    const barCount = 18;
+    for (let i = 0; i < barCount; i++) {
+      const b = document.createElement('div');
+      b.className = 'meter-bar';
+      meter.appendChild(b);
+    }
+
+    const bars = meter.querySelectorAll('.meter-bar');
+    setInterval(() => {
+      bars.forEach(b => {
+        const h = Math.floor(Math.random() * 85) + 15;
+        b.style.height = h + '%';
+      });
+    }, 120);
+
+    // -------------------------------------------------------------
+    // Chapter Scroll Indicator Synchronization
+    // -------------------------------------------------------------
+    function scrollToScene(id) {
+      document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+    }
+
+    const sections = document.querySelectorAll('.scroll-scene');
+    const chapterButtons = document.querySelectorAll('.chapter-btn');
+
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        const top = s.offsetTop;
+        if (window.scrollY >= top - 250) {
+          current = s.getAttribute('id');
+        }
+      });
+
+      chapterButtons.forEach((btn, index) => {
+        btn.classList.remove('active');
+        if (current === `scene-0${index + 1}`) {
+          btn.classList.add('active');
+        }
+      });
+    });
+
+    // -------------------------------------------------------------
+    // Legal Document Modal Handlers
+    // -------------------------------------------------------------
+    const legalTexts = {
+      privacy: {
+        title: "Zero-Telemetry Privacy Policy",
+        body: `
+          <p><strong>1. Architectural Privacy</strong><br>SpotVault does not feature user telemetry, crash collectors, usage analytics, or external tracker libraries. All network operations are directed exclusively between your client machine and public media providers.</p>
+          <br>
+          <p><strong>2. Local Storage Model</strong><br>All configurations, saved playlists, directory maps, and cached album artworks are maintained in your system profile directory. No cloud profiles are synthesized.</p>
+        `
+      },
+      terms: {
+        title: "Terms & Conditions",
+        body: `
+          <p><strong>1. Intended Use</strong><br>SpotVault is provided as a personal audio utility for archiving public stream content for offline consumption. Users are responsible for complying with the terms of their media providers.</p>
+          <br>
+          <p><strong>2. Software Distribution</strong><br>The software is supplied "as is", without warranty of any kind, express or implied, regarding uptime or permanent provider API continuity.</p>
+        `
+      }
+    };
+
+    function openModal(type) {
+      document.getElementById('modal-title-target').innerText = legalTexts[type].title;
+      document.getElementById('modal-body-target').innerHTML = legalTexts[type].body;
+      document.getElementById('legal-modal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('legal-modal').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+Output/
+*.spec
+*.exe
+library_config.json
+.spot_sync_cache/
+*.m4a
+*.mp3
+.vscode/
+.idea/

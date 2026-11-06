@@ -1,0 +1,5 @@
+customtkinter>=5.2.0
+spotdl>=4.2.0
+Pillow>=10.0.0
+requests>=2.31.0
+pyinstaller>=6.0.0
