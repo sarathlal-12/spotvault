@@ -1,7 +1,7 @@
 
                           SPOTVAULT (v1.0)
              Offline Spotify Playlist Sync & Downloader
-======================================================================
+
 
 SpotVault keeps your local music collection synchronized with your 
 Spotify playlists. It downloads high-quality audio files, embeds full 
