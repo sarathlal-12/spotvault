@@ -1,828 +1,955 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SpotVault — Precision Offline Audio Infrastructure</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307080a'/%3E%3Cpath d='M6 16h3v-3h2v7H9v-2H6v-2zm7-7h2v14h-2V9zm4 4h2v8h-2v-2h-1v-4h1v-2zm4 3h2v4h-2v-4z' fill='%231ed760'/%3E%3C/svg%3E" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SpotVault — Sovereign Desktop Audio Engine</title>
+  <meta name="description" content="Direct-bitrate audio acquisition engine built on Python and Inno Setup. Sovereign local audio with zero telemetry.">
+  <link rel="icon" type="image/x-icon" href="../assets/app_icon.ico">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://spotvault-web.vercel.app">
+  <meta property="og:title" content="SpotVault — Sovereign Desktop Audio Engine">
+  <meta property="og:description" content="Offline Spotify synchronization, clean audio filters, tri-provider fallback, and auto-resume.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=DotGothic16&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 
   <style>
     :root {
-      --bg: #07080a;
-      --card-bg: rgba(14, 16, 22, 0.75);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --accent: #1ed760;
-      --accent-dim: rgba(30, 215, 96, 0.2);
-      --text: #ffffff;
-      --text-muted: #8a8f98;
-      --font-display: 'Cinzel', serif;
-      --font-body: 'Inter', sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
+      --bg-cream: #f4f1ea;
+      --ink-black: #16181b;
+      --ink-muted: #5a6068;
+      --ink-faint: #9ea5af;
+      --border-line: rgba(22, 24, 27, 0.12);
+      --pixel-green: #1ed760;
+      --pixel-orange: #f26835;
+      --font-body: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      --font-pixel: 'DotGothic16', monospace;
+      --font-mono: 'Space Mono', monospace;
+      --font-serif: 'Cinzel', serif;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    html, body {
-      background-color: var(--bg);
-      color: var(--text);
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; background: var(--bg-cream); }
+    body {
       font-family: var(--font-body);
+      color: var(--ink-black);
+      background-color: var(--bg-cream);
       overflow-x: hidden;
-      scroll-behavior: smooth;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Fixed Three.js Background Canvas */
-    #webgl-canvas {
+    /* Top Persistent Minimal Navigation */
+    header.agentic-nav {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 0;
-      pointer-events: none;
-    }
-
-    /* Subtle Film Grain & Radial Vignette Overlay */
-    .grain-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: radial-gradient(circle at 50% 50%, transparent 50%, rgba(7, 8, 10, 0.88) 100%);
-      z-index: 1;
-      pointer-events: none;
-    }
-
-    /* Giant Background Typography (Transforms on Scroll - KAGE Architecture) */
-    .huge-backdrop-text {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-family: var(--font-display);
-      font-size: clamp(5.5rem, 18vw, 22rem);
-      font-weight: 900;
-      letter-spacing: 0.16em;
-      color: rgba(255, 255, 255, 0.032);
-      text-transform: uppercase;
-      user-select: none;
-      z-index: 1;
-      pointer-events: none;
-      white-space: nowrap;
-      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
-    }
-
-    /* Top Navigation */
-    header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      padding: 1.8rem 3.5rem;
+      right: 0;
+      height: 64px;
+      padding: 0 2rem;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      z-index: 10;
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      justify-content: space-between;
+      z-index: 100;
+      background: rgba(244, 241, 234, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-line);
     }
 
-    .brand {
+    .brand-wrap {
       display: flex;
       align-items: center;
       gap: 12px;
+      text-decoration: none;
+      color: var(--ink-black);
+    }
+
+    .brand-zen {
+      width: 22px;
+      height: 22px;
+      border: 3px solid var(--ink-black);
+      border-radius: 50%;
+      border-bottom-color: transparent;
+      transform: rotate(45deg);
+    }
+
+    .brand-title {
+      font-family: var(--font-serif);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .btn-top-download {
       font-family: var(--font-mono);
-      font-size: 0.85rem;
-      letter-spacing: 0.2em;
+      font-size: 0.8rem;
+      font-weight: 700;
       text-transform: uppercase;
-      font-weight: 600;
+      letter-spacing: 0.05em;
+      padding: 8px 18px;
+      background: var(--ink-black);
+      color: var(--bg-cream);
+      border: 1px solid var(--ink-black);
+      border-radius: 4px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-top-download:hover {
+      background: var(--pixel-green);
+      color: var(--ink-black);
+      border-color: var(--pixel-green);
+    }
+
+    /* Hero Section */
+    section.hero-stage {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 100px 2rem 40px;
+      overflow: hidden;
+    }
+
+    /* High Definition Background Canvas */
+    #pixel-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Hero Headline & Controls */
+    .hero-content {
+      position: relative;
+      z-index: 10;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 3rem;
+      align-items: flex-start;
+      padding-top: 2rem;
+    }
+
+    .hero-title-area h1 {
+      font-size: clamp(2.8rem, 5.5vw, 4.8rem);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      color: #fff;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.45);
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title-area p {
+      font-size: 1.15rem;
+      color: rgba(255, 255, 255, 0.95);
+      max-width: 520px;
+      line-height: 1.6;
+      margin-bottom: 2rem;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+    }
+
+    .hero-btn-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .btn-pixel-primary {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      font-weight: 700;
+      padding: 14px 28px;
+      background: #fff;
+      color: var(--ink-black);
+      border: 2px solid #fff;
+      border-radius: 4px;
+      text-decoration: none;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-pixel-primary:hover {
+      background: var(--pixel-green);
+      border-color: var(--pixel-green);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(30, 215, 96, 0.4);
+    }
+
+    .btn-pixel-ghost {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      font-weight: 700;
+      padding: 14px 24px;
+      background: rgba(0, 0, 0, 0.35);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(8px);
+      border-radius: 4px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-pixel-ghost:hover {
+      background: rgba(0, 0, 0, 0.55);
+      border-color: #fff;
+    }
+
+    /* Floating Toast Tasks */
+    .task-toasts {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .task-toast {
+      background: rgba(18, 20, 24, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      padding: 12px 18px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: floatToast 3s ease-in-out infinite alternate;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+    }
+
+    .task-toast:hover {
+      transform: translateX(-8px) scale(1.02);
+      border-color: rgba(30, 215, 96, 0.5);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .task-toast:nth-child(2) { animation-delay: 1s; }
+    .task-toast:nth-child(3) { animation-delay: 2s; }
+
+    @keyframes floatToast {
+      from { transform: translateY(0); }
+      to { transform: translateY(-6px); }
+    }
+
+    .toast-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--pixel-green);
+      box-shadow: 0 0 8px var(--pixel-green);
+    }
+
+    /* Bottom Atmosphere Switcher Dock */
+    .stage-dock {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: rgba(18, 20, 24, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 6px 12px;
+      border-radius: 30px;
+      margin: 0 auto;
+      backdrop-filter: blur(8px);
+      width: fit-content;
+    }
+
+    .time-chip {
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.7);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .time-chip.active, .time-chip:hover {
+      background: rgba(255, 255, 255, 0.2);
       color: #fff;
     }
 
-    .brand-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--accent);
-      border-radius: 50%;
-      box-shadow: 0 0 12px var(--accent);
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 2.2rem;
-      list-style: none;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-    }
-
-    .nav-links a {
-      color: var(--text-muted);
-      text-decoration: none;
-      transition: color 0.3s ease;
-    }
-
-    .nav-links a:hover {
-      color: var(--text);
-    }
-
-    /* Fixed Bottom Layer: Chapters + Spectrogram Monitor */
-    .fixed-footer-layer {
-      position: fixed;
-      bottom: 2.5rem;
-      left: 3.5rem;
-      right: 3.5rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    .chapter-indicator {
-      display: flex;
-      gap: 1.8rem;
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-      pointer-events: auto;
-    }
-
-    .chapter-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      transition: color 0.3s ease;
-    }
-
-    .chapter-btn.active {
-      color: var(--accent);
-    }
-
-    .chapter-bar {
-      width: 24px;
-      height: 2px;
-      background: currentColor;
-      transition: width 0.3s ease;
-    }
-
-    .chapter-btn.active .chapter-bar {
-      width: 44px;
-    }
-
-    /* Bottom-Right Audio Monitor (Matching video mini-widget) */
-    .mini-monitor {
-      pointer-events: auto;
-      background: rgba(14, 16, 22, 0.88);
-      border: 1px solid var(--card-border);
-      backdrop-filter: blur(14px);
-      padding: 1.2rem;
-      border-radius: 8px;
-      width: 260px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      box-shadow: 0 16px 32px rgba(0,0,0,0.5);
-    }
-
-    .mini-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-family: var(--font-mono);
-      font-size: 0.65rem;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-      text-transform: uppercase;
-    }
-
-    .pulse-meter {
-      display: flex;
-      align-items: flex-end;
-      gap: 3px;
-      height: 32px;
-      padding: 4px 0;
-    }
-
-    .meter-bar {
-      flex: 1;
-      background: var(--accent);
-      border-radius: 1px;
-      height: 20%;
-      transition: height 0.15s ease;
-    }
-
-    /* Content Stream */
-    .content-container {
-      position: relative;
-      z-index: 2;
+    /* Pixel Sand Disintegration Canvas */
+    #sand-canvas {
       width: 100%;
-    }
-
-    section.scroll-scene {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      padding: 6rem 8vw;
-      position: relative;
-    }
-
-    /* Hero Layout (Scene 01) */
-    .scene-hero-grid {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      width: 100%;
-      align-items: center;
-      gap: 4rem;
-    }
-
-    .scene-tagline {
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      letter-spacing: 0.25em;
-      color: var(--accent);
-      text-transform: uppercase;
-      margin-bottom: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .scene-tagline::before {
-      content: '';
-      width: 24px;
-      height: 1px;
-      background: var(--accent);
-    }
-
-    .main-heading {
-      font-family: var(--font-display);
-      font-size: clamp(2.4rem, 5vw, 4.4rem);
-      font-weight: 700;
-      line-height: 1.12;
-      letter-spacing: -0.01em;
-      text-transform: uppercase;
-      margin-bottom: 2rem;
-    }
-
-    .scene-desc {
-      font-size: 1.05rem;
-      line-height: 1.8;
-      color: var(--text-muted);
-      max-width: 520px;
-      margin-bottom: 3rem;
-      font-weight: 300;
-    }
-
-    .cta-row {
-      display: flex;
-      align-items: center;
-      gap: 2rem;
-    }
-
-    .btn-architect {
-      background: var(--accent);
-      color: #000000;
-      text-decoration: none;
-      padding: 1rem 2rem;
-      border-radius: 4px;
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      display: inline-flex;
-      align-items: center;
-      gap: 12px;
-      transition: background 0.3s ease, transform 0.2s ease;
-      box-shadow: 0 4px 18px rgba(30, 215, 96, 0.25);
-    }
-
-    .btn-architect:hover {
-      background: #25ef6d;
-      transform: translateY(-2px);
-    }
-
-    .btn-ghost {
-      color: var(--text);
-      text-decoration: none;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border-bottom: 1px solid var(--card-border);
-      padding-bottom: 4px;
-      transition: border-color 0.3s ease;
-    }
-
-    .btn-ghost:hover {
-      border-color: var(--text);
-    }
-
-    /* Scene 02: Engine Specification Grid */
-    .specs-matrix {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2rem;
-      width: 100%;
-    }
-
-    .spec-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 2.5rem;
-      backdrop-filter: blur(16px);
-      transition: border-color 0.3s ease, transform 0.3s ease;
-    }
-
-    .spec-card:hover {
-      border-color: rgba(30, 215, 96, 0.4);
-      transform: translateY(-4px);
-    }
-
-    .spec-id {
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      color: var(--accent);
-      margin-bottom: 1.5rem;
+      height: 180px;
       display: block;
+      background: var(--bg-cream);
+      margin-top: -1px;
     }
 
-    .spec-title {
-      font-family: var(--font-display);
-      font-size: 1.5rem;
+    /* Editorial Documentation Layout */
+    .editorial-section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 5rem 2rem 8rem;
+    }
+
+    .sub-brand {
+      font-family: var(--font-serif);
+      font-size: 0.85rem;
+      letter-spacing: 0.2em;
       text-transform: uppercase;
-      margin-bottom: 1rem;
+      color: var(--ink-muted);
+      margin-bottom: 1.25rem;
     }
 
-    .spec-body {
-      font-size: 0.9rem;
-      color: var(--text-muted);
+    .editorial-h2 {
+      font-size: clamp(2.2rem, 4vw, 3.4rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 3.5rem;
+    }
+
+    .editorial-h2 span {
+      text-decoration: underline;
+      text-decoration-color: var(--pixel-orange);
+      text-underline-offset: 8px;
+    }
+
+    /* Split Overview Layout */
+    .split-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: flex-start;
+      margin-bottom: 6rem;
+    }
+
+    .zen-circle-box {
+      background: #eae5d9;
+      border: 1px solid var(--border-line);
+      border-radius: 12px;
+      padding: 3rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .zen-enso {
+      width: 220px;
+      height: 220px;
+      border: 12px solid var(--ink-black);
+      border-radius: 50%;
+      border-top-color: transparent;
+      border-right-color: #2b3038;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transform: rotate(-15deg);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+    }
+
+    .enso-center {
+      transform: rotate(15deg);
+      text-align: center;
+    }
+
+    .enso-center span {
+      font-family: var(--font-pixel);
+      font-size: 1.4rem;
+      font-weight: 700;
+      display: block;
+      color: var(--pixel-orange);
+    }
+
+    .enso-center small {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--ink-muted);
+    }
+
+    /* Accordion Module List with Smooth Springs */
+    .accordion-list {
+      display: flex;
+      flex-direction: column;
+      border-top: 1px solid var(--border-line);
+    }
+
+    .accordion-item {
+      border-bottom: 1px solid var(--border-line);
+      padding: 1.5rem 0;
+      cursor: pointer;
+    }
+
+    .accordion-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .accordion-head h3 {
+      font-family: var(--font-mono);
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .accordion-icon {
+      font-family: var(--font-mono);
+      font-size: 1.2rem;
+      color: var(--ink-muted);
+      transition: transform 0.25s ease, color 0.2s ease;
+    }
+
+    .accordion-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+      opacity: 0;
+      font-size: 0.95rem;
+      color: var(--ink-muted);
       line-height: 1.7;
     }
 
-    /* Scene 03: Architecture Terminal */
-    .terminal-container {
-      width: 100%;
-      background: rgba(10, 11, 15, 0.92);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+    .accordion-item.active .accordion-body {
+      max-height: 300px;
+      opacity: 1;
+      padding-top: 1rem;
     }
 
-    .terminal-header {
-      background: rgba(18, 20, 26, 0.85);
-      padding: 0.9rem 1.5rem;
-      border-bottom: 1px solid var(--card-border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .accordion-item.active .accordion-icon {
+      transform: rotate(45deg);
+      color: var(--pixel-orange);
+    }
+
+    /* Feature Grid Section */
+    .feature-showcase-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-bottom: 6rem;
+    }
+
+    .feature-card {
+      background: #eae5d9;
+      border: 1px solid var(--border-line);
+      border-radius: 12px;
+      padding: 2.2rem;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(22, 24, 27, 0.3);
+    }
+
+    .feature-tag {
       font-family: var(--font-mono);
-      font-size: 0.7rem;
-      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--pixel-orange);
+      margin-bottom: 0.75rem;
     }
 
-    .terminal-dots {
-      display: flex;
-      gap: 6px;
+    .feature-card h4 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
     }
 
-    .dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.1);
+    .feature-card p {
+      font-size: 0.92rem;
+      color: var(--ink-muted);
+      line-height: 1.6;
     }
 
-    .terminal-body {
-      padding: 2rem;
+    /* Dark Mode Terminal Card */
+    .terminal-card {
+      background: #11141a;
+      border-radius: 12px;
+      padding: 3rem;
+      color: #fff;
+      margin-bottom: 6rem;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+    }
+
+    .terminal-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .terminal-desc {
+      color: var(--ink-faint);
+      margin-bottom: 2.5rem;
+      max-width: 600px;
+    }
+
+    .terminal-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    .term-box {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+
+    .term-box h4 {
       font-family: var(--font-mono);
       font-size: 0.85rem;
-      line-height: 1.9;
-      color: #b5bcc7;
+      color: var(--pixel-green);
+      margin-bottom: 0.6rem;
     }
 
-    .terminal-highlight {
-      color: var(--accent);
+    .term-box p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      line-height: 1.5;
     }
 
-    /* Modals */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.85);
-      backdrop-filter: blur(20px);
-      z-index: 100;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
+    /* Footer */
+    footer.agentic-footer {
+      border-top: 1px solid var(--border-line);
+      padding: 4rem 2rem;
+      background: #ebe6dc;
     }
 
-    .modal-box {
-      background: #0f1115;
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      max-width: 720px;
-      width: 100%;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .modal-header {
-      padding: 1.5rem 2rem;
-      border-bottom: 1px solid var(--card-border);
+    .footer-inner {
+      max-width: 1100px;
+      margin: 0 auto;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--ink-muted);
     }
 
-    .modal-title {
-      font-family: var(--font-display);
-      font-size: 1.3rem;
-      text-transform: uppercase;
+    .footer-links {
+      display: flex;
+      gap: 24px;
     }
 
-    .close-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      font-size: 1.5rem;
-      cursor: pointer;
+    .footer-links a {
+      color: var(--ink-black);
+      text-decoration: none;
+      transition: color 0.2s;
     }
 
-    .modal-body {
-      padding: 2rem;
-      overflow-y: auto;
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      line-height: 1.8;
+    .footer-links a:hover {
+      color: var(--pixel-orange);
     }
 
-    @media (max-width: 900px) {
-      .scene-hero-grid { grid-template-columns: 1fr; }
-      .specs-matrix { grid-template-columns: 1fr; }
-      .fixed-footer-layer { display: none; }
-      header { padding: 1.5rem 2rem; }
+    @media (max-width: 860px) {
+      .hero-content { grid-template-columns: 1fr; }
+      .task-toasts { align-items: flex-start; }
+      .split-grid { grid-template-columns: 1fr; }
+      .feature-showcase-grid { grid-template-columns: 1fr; }
+      .terminal-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Three.js Dimensional Background Canvas -->
-  <canvas id="webgl-canvas"></canvas>
-  <div class="grain-overlay"></div>
-
-  <!-- Giant Backdrop Typography (Transforms on Scroll - VAULT -> ENGINE -> AUDIO) -->
-  <div class="huge-backdrop-text" id="backdrop-text">VAULT</div>
-
-  <!-- Navigation -->
-  <header>
-    <div class="brand">
-      <div class="brand-dot"></div>
-      SpotVault v1.0
+  <!-- Top Navigation -->
+  <header class="agentic-nav">
+    <a href="#" class="brand-wrap">
+      <div class="brand-zen"></div>
+      <span class="brand-title">SpotVault</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://github.com/sarathlal-12/spotvault" target="_blank" style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-black); text-decoration: none;">GitHub</a>
+      <a href="https://github.com/sarathlal-12/spotvault/releases/download/v1.0.0/SpotVault_Setup.exe" class="btn-top-download" download>
+        Download v1.0
+      </a>
     </div>
-    <ul class="nav-links">
-      <li><a href="#scene-01">Threshold</a></li>
-      <li><a href="#scene-02">Engine</a></li>
-      <li><a href="#scene-03">Architecture</a></li>
-      <li><a href="#" onclick="openModal('privacy'); return false;">Privacy</a></li>
-      <li><a href="#" onclick="openModal('terms'); return false;">Terms</a></li>
-    </ul>
   </header>
 
-  <!-- Content Stream -->
-  <div class="content-container">
+  <!-- Hero Section -->
+  <section class="hero-stage" id="hero-stage">
+    <canvas id="pixel-canvas"></canvas>
 
-    <!-- Scene 01: Hero / Threshold -->
-    <section class="scroll-scene" id="scene-01">
-      <div class="scene-hero-grid">
-        <div>
-          <div class="scene-tagline">Chapter 00 // Zero Loss Offline Audio</div>
-          <h1 class="main-heading">Where Acoustic Fidelity Meets Total Sovereignty.</h1>
-          <p class="scene-desc">
-            Direct high-bitrate audio extraction engine built on Python and PyInstaller. No subscription telemetry, zero cloud locks, and resilient multi-provider redundancy.
-          </p>
-          <div class="cta-row">
-            <a href="https://github.com/sarathlal-12/spotvault/releases/download/v1.0.0/SpotVault_Setup.exe" class="btn-architect" download>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              Download Setup (v1.0)
-            </a>
-            <a href="#scene-02" class="btn-ghost">Read Specifications &rarr;</a>
+    <div class="hero-content">
+      <div class="hero-title-area">
+        <h1>SpotVault turns playlists into sovereign offline audio.</h1>
+        <p>
+          Ingest multi-playlist queues, filter dialogue skits, and coordinate fallback across YouTube Music, SoundCloud, and clean lyric releases with auto-resume.
+        </p>
+        <div class="hero-btn-row">
+          <a href="https://github.com/sarathlal-12/spotvault/releases/download/v1.0.0/SpotVault_Setup.exe" class="btn-pixel-primary" download>
+            Download Setup (v1.0)
+          </a>
+          <a href="https://github.com/sarathlal-12/spotvault" target="_blank" class="btn-pixel-ghost">
+            View Source Code
+          </a>
+        </div>
+      </div>
+
+      <!-- Live Notification Badges -->
+      <div class="task-toasts">
+        <div class="task-toast">
+          <div class="toast-dot"></div>
+          <span>Multi-playlist queue: 5 Vaults armed</span>
+        </div>
+        <div class="task-toast">
+          <div class="toast-dot"></div>
+          <span>Lyric video filter: Skits & dialogue bypassed</span>
+        </div>
+        <div class="task-toast">
+          <div class="toast-dot" style="background: var(--pixel-orange); box-shadow: 0 0 8px var(--pixel-orange);"></div>
+          <span>Tri-provider: YT Music / SoundCloud / YT ready</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Atmosphere Time Switcher -->
+    <div class="stage-dock">
+      <button class="time-chip" onclick="setTimeOfDay('morning')">Morning</button>
+      <button class="time-chip" onclick="setTimeOfDay('day')">Day</button>
+      <button class="time-chip active" onclick="setTimeOfDay('sunset')">Sunset</button>
+      <button class="time-chip" onclick="setTimeOfDay('night')">Night</button>
+    </div>
+  </section>
+
+  <!-- Pixel Sand Transition Canvas -->
+  <canvas id="sand-canvas"></canvas>
+
+  <!-- Editorial Section -->
+  <main class="editorial-section">
+    <div class="sub-brand">01 // AUTONOMOUS SYNCHRONIZATION ENGINE</div>
+    <h2 class="editorial-h2">
+      You curate the music. <br>
+      SpotVault <span>manages the sovereignty</span> around it.
+    </h2>
+
+    <div class="split-grid">
+      <div class="zen-circle-box">
+        <div class="zen-enso">
+          <div class="enso-center">
+            <span>SV</span>
+            <small>ENGINE READY</small>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- Scene 02: The Engine / Specifications -->
-    <section class="scroll-scene" id="scene-02">
-      <div style="width: 100%;">
-        <div class="scene-tagline">Chapter 01 // Structural Framework</div>
-        <h2 class="main-heading" style="margin-bottom: 3.5rem;">Engineered For Permanence.</h2>
-        <div class="specs-matrix">
-          <div class="spec-card">
-            <span class="spec-id">01 // METADATA PARSER</span>
-            <h3 class="spec-title">Lossless Tags</h3>
-            <p class="spec-body">Automatic embedding of high-resolution cover artwork, dynamic track sequencing, artist credits, and year stamps directly into audio containers.</p>
+      <div class="accordion-list">
+        <div class="accordion-item active">
+          <div class="accordion-head">
+            <h3>1.0 / Clean Audio & Lyric-Only Filter</h3>
+            <span class="accordion-icon">+</span>
           </div>
-          <div class="spec-card">
-            <span class="spec-id">02 // MULTI-SOURCE SYNC</span>
-            <h3 class="spec-title">Dual Streams</h3>
-            <p class="spec-body">Redundant fallback network scanning across YouTube Music and SoundCloud streams, ensuring no missing tracks even during provider regional blocks.</p>
+          <div class="accordion-body">
+            Music videos often contain minute-long intro dialogue, car crash sound effects, movie cuts, or quiet outro sequences. SpotVault’s filtering heuristics target official audio tracks and verified lyric uploads, stripping out non-musical audio interruptions.
           </div>
-          <div class="spec-card">
-            <span class="spec-id">03 // FOLDER INTEGRITY</span>
-            <h3 class="spec-title">Dead-Link Recovery</h3>
-            <p class="spec-body">Subsystem state monitoring detects deleted or altered playlist directories, prompting safe re-indexing rather than silent corruption.</p>
+        </div>
+        <div class="accordion-item">
+          <div class="accordion-head">
+            <h3>2.0 / Persistent State & Auto-Resume</h3>
+            <span class="accordion-icon">+</span>
+          </div>
+          <div class="accordion-body">
+            Never download the same song twice. SpotVault verifies track hashes and existing ID3 metadata in your local destination folder. If an acquisition session is stopped or internet connection drops, it automatically resumes starting right from the last interrupted song.
+          </div>
+        </div>
+        <div class="accordion-item">
+          <div class="accordion-head">
+            <h3>3.0 / Multi-Playlist Batch Acquisition</h3>
+            <span class="accordion-icon">+</span>
+          </div>
+          <div class="accordion-body">
+            Queue multiple Spotify playlist URLs simultaneously. SpotVault maintains separate destination directory allocations for each playlist, isolates threads, and tags folders without mix-up.
           </div>
         </div>
       </div>
-    </section>
+    </div>
 
-    <!-- Scene 03: Architecture Terminal -->
-    <section class="scroll-scene" id="scene-03">
-      <div style="width: 100%;">
-        <div class="scene-tagline">Chapter 02 // Environment Diagnostics</div>
-        <h2 class="main-heading" style="margin-bottom: 2.5rem;">Self-Contained Binaries.</h2>
-        <div class="terminal-container">
-          <div class="terminal-header">
-            <div class="terminal-dots">
-              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            </div>
-            <div>RUNTIME CONFIGURATION // x86_64</div>
-          </div>
-          <div class="terminal-body">
-            <div><span class="terminal-highlight">$</span> spotvault --verify-integrity</div>
-            <div>[OK] Core Executable: SpotVault_V1.exe (46.7 MB PE32+ standalone)</div>
-            <div>[OK] Audio Conversion Engine: FFmpeg (Dynamic AppData bootstrap)</div>
-            <div>[OK] Identity Decoupling: SetCurrentProcessExplicitAppUserModelID ("spotvault.1.0")</div>
-            <div>[OK] Network Boundary: Zero outbound user metrics / 100% local library state</div>
-            <br />
-            <div><span class="terminal-highlight">STATUS:</span> System ready for deployment. Requires 64-bit Windows environment.</div>
-          </div>
+    <!-- Detailed Feature Showcase Cards -->
+    <div class="feature-showcase-grid">
+      <div class="feature-card">
+        <div class="feature-tag">TRI-PROVIDER PIPELINE</div>
+        <h4>YouTube Music, SoundCloud & YouTube</h4>
+        <p>If a track is region-restricted on one service or missing from YouTube Music, the engine immediately shifts fallback evaluation to SoundCloud and YouTube query indices to secure the highest-bitrate stream.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-tag">METADATA RETENTION</div>
+        <h4>Embedded Covers & ID3v2.4 Tags</h4>
+        <p>Dynamic track numbers, artist rosters, year stamps, and original high-resolution album covers are permanently baked into the audio binary headers for seamless car and offline player compatibility.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-tag">FAULT RESILIENCE</div>
+        <h4>Directory Orphan Recovery</h4>
+        <p>Re-organized your library or renamed a folder? SpotVault checks target folders before initiating network requests, preventing duplicate downloads or orphaned broken files.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-tag">PRIVACY GUARANTEE</div>
+        <h4>100% Local & Zero Telemetry</h4>
+        <p>No account logins required, no analytics pinged, and zero usage telemetry sent to third-party databases. Direct socket execution runs completely isolated on your machine.</p>
+      </div>
+    </div>
+
+    <!-- Terminal Architecture Banner -->
+    <div class="terminal-card">
+      <div class="terminal-title">Every subsystem your local library runs on.</div>
+      <div class="terminal-desc">
+        SpotVault handles multi-threading and socket recovery in the background while keeping full execution control in your hands.
+      </div>
+      <div class="terminal-grid">
+        <div class="term-box">
+          <h4>01 / ASYNC THREADING</h4>
+          <p>GUI operations run on detached worker threads to prevent application freezing during heavy playlist synchronization.</p>
+        </div>
+        <div class="term-box">
+          <h4>02 / INNO SETUP 7</h4>
+          <p>Clean Windows installation, automatic desktop shortcuts, and registered uninstaller in Windows Programs & Features.</p>
+        </div>
+        <div class="term-box">
+          <h4>03 / SMART RECOVERY</h4>
+          <p>Interrupted download queues automatically resume from the last completed track without re-processing earlier files.</p>
         </div>
       </div>
-    </section>
-
-  </div>
-
-  <!-- Persistent Lower Dashboard Layer (Directly mirroring KAGE navigation) -->
-  <div class="fixed-footer-layer">
-    <div class="chapter-indicator">
-      <button class="chapter-btn active" onclick="scrollToScene('scene-01')">
-        <span>01</span>
-        <div class="chapter-bar"></div>
-      </button>
-      <button class="chapter-btn" onclick="scrollToScene('scene-02')">
-        <span>02</span>
-        <div class="chapter-bar"></div>
-      </button>
-      <button class="chapter-btn" onclick="scrollToScene('scene-03')">
-        <span>03</span>
-        <div class="chapter-bar"></div>
-      </button>
     </div>
+  </main>
 
-    <div class="mini-monitor">
-      <div class="mini-header">
-        <span>Acoustic Waveform</span>
-        <span style="color: var(--accent);">LIVE SYNC</span>
-      </div>
-      <div class="pulse-meter" id="spectrogram">
-        <!-- Javascript fills dynamic waveform bars -->
+  <!-- Minimal Agentic Footer -->
+  <footer class="agentic-footer">
+    <div class="footer-inner">
+      <div>© 2026 SpotVault Engine. Distributed under Open-Source License.</div>
+      <div class="footer-links">
+        <a href="https://github.com/sarathlal-12/spotvault" target="_blank">Repository</a>
+        <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank">Releases</a>
+        <a href="https://github.com/sarathlal-12/spotvault/releases/download/v1.0.0/SpotVault_Setup.exe" download>Download</a>
       </div>
     </div>
-  </div>
+  </footer>
 
-  <!-- Legal Modals -->
-  <div class="modal-overlay" id="legal-modal">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3 class="modal-title" id="modal-title-target">Document</h3>
-        <button class="close-btn" onclick="closeModal()">&times;</button>
-      </div>
-      <div class="modal-body" id="modal-body-target"></div>
-    </div>
-  </div>
-
-  <!-- Interactive 3D Audio Visualizer Engine -->
+  <!-- High-Definition Mount Fuji & Dynamic Sky Canvas -->
   <script>
-    // -------------------------------------------------------------
-    // Three.js Dynamic Audio Landscape Setup
-    // -------------------------------------------------------------
-    const canvas = document.getElementById('webgl-canvas');
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x07080a, 0.04);
+    const pCanvas = document.getElementById('pixel-canvas');
+    const pCtx = pCanvas.getContext('2d');
+    let width, height;
+    let timeTheme = 'sunset';
+    let cloudOffset = 0;
 
-    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 4, 14);
-
-    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-    // Dynamic Geometric Audio Mesh (Sound Terrain)
-    const geometry = new THREE.PlaneGeometry(60, 60, 64, 64);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x111317,
-      wireframe: true,
-      roughness: 0.8,
-      metalness: 0.3
-    });
-
-    const terrain = new THREE.Mesh(geometry, material);
-    terrain.rotation.x = -Math.PI / 2.3;
-    terrain.position.y = -3;
-    scene.add(terrain);
-
-    // Audio Particle Nodes
-    const particleCount = 200;
-    const particleGeo = new THREE.BufferGeometry();
-    const particlePositions = new Float32Array(particleCount * 3);
-
-    for (let i = 0; i < particleCount * 3; i += 3) {
-      particlePositions[i] = (Math.random() - 0.5) * 30;
-      particlePositions[i + 1] = Math.random() * 8 - 2;
-      particlePositions[i + 2] = (Math.random() - 0.5) * 20;
-    }
-
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    const particleMat = new THREE.PointsMaterial({
-      color: 0x1ed760,
-      size: 0.08,
-      transparent: true,
-      opacity: 0.6
-    });
-
-    const particles = new THREE.Points(particleGeo, particleMat);
-    scene.add(particles);
-
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
-
-    const accentLight = new THREE.PointLight(0x1ed760, 4, 40);
-    accentLight.position.set(0, 5, 2);
-    scene.add(accentLight);
-
-    // Dynamic Waveform Calculation
-    const posAttr = geometry.attributes.position;
-    const originalZ = [];
-    for (let i = 0; i < posAttr.count; i++) {
-      originalZ.push(posAttr.getZ(i));
-    }
-
-    // Scroll Transformation Hooks
-    let scrollY = 0;
-    window.addEventListener('scroll', () => {
-      scrollY = window.scrollY;
-    });
-
-    // Animate Loop
-    const clock = new THREE.Clock();
-
-    function renderLoop() {
-      const time = clock.getElapsedTime();
-
-      // Transform terrain wireframe into oscillating audio waves
-      for (let i = 0; i < posAttr.count; i++) {
-        const u = posAttr.getX(i);
-        const v = posAttr.getY(i);
-        const wave = Math.sin(u * 0.4 + time * 1.5) * Math.cos(v * 0.3 + time * 1.2) * 1.4;
-        posAttr.setZ(i, wave);
-      }
-      posAttr.needsUpdate = true;
-
-      // Camera responds dynamically to scroll progression
-      const scrollFraction = scrollY / (document.body.scrollHeight - window.innerHeight || 1);
-      camera.position.z = 14 - scrollFraction * 6;
-      camera.position.y = 4 - scrollFraction * 2;
-      accentLight.intensity = 2 + Math.sin(time * 2) * 1.2;
-
-      // Giant background typography parallax and shift
-      const backdrop = document.getElementById('backdrop-text');
-      if (backdrop) {
-        backdrop.style.transform = `translate(-50%, calc(-50% + ${scrollY * 0.25}px))`;
-        if (scrollFraction < 0.33) {
-          backdrop.innerText = "VAULT";
-        } else if (scrollFraction < 0.66) {
-          backdrop.innerText = "ENGINE";
-        } else {
-          backdrop.innerText = "AUDIO";
-        }
-      }
-
-      renderer.render(scene, camera);
-      requestAnimationFrame(renderLoop);
-    }
-    renderLoop();
-
-    // Resize Handler
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    // -------------------------------------------------------------
-    // Bottom-Right Spectrogram Simulation
-    // -------------------------------------------------------------
-    const meter = document.getElementById('spectrogram');
-    const barCount = 18;
-    for (let i = 0; i < barCount; i++) {
-      const b = document.createElement('div');
-      b.className = 'meter-bar';
-      meter.appendChild(b);
-    }
-
-    const bars = meter.querySelectorAll('.meter-bar');
-    setInterval(() => {
-      bars.forEach(b => {
-        const h = Math.floor(Math.random() * 85) + 15;
-        b.style.height = h + '%';
-      });
-    }, 120);
-
-    // -------------------------------------------------------------
-    // Chapter Scroll Indicator Synchronization
-    // -------------------------------------------------------------
-    function scrollToScene(id) {
-      document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
-    }
-
-    const sections = document.querySelectorAll('.scroll-scene');
-    const chapterButtons = document.querySelectorAll('.chapter-btn');
-
-    window.addEventListener('scroll', () => {
-      let current = '';
-      sections.forEach(s => {
-        const top = s.offsetTop;
-        if (window.scrollY >= top - 250) {
-          current = s.getAttribute('id');
-        }
-      });
-
-      chapterButtons.forEach((btn, index) => {
-        btn.classList.remove('active');
-        if (current === `scene-0${index + 1}`) {
-          btn.classList.add('active');
-        }
-      });
-    });
-
-    // -------------------------------------------------------------
-    // Legal Document Modal Handlers
-    // -------------------------------------------------------------
-    const legalTexts = {
-      privacy: {
-        title: "Zero-Telemetry Privacy Policy",
-        body: `
-          <p><strong>1. Architectural Privacy</strong><br>SpotVault does not feature user telemetry, crash collectors, usage analytics, or external tracker libraries. All network operations are directed exclusively between your client machine and public media providers.</p>
-          <br>
-          <p><strong>2. Local Storage Model</strong><br>All configurations, saved playlists, directory maps, and cached album artworks are maintained in your system profile directory. No cloud profiles are synthesized.</p>
-        `
-      },
-      terms: {
-        title: "Terms & Conditions",
-        body: `
-          <p><strong>1. Intended Use</strong><br>SpotVault is provided as a personal audio utility for archiving public stream content for offline consumption. Users are responsible for complying with the terms of their media providers.</p>
-          <br>
-          <p><strong>2. Software Distribution</strong><br>The software is supplied "as is", without warranty of any kind, express or implied, regarding uptime or permanent provider API continuity.</p>
-        `
-      }
+    const themes = {
+      morning: { skyTop: '#43617b', skyBot: '#b4cfce', mountain: '#2e4155', mountainRidge: '#1e2c3b', ground: '#3e4f35', sun: '#fce2ad' },
+      day:     { skyTop: '#3b82f6', skyBot: '#bae6fd', mountain: '#294363', mountainRidge: '#1c314b', ground: '#36612d', sun: '#ffffff' },
+      sunset:  { skyTop: '#2d2244', skyBot: '#e26b38', mountain: '#211531', mountainRidge: '#160d22', ground: '#2b2319', sun: '#f97316' },
+      night:   { skyTop: '#080a10', skyBot: '#151c2c', mountain: '#0a0e17', mountainRidge: '#05070c', ground: '#0f131a', sun: '#e2e8f0' }
     };
 
-    function openModal(type) {
-      document.getElementById('modal-title-target').innerText = legalTexts[type].title;
-      document.getElementById('modal-body-target').innerHTML = legalTexts[type].body;
-      document.getElementById('legal-modal').style.display = 'flex';
+    function resizePixelCanvas() {
+      const rect = document.getElementById('hero-stage').getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      pCanvas.width = rect.width * dpr;
+      pCanvas.height = rect.height * dpr;
+      pCtx.scale(dpr, dpr);
+      width = rect.width;
+      height = rect.height;
     }
 
-    function closeModal() {
-      document.getElementById('legal-modal').style.display = 'none';
+    function renderPixelScene() {
+      if (!pCtx) return;
+      const t = themes[timeTheme];
+
+      // 1. High Definition Sky Gradient
+      const grad = pCtx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, t.skyTop);
+      grad.addColorStop(0.72, t.skyBot);
+      pCtx.fillStyle = grad;
+      pCtx.fillRect(0, 0, width, height);
+
+      // 2. Luminous Celestial Sun/Moon
+      const pulse = Math.sin(Date.now() * 0.0018) * 3;
+      const sunX = width * 0.72;
+      const sunY = height * 0.38;
+
+      const sunGlow = pCtx.createRadialGradient(sunX, sunY, 15, sunX, sunY, 70);
+      sunGlow.addColorStop(0, t.sun);
+      sunGlow.addColorStop(0.4, t.sun + '88');
+      sunGlow.addColorStop(1, 'transparent');
+      pCtx.fillStyle = sunGlow;
+      pCtx.beginPath();
+      pCtx.arc(sunX, sunY, 70 + pulse, 0, Math.PI * 2);
+      pCtx.fill();
+
+      pCtx.fillStyle = t.sun;
+      pCtx.beginPath();
+      pCtx.arc(sunX, sunY, 26 + pulse * 0.5, 0, Math.PI * 2);
+      pCtx.fill();
+
+      // 3. Crisp High-Definition Mount Fuji
+      const fujiBaseW = width * 0.65;
+      const fujiApexW = width * 0.11;
+      const fujiLeft  = width * 0.40;
+      const fujiRight = fujiLeft + fujiBaseW;
+      const fujiApexX = fujiLeft + fujiBaseW * 0.50;
+      const fujiApexY = height * 0.28;
+
+      // Base Mountain Body
+      pCtx.fillStyle = t.mountain;
+      pCtx.beginPath();
+      pCtx.moveTo(fujiLeft, height);
+      // Gentle parabolic slope up
+      pCtx.quadraticCurveTo(fujiLeft + fujiBaseW * 0.25, height * 0.65, fujiApexX - fujiApexW * 0.5, fujiApexY);
+      pCtx.lineTo(fujiApexX + fujiApexW * 0.5, fujiApexY);
+      // Symmetrical slope down
+      pCtx.quadraticCurveTo(fujiRight - fujiBaseW * 0.25, height * 0.65, fujiRight, height);
+      pCtx.closePath();
+      pCtx.fill();
+
+      // Right-Side Shaded Mountain Ridge
+      pCtx.fillStyle = t.mountainRidge;
+      pCtx.beginPath();
+      pCtx.moveTo(fujiApexX, fujiApexY);
+      pCtx.lineTo(fujiApexX + fujiApexW * 0.5, fujiApexY);
+      pCtx.quadraticCurveTo(fujiRight - fujiBaseW * 0.25, height * 0.65, fujiRight, height);
+      pCtx.lineTo(fujiApexX + 10, height);
+      pCtx.closePath();
+      pCtx.fill();
+
+      // Detailed Layered Snow Cap
+      const snowY = fujiApexY + height * 0.16;
+      pCtx.fillStyle = '#ffffff';
+      pCtx.beginPath();
+      pCtx.moveTo(fujiApexX - fujiApexW * 0.5, fujiApexY);
+      pCtx.lineTo(fujiApexX + fujiApexW * 0.5, fujiApexY);
+      pCtx.lineTo(fujiApexX + fujiApexW * 0.5 + 40, snowY - 10);
+      // Fluted snow tongues
+      pCtx.quadraticCurveTo(fujiApexX + 30, snowY + 22, fujiApexX + 15, snowY - 5);
+      pCtx.quadraticCurveTo(fujiApexX, snowY + 28, fujiApexX - 20, snowY);
+      pCtx.quadraticCurveTo(fujiApexX - 35, snowY + 18, fujiApexX - fujiApexW * 0.5 - 35, snowY - 5);
+      pCtx.closePath();
+      pCtx.fill();
+
+      // Snow Shading on Right Ridge
+      pCtx.fillStyle = 'rgba(210, 225, 240, 0.45)';
+      pCtx.beginPath();
+      pCtx.moveTo(fujiApexX, fujiApexY);
+      pCtx.lineTo(fujiApexX + fujiApexW * 0.5, fujiApexY);
+      pCtx.lineTo(fujiApexX + fujiApexW * 0.5 + 40, snowY - 10);
+      pCtx.quadraticCurveTo(fujiApexX + 30, snowY + 22, fujiApexX + 15, snowY - 5);
+      pCtx.lineTo(fujiApexX, snowY + 5);
+      pCtx.closePath();
+      pCtx.fill();
+
+      // 4. Smooth Wind-Drift Clouds
+      cloudOffset = (cloudOffset + 0.35) % (width + 300);
+      pCtx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+
+      pCtx.beginPath();
+      pCtx.roundRect((cloudOffset - 150), height * 0.18, 140, 18, 9);
+      pCtx.roundRect((cloudOffset - 110), height * 0.15, 80, 22, 11);
+      pCtx.fill();
+
+      pCtx.beginPath();
+      pCtx.roundRect((width - cloudOffset * 0.8), height * 0.34, 160, 20, 10);
+      pCtx.fill();
+
+      // 5. Ground Line Silhouette
+      pCtx.fillStyle = t.ground;
+      pCtx.fillRect(0, height - 28, width, 28);
+
+      requestAnimationFrame(renderPixelScene);
     }
+
+    function setTimeOfDay(theme) {
+      timeTheme = theme;
+      document.querySelectorAll('.time-chip').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase() === theme);
+      });
+    }
+
+    window.addEventListener('resize', resizePixelCanvas);
+    resizePixelCanvas();
+    requestAnimationFrame(renderPixelScene);
+
+    // --- 2. Interactive Falling Pixel Sand Stream ---
+    const sCanvas = document.getElementById('sand-canvas');
+    const sCtx = sCanvas.getContext('2d');
+    let sandParticles = [];
+
+    function resizeSand() {
+      sCanvas.width = window.innerWidth;
+      sCanvas.height = 180;
+      initSand();
+    }
+
+    function initSand() {
+      sandParticles = [];
+      const count = Math.floor(sCanvas.width / 4);
+      for (let i = 0; i < count; i++) {
+        sandParticles.push({
+          x: Math.random() * sCanvas.width,
+          y: Math.random() * sCanvas.height,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: 0.8 + Math.random() * 1.5,
+          size: Math.random() > 0.8 ? 4 : 3,
+          color: Math.random() > 0.4 ? '#3e3428' : (Math.random() > 0.5 ? '#f26835' : '#8c8275')
+        });
+      }
+    }
+
+    function renderSand() {
+      sCtx.clearRect(0, 0, sCanvas.width, sCanvas.height);
+      for (let p of sandParticles) {
+        p.y += p.vy;
+        p.x += p.vx + Math.sin(p.y * 0.05) * 0.3;
+
+        if (p.y > sCanvas.height) {
+          p.y = 0;
+          p.x = Math.random() * sCanvas.width;
+        }
+
+        sCtx.fillStyle = p.color;
+        sCtx.fillRect(Math.floor(p.x), Math.floor(p.y), p.size, p.size);
+      }
+      requestAnimationFrame(renderSand);
+    }
+
+    window.addEventListener('resize', resizeSand);
+    resizeSand();
+    requestAnimationFrame(renderSand);
+
+    // --- 3. Interactive Accordion Listener ---
+    document.querySelectorAll('.accordion-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const isActive = item.classList.contains('active');
+        document.querySelectorAll('.accordion-item').forEach(i => i.classList.remove('active'));
+        if (!isActive) item.classList.add('active');
+      });
+    });
   </script>
+
+  <!-- Free Privacy-Friendly Vercel Analytics -->
+  <script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
