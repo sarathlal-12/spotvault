@@ -1,0 +1,63 @@
+# Builds an unsigned iOS .ipa of SpotVault Mobile on a GitHub macOS runner
+# (iOS apps can only be compiled on macOS). Sideload it with your own Apple ID
+# using Sideloadly or AltStore, which sign it during install.
+#
+# Run it: GitHub > Actions > "Build iOS IPA" > Run workflow.
+# Pushing a tag like v1.2.0 also builds it and attaches the IPA to that release.
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Attach the IPA to this existing release tag (optional, e.g. v1.1.0)"
+        required: false
+        default: ""
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: spotvault_mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS app (unsigned)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr "SpotVault_v${VERSION}_unsigned.ipa" Payload
+          ls -la *.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpotVault-iOS
+          path: spotvault_mobile/*.ipa
+          retention-days: 30
+
+      - name: Attach to release
+        if: github.event_name == 'push' || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: gh release upload "$TAG" *.ipa --clobber --repo "$GITHUB_REPOSITORY"

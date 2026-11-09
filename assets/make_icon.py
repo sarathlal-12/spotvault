@@ -120,6 +120,22 @@ def main():
         path = os.path.join(res, folder)
         os.makedirs(path, exist_ok=True)
         logo.resize((px, px), Image.Resampling.LANCZOS).save(os.path.join(path, "ic_launcher.png"))
+    # iOS: Apple rounds the corners itself and rejects transparency, so fill the
+    # tile edge-to-edge (draw on the dark background, no rounded mask).
+    appicon = os.path.join(ROOT, "spotvault_mobile", "ios", "Runner", "Assets.xcassets", "AppIcon.appiconset")
+    if os.path.isdir(appicon):
+        flat = Image.new("RGB", logo.size, BG_BOTTOM)
+        # Re-draw without the rounded-square cut: scale the artwork up slightly
+        inner = logo.resize((int(S * 1.12), int(S * 1.12)), Image.Resampling.LANCZOS)
+        off = (S - inner.width) // 2
+        flat.paste(inner, (off, off), inner)
+        for name in os.listdir(appicon):
+            if name.endswith(".png"):
+                path = os.path.join(appicon, name)
+                with Image.open(path) as old:
+                    size = old.size
+                flat.resize(size, Image.Resampling.LANCZOS).save(path)
+
     print("icons written")
 
 
