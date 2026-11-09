@@ -56,7 +56,27 @@ metadata and album artwork, and skips existing tracks automatically.
   recreate or reassign the folder before downloading.
 
 ----------------------------------------------------------------------
-3. TROUBLESHOOTING
+3. PHONE SYNC (ANDROID COMPANION APP)
+----------------------------------------------------------------------
+* Install the SpotVault Android app (spotvault_mobile/) on your phone.
+* Put the PC and the phone on the same Wi-Fi network.
+* On the PC, click "📱 Phone Sync" in the top bar. It shows this PC's
+  address (e.g. 192.168.0.113:50505) and a 6-digit PIN.
+* On the phone, open the Sync tab. Tap "Scan" to find the PC, or type
+  the address. Enter the PIN and tap "Sync now".
+* Every playlist folder is copied with its songs, cover art and order.
+  Later syncs copy only new or changed songs. Songs deleted on the PC
+  are removed from the phone (switch this off in the Sync tab).
+* An interrupted sync resumes where it stopped.
+* The first time, Windows Firewall asks about network access. Allow
+  SpotVault on "Private networks", or the phone cannot connect.
+
+The phone app is a full offline music player: playlists, Liked Songs,
+Recently/Most Played, search, shuffle, repeat, queue editing, sleep
+timer, playback speed, and lock-screen / notification controls.
+
+----------------------------------------------------------------------
+4. TROUBLESHOOTING
 ----------------------------------------------------------------------
 * Q: A track shows "Provider match failed"?
   A: SpotVault matches tracks against audio streaming providers. Very 
@@ -66,4 +86,10 @@ metadata and album artwork, and skips existing tracks automatically.
 * Q: Missing folder prompt appears constantly?
   A: Make sure the master folder path at the top exists and that your 
      storage drive is connected and writable.
+
+* Q: The phone says "Can't reach" the PC?
+  A: Check both are on the same Wi-Fi (not a guest network), SpotVault
+     is open on the PC, and Windows Firewall allows SpotVault on
+     Private networks. Public/hotel Wi-Fi often blocks devices from
+     seeing each other.
 ======================================================================

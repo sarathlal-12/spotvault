@@ -1,0 +1,30 @@
+name: spotvault_mobile
+description: Sovereign offline audio synchronization engine for Android & iOS.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  audio_session: ^0.2.4
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  just_audio: ^0.10.6
+  just_audio_background: ^0.0.1-beta.17
+  path_provider: ^2.1.2
+  shared_preferences: ^2.5.6
+  wakelock_plus: ^1.8.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  test: ^1.31.1
+
+flutter:
+  uses-material-design: true
+# sqflite_android 2.4.5 calls Thread.threadId() (Java 19+), which fails to
+# compile against the Java 17 target. Pulled in by audio_service's art cache.
+dependency_overrides:
+  sqflite_android: 2.4.1

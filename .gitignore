@@ -4,10 +4,14 @@ build/
 dist/
 Output/
 *.spec
+# The build spec carries required data-file fixes, so keep it in git.
+!SpotVault_V1.spec
 *.exe
+*.apk
 library_config.json
 .spot_sync_cache/
 *.m4a
 *.mp3
+*.part
 .vscode/
 .idea/

@@ -7,12 +7,14 @@ import re
 import queue
 import signal
 import threading
+import time
 import multiprocessing
 import subprocess
 import requests
 from PIL import Image
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
+from phone_sync import PhoneSyncServer, generate_pin, get_lan_ips, HTTP_PORT
 
 # Explicitly register Windows AppUserModelID so the taskbar displays our custom icon
 if os.name == "nt":
@@ -22,6 +24,18 @@ if os.name == "nt":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
     except Exception:
         pass
+
+    # spotdl runs FFmpeg and yt-dlp helpers for every song. In the windowed exe
+    # each of those console programs would pop up its own terminal window.
+    # Start every child process hidden instead (asyncio's Popen inherits this).
+    _CREATE_NO_WINDOW = 0x08000000
+    _orig_popen_init = subprocess.Popen.__init__
+
+    def _hidden_popen_init(self, *args, **kwargs):
+        kwargs["creationflags"] = kwargs.get("creationflags", 0) | _CREATE_NO_WINDOW
+        _orig_popen_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _hidden_popen_init
 
 # Prevent Rich wrapping artifacts
 os.environ.setdefault("COLUMNS", "160")
@@ -222,6 +236,105 @@ class AddPlaylistDialog(ctk.CTkToplevel):
 
 
 # -------------------------------------------------------------
+# Phone Sync Window (connection details for the Android app)
+# -------------------------------------------------------------
+class PhoneSyncDialog(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.app = parent
+        self.title("Phone Sync")
+        self.geometry("460x560")
+        self.resizable(False, False)
+        self.configure(fg_color=COLOR_SURFACE)
+        self.transient(parent)
+
+        icon_path = get_resource_path("app_icon.ico")
+        if os.path.exists(icon_path):
+            self.after(200, lambda: self.iconbitmap(icon_path))
+
+        ctk.CTkLabel(
+            self,
+            text="Connect Your Phone",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=COLOR_TEXT_PRIMARY
+        ).pack(pady=(20, 4))
+
+        ctk.CTkLabel(
+            self,
+            text="Open SpotVault on your phone (same Wi-Fi).\nIt finds this PC automatically, or type the address below.",
+            font=ctk.CTkFont(size=12),
+            text_color=COLOR_TEXT_MUTED,
+            justify="center"
+        ).pack(pady=(0, 14))
+
+        info = ctk.CTkFrame(self, fg_color=COLOR_CARD, corner_radius=12, border_width=1, border_color=COLOR_BORDER)
+        info.pack(fill="x", padx=25)
+
+        ctk.CTkLabel(info, text="ADDRESS", font=ctk.CTkFont(size=11, weight="bold"), text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=18, pady=(14, 0))
+        self.lbl_addr = ctk.CTkLabel(info, text="", font=ctk.CTkFont(size=26, weight="bold"), text_color=COLOR_ACCENT, anchor="w", justify="left")
+        self.lbl_addr.pack(fill="x", padx=18)
+
+        ctk.CTkLabel(info, text="PIN", font=ctk.CTkFont(size=11, weight="bold"), text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=18, pady=(10, 0))
+        pin_row = ctk.CTkFrame(info, fg_color="transparent")
+        pin_row.pack(fill="x", padx=18, pady=(0, 14))
+        self.lbl_pin = ctk.CTkLabel(pin_row, text="", font=ctk.CTkFont(size=26, weight="bold"), text_color=COLOR_TEXT_PRIMARY)
+        self.lbl_pin.pack(side="left")
+        ctk.CTkButton(
+            pin_row,
+            text="New PIN",
+            width=80,
+            height=28,
+            corner_radius=14,
+            fg_color=COLOR_SURFACE,
+            hover_color=COLOR_CARD_HOVER,
+            command=self._new_pin
+        ).pack(side="right")
+
+        self.lbl_state = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=12, weight="bold"), wraplength=400, justify="center")
+        self.lbl_state.pack(pady=(12, 6))
+
+        ctk.CTkLabel(self, text="ACTIVITY", font=ctk.CTkFont(size=11, weight="bold"), text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=25)
+        self.feed = ctk.CTkTextbox(self, height=150, fg_color="#0D0D0D", border_width=1, border_color=COLOR_BORDER, font=ctk.CTkFont(size=11))
+        self.feed.pack(fill="both", expand=True, padx=25, pady=(4, 10))
+
+        ctk.CTkLabel(
+            self,
+            text="If the phone can't connect, allow SpotVault on 'Private networks'\nwhen Windows Firewall asks.",
+            font=ctk.CTkFont(size=10),
+            text_color=COLOR_TEXT_MUTED,
+            justify="center"
+        ).pack(pady=(0, 14))
+
+        self.refresh()
+
+    def _new_pin(self):
+        if messagebox.askyesno("New PIN", "Phones paired with the old PIN must re-enter the new one. Continue?", parent=self):
+            self.app.sync_pin = generate_pin()
+            self.app._save_config()
+            self.refresh()
+
+    def refresh(self):
+        server = self.app.phone_server
+        ips = get_lan_ips()
+        if ips:
+            self.lbl_addr.configure(text="\n".join(f"{ip}:{HTTP_PORT}" for ip in ips[:3]))
+        else:
+            self.lbl_addr.configure(text="No network found")
+        pin = self.app.sync_pin
+        self.lbl_pin.configure(text=f"{pin[:3]} {pin[3:]}")
+
+        if server.running:
+            self.lbl_state.configure(text="● Ready for phone sync", text_color=COLOR_ACCENT)
+        else:
+            self.lbl_state.configure(text=f"✕ Sync server not running: {server.error}", text_color=COLOR_DANGER)
+
+        self.feed.configure(state="normal")
+        self.feed.delete("1.0", "end")
+        self.feed.insert("end", "\n".join(self.app.phone_events[-200:]) or "Waiting for a phone…")
+        self.feed.see("end")
+        self.feed.configure(state="disabled")
+
+# -------------------------------------------------------------
 # Main Application
 # -------------------------------------------------------------
 class SpotifyLibraryApp(ctk.CTk):
@@ -229,8 +342,9 @@ class SpotifyLibraryApp(ctk.CTk):
         super().__init__()
 
         self.title("SpotVault")
-        self.geometry("980x720")
-        self.minsize(850, 600)
+        self.geometry("1100x700")
+        self.minsize(980, 600)
+        self.after(0, lambda: self.state("zoomed"))
         self.configure(fg_color=COLOR_BG)
 
         # Set Window Icon
@@ -243,8 +357,23 @@ class SpotifyLibraryApp(ctk.CTk):
         self.is_running = False
         self.msg_queue = queue.Queue()
         self.active_tasks = []
+        self.sync_pin = ""
+        self.phone_events = []
+        self.phone_dialog = None
 
         self._load_config()
+        if not self.sync_pin:
+            self.sync_pin = generate_pin()
+            self._save_config()
+
+        # Wi-Fi server for the Android companion app
+        self.phone_server = PhoneSyncServer(
+            get_state=lambda: (self.master_folder, list(self.playlists)),
+            get_pin=lambda: self.sync_pin,
+            on_event=lambda text: self._post("phone", text),
+        )
+        self.phone_server.start()
+
         self._build_ui()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -257,13 +386,15 @@ class SpotifyLibraryApp(ctk.CTk):
                     data = json.load(f)
                     self.master_folder = data.get("master_folder", self.master_folder)
                     self.playlists = data.get("playlists", [])
+                    self.sync_pin = str(data.get("sync_pin", ""))
             except Exception:
                 pass
 
     def _save_config(self):
         data = {
             "master_folder": self.master_folder,
-            "playlists": self.playlists
+            "playlists": self.playlists,
+            "sync_pin": self.sync_pin
         }
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -271,269 +402,271 @@ class SpotifyLibraryApp(ctk.CTk):
         except Exception:
             pass
 
+    # ---------------------------------------------------------------
+    # UI
+    # ---------------------------------------------------------------
+    def _font(self, size, weight="normal"):
+        return ctk.CTkFont(family="Segoe UI", size=size, weight=weight)
+
     def _build_ui(self):
-        # Top Header Bar
-        header = ctk.CTkFrame(self, fg_color=COLOR_SURFACE, height=70, corner_radius=0)
-        header.pack(fill="x", side="top")
+        self._cover_cache = {}
+        self._grid_cols = 0
+        self.counts = {"done": 0, "skip": 0, "fail": 0}
 
-        brand_box = ctk.CTkFrame(header, fg_color="transparent")
-        brand_box.pack(side="left", padx=25, pady=15)
+        # ---------- Sidebar ----------
+        sidebar = ctk.CTkFrame(self, fg_color=COLOR_SIDEBAR, width=230, corner_radius=0)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
-        ctk.CTkLabel(
-            brand_box,
-            text="●",
-            font=ctk.CTkFont(size=28, weight="bold"),
-            text_color=COLOR_ACCENT
-        ).pack(side="left", padx=(0, 10))
+        brand = ctk.CTkFrame(sidebar, fg_color="transparent")
+        brand.pack(fill="x", padx=20, pady=(24, 26))
+        logo = ctk.CTkFrame(brand, width=34, height=34, corner_radius=17, fg_color=COLOR_ACCENT)
+        logo.pack(side="left")
+        logo.pack_propagate(False)
+        ctk.CTkLabel(logo, text="♪", text_color="#000000", font=self._font(18, "bold")).place(relx=0.5, rely=0.5, anchor="center")
+        ctk.CTkLabel(brand, text="SpotVault", font=self._font(21, "bold"), text_color=COLOR_TEXT_PRIMARY).pack(side="left", padx=(10, 0))
 
-        ctk.CTkLabel(
-            brand_box,
-            text="SpotVault",
-            font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=COLOR_TEXT_PRIMARY
-        ).pack(side="left")
+        # Library stats
+        stats = ctk.CTkFrame(sidebar, fg_color=COLOR_SURFACE, corner_radius=10)
+        stats.pack(fill="x", padx=14)
+        ctk.CTkLabel(stats, text="YOUR LIBRARY", font=self._font(11, "bold"), text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=14, pady=(12, 6))
+        self.lbl_stat_playlists = self._stat_row(stats, "Playlists")
+        self.lbl_stat_songs = self._stat_row(stats, "Songs")
+        self.lbl_stat_size = self._stat_row(stats, "On disk", last=True)
 
-        # Master Folder Selector
-        path_box = ctk.CTkFrame(header, fg_color=COLOR_CARD, corner_radius=20, border_width=1, border_color=COLOR_BORDER)
-        path_box.pack(side="right", padx=25, pady=15)
-
-        self.lbl_master_path = ctk.CTkLabel(
-            path_box,
-            text=f"📁 {self.master_folder}",
-            font=ctk.CTkFont(size=12),
-            text_color=COLOR_TEXT_MUTED
-        )
-        self.lbl_master_path.pack(side="left", padx=(15, 10), pady=6)
-
+        # Phone sync
+        phone = ctk.CTkFrame(sidebar, fg_color=COLOR_SURFACE, corner_radius=10)
+        phone.pack(fill="x", padx=14, pady=(12, 0))
+        row = ctk.CTkFrame(phone, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=(12, 2))
+        ctk.CTkLabel(row, text="PHONE SYNC", font=self._font(11, "bold"), text_color=COLOR_TEXT_MUTED).pack(side="left")
+        ok = self.phone_server.running
+        ctk.CTkLabel(row, text="● Ready" if ok else "● Off", font=self._font(11, "bold"),
+                     text_color=COLOR_ACCENT if ok else COLOR_DANGER).pack(side="right")
+        ctk.CTkLabel(phone, text="Send playlists to the\nSpotVault Android app.", justify="left",
+                     font=self._font(12), text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=14)
         ctk.CTkButton(
-            path_box,
-            text="Change",
-            width=70,
-            height=26,
-            corner_radius=13,
-            fg_color=COLOR_SURFACE,
-            hover_color=COLOR_CARD_HOVER,
-            command=self._change_master_folder
-        ).pack(side="right", padx=(0, 8), pady=4)
+            phone, text="Connect phone", height=34, corner_radius=17,
+            fg_color=COLOR_TEXT_PRIMARY, hover_color="#E0E0E0", text_color="#000000",
+            font=self._font(13, "bold"), command=self._open_phone_dialog
+        ).pack(fill="x", padx=14, pady=(10, 14))
 
-        # Main Layout Division
-        self.body_panes = ctk.CTkFrame(self, fg_color="transparent")
-        self.body_panes.pack(fill="both", expand=True, padx=25, pady=15)
+        # Storage folder (bottom of sidebar)
+        folder = ctk.CTkFrame(sidebar, fg_color=COLOR_SURFACE, corner_radius=10)
+        folder.pack(side="bottom", fill="x", padx=14, pady=14)
+        ctk.CTkLabel(folder, text="MUSIC FOLDER", font=self._font(11, "bold"), text_color=COLOR_TEXT_MUTED).pack(anchor="w", padx=14, pady=(12, 2))
+        self.lbl_master_path = ctk.CTkLabel(folder, text="", font=self._font(12), text_color=COLOR_TEXT_PRIMARY,
+                                            anchor="w", justify="left", wraplength=180)
+        self.lbl_master_path.pack(fill="x", padx=14)
+        btns = ctk.CTkFrame(folder, fg_color="transparent")
+        btns.pack(fill="x", padx=14, pady=(10, 14))
+        ctk.CTkButton(btns, text="Open", height=30, width=80, corner_radius=15, fg_color=COLOR_CARD,
+                      hover_color=COLOR_CARD_HOVER, font=self._font(12, "bold"),
+                      command=self._open_master_folder).pack(side="left", expand=True, fill="x", padx=(0, 4))
+        ctk.CTkButton(btns, text="Change", height=30, width=80, corner_radius=15, fg_color=COLOR_CARD,
+                      hover_color=COLOR_CARD_HOVER, font=self._font(12, "bold"),
+                      command=self._change_master_folder).pack(side="left", expand=True, fill="x", padx=(4, 0))
 
-        # Left: Playlists Deck
-        self.left_pane = ctk.CTkFrame(self.body_panes, fg_color="transparent")
-        self.left_pane.pack(side="left", fill="both", expand=True, padx=(0, 10))
-
-        deck_actions = ctk.CTkFrame(self.left_pane, fg_color="transparent")
-        deck_actions.pack(fill="x", pady=(0, 12))
-
-        ctk.CTkLabel(
-            deck_actions,
-            text="Your Synced Playlists",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=COLOR_TEXT_PRIMARY
-        ).pack(side="left")
-
-        ctk.CTkButton(
-            deck_actions,
-            text="+ Add Playlist",
-            width=120,
-            height=36,
-            corner_radius=18,
-            fg_color=COLOR_CARD,
-            hover_color=COLOR_CARD_HOVER,
-            font=ctk.CTkFont(weight="bold"),
-            command=self._open_add_dialog
-        ).pack(side="right", padx=(8, 0))
-
-        self.btn_sync_all = ctk.CTkButton(
-            deck_actions,
-            text="⚡ Sync All Playlists",
-            height=36,
-            corner_radius=18,
-            fg_color=COLOR_ACCENT,
-            hover_color=COLOR_ACCENT_HOVER,
-            text_color="#000000",
-            font=ctk.CTkFont(weight="bold"),
-            command=self._sync_all_playlists
-        )
-        self.btn_sync_all.pack(side="right")
-
-        self.cards_scroll = ctk.CTkScrollableFrame(
-            self.left_pane,
-            fg_color=COLOR_SURFACE,
-            corner_radius=12,
-            border_width=1,
-            border_color=COLOR_BORDER
-        )
-        self.cards_scroll.pack(fill="both", expand=True)
-
-        # Right: Live Sync Hub
-        self.right_pane = ctk.CTkFrame(
-            self.body_panes,
-            width=320,
-            fg_color=COLOR_SURFACE,
-            corner_radius=12,
-            border_width=1,
-            border_color=COLOR_BORDER
-        )
-        self.right_pane.pack(side="right", fill="both", padx=(10, 0))
+        # ---------- Activity panel (right) ----------
+        self.right_pane = ctk.CTkFrame(self, width=300, fg_color=COLOR_SIDEBAR, corner_radius=0)
+        self.right_pane.pack(side="right", fill="y")
         self.right_pane.pack_propagate(False)
 
-        right_header = ctk.CTkFrame(self.right_pane, fg_color="transparent")
-        right_header.pack(fill="x", padx=15, pady=(15, 8))
-
-        ctk.CTkLabel(
-            right_header,
-            text="SYNC STATUS",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color=COLOR_TEXT_MUTED
-        ).pack(side="left")
-
-        self.lbl_status = ctk.CTkLabel(
-            right_header,
-            text="Idle",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color=COLOR_ACCENT
-        )
+        head = ctk.CTkFrame(self.right_pane, fg_color="transparent")
+        head.pack(fill="x", padx=18, pady=(24, 10))
+        ctk.CTkLabel(head, text="Activity", font=self._font(18, "bold"), text_color=COLOR_TEXT_PRIMARY).pack(side="left")
+        self.lbl_status = ctk.CTkLabel(head, text="Idle", font=self._font(11, "bold"), text_color="#000000",
+                                       fg_color=COLOR_TEXT_MUTED, corner_radius=10, height=22, width=70)
         self.lbl_status.pack(side="right")
 
-        self.progress_bar = ctk.CTkProgressBar(
-            self.right_pane,
-            height=8,
-            corner_radius=4,
-            progress_color=COLOR_ACCENT,
-            fg_color=COLOR_CARD
-        )
-        self.progress_bar.pack(fill="x", padx=15, pady=(0, 10))
+        self.progress_bar = ctk.CTkProgressBar(self.right_pane, height=6, corner_radius=3,
+                                               progress_color=COLOR_ACCENT, fg_color=COLOR_CARD)
+        self.progress_bar.pack(fill="x", padx=18)
         self.progress_bar.set(0)
 
-        self.feed_scroll = ctk.CTkScrollableFrame(
-            self.right_pane,
-            fg_color="#0D0D0D",
-            corner_radius=8,
-            border_width=1,
-            border_color=COLOR_BORDER
-        )
-        self.feed_scroll.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        counters = ctk.CTkFrame(self.right_pane, fg_color="transparent")
+        counters.pack(fill="x", padx=14, pady=(12, 8))
+        self.lbl_cnt_done = self._counter(counters, "Downloaded", COLOR_ACCENT)
+        self.lbl_cnt_skip = self._counter(counters, "Skipped", COLOR_TEXT_MUTED)
+        self.lbl_cnt_fail = self._counter(counters, "Failed", COLOR_DANGER)
 
-        self.btn_open_folder = ctk.CTkButton(
-            self.right_pane,
-            text="📁 Open Folder in Explorer",
-            height=40,
-            corner_radius=20,
-            fg_color=COLOR_CARD,
-            hover_color=COLOR_CARD_HOVER,
-            font=ctk.CTkFont(weight="bold"),
-            command=self._open_master_folder
+        self.feed_scroll = ctk.CTkScrollableFrame(self.right_pane, fg_color="transparent", corner_radius=0)
+        self.feed_scroll.pack(fill="both", expand=True, padx=6, pady=(0, 10))
+        self._feed_placeholder()
+
+        # ---------- Main area ----------
+        main = ctk.CTkFrame(self, fg_color=COLOR_BG, corner_radius=0)
+        main.pack(side="left", fill="both", expand=True)
+
+        hero = ctk.CTkFrame(main, fg_color="#1F3D2B", corner_radius=0, height=150)
+        hero.pack(fill="x")
+        hero.pack_propagate(False)
+        ctk.CTkLabel(hero, text="LIBRARY", font=self._font(11, "bold"), text_color="#CFEFDC").place(x=30, y=30)
+        ctk.CTkLabel(hero, text="Your Playlists", font=self._font(34, "bold"), text_color=COLOR_TEXT_PRIMARY).place(x=28, y=48)
+        self.lbl_hero_sub = ctk.CTkLabel(hero, text="", font=self._font(13), text_color="#CFEFDC")
+        self.lbl_hero_sub.place(x=30, y=100)
+
+        actions = ctk.CTkFrame(main, fg_color="transparent")
+        actions.pack(fill="x", padx=28, pady=(18, 6))
+        self.btn_sync_all = ctk.CTkButton(
+            actions, text="⟳  Sync all", height=44, width=140, corner_radius=22,
+            fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER, text_color="#000000",
+            font=self._font(14, "bold"), command=self._sync_all_playlists
         )
-        self.btn_open_folder.pack(fill="x", padx=12, pady=(0, 12))
+        self.btn_sync_all.pack(side="left")
+        ctk.CTkButton(
+            actions, text="+  Add playlist", height=44, width=150, corner_radius=22,
+            fg_color="transparent", hover_color=COLOR_CARD, border_width=1, border_color="#727272",
+            text_color=COLOR_TEXT_PRIMARY, font=self._font(14, "bold"), command=self._open_add_dialog
+        ).pack(side="left", padx=12)
+
+        self.cards_scroll = ctk.CTkScrollableFrame(main, fg_color="transparent", corner_radius=0)
+        self.cards_scroll.pack(fill="both", expand=True, padx=16, pady=(6, 12))
+        self.cards_scroll.bind("<Configure>", self._on_grid_resize)
 
         self._render_library_cards()
 
+    def _stat_row(self, parent, label, last=False):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=(0, 12 if last else 4))
+        ctk.CTkLabel(row, text=label, font=self._font(13), text_color=COLOR_TEXT_MUTED).pack(side="left")
+        val = ctk.CTkLabel(row, text="–", font=self._font(13, "bold"), text_color=COLOR_TEXT_PRIMARY)
+        val.pack(side="right")
+        return val
+
+    def _counter(self, parent, label, color):
+        box = ctk.CTkFrame(parent, fg_color=COLOR_SURFACE, corner_radius=8)
+        box.pack(side="left", expand=True, fill="x", padx=4)
+        val = ctk.CTkLabel(box, text="0", font=self._font(18, "bold"), text_color=color)
+        val.pack(pady=(6, 0))
+        ctk.CTkLabel(box, text=label, font=self._font(10), text_color=COLOR_TEXT_MUTED).pack(pady=(0, 6))
+        return val
+
+    def _feed_placeholder(self):
+        self._placeholder = ctk.CTkLabel(self.feed_scroll, text="Nothing yet.\nPress Sync to download new songs.",
+                     font=self._font(12), text_color="#6A6A6A", justify="center")
+        self._placeholder.pack(pady=60)
+
+    def _folder_stats(self, folder):
+        path = os.path.join(self.master_folder, folder)
+        count, size = 0, 0
+        try:
+            for e in os.scandir(path):
+                if e.is_file() and e.name.lower().endswith((".m4a", ".mp3", ".flac", ".wav", ".ogg", ".opus")):
+                    count += 1
+                    size += e.stat().st_size
+        except OSError:
+            pass
+        return count, size
+
+    def _cover_image(self, img_path, size):
+        key = (img_path, size)
+        if key in self._cover_cache:
+            return self._cover_cache[key]
+        img = None
+        if img_path and os.path.exists(img_path):
+            try:
+                from PIL import ImageDraw
+                pil = Image.open(img_path).convert("RGB").resize((size * 2, size * 2), Image.Resampling.LANCZOS)
+                mask = Image.new("L", pil.size, 0)
+                ImageDraw.Draw(mask).rounded_rectangle((0, 0, *pil.size), radius=16, fill=255)
+                pil.putalpha(mask)
+                img = ctk.CTkImage(light_image=pil, dark_image=pil, size=(size, size))
+            except Exception:
+                img = None
+        self._cover_cache[key] = img
+        return img
+
+    def _on_grid_resize(self, event):
+        cols = max(1, (event.width - 10) // 200)
+        if self.playlists and cols != self._grid_cols:
+            self._render_library_cards()
+
     def _render_library_cards(self):
-        """Draws all saved playlists as rich Spotify-styled cards."""
+        """Draws saved playlists as a grid of cover-art tiles."""
         for widget in self.cards_scroll.winfo_children():
             widget.destroy()
 
+        self.lbl_master_path.configure(text=self.master_folder)
+
+        total_songs, total_size = 0, 0
+        stats = []
+        for pl in self.playlists:
+            c, s = self._folder_stats(pl.get("folder", ""))
+            stats.append((c, s))
+            total_songs += c
+            total_size += s
+        self.lbl_stat_playlists.configure(text=str(len(self.playlists)))
+        self.lbl_stat_songs.configure(text=str(total_songs))
+        if total_size < 1024 ** 3:
+            self.lbl_stat_size.configure(text=f"{total_size / 1024 / 1024:.0f} MB")
+        else:
+            self.lbl_stat_size.configure(text=f"{total_size / 1024 ** 3:.2f} GB")
+        self.lbl_hero_sub.configure(text=f"{len(self.playlists)} playlists  •  {total_songs} songs downloaded")
+
         if not self.playlists:
-            placeholder = ctk.CTkFrame(self.cards_scroll, fg_color="transparent")
-            placeholder.pack(fill="both", expand=True, pady=80)
-
-            ctk.CTkLabel(
-                placeholder,
-                text="No Playlists Added Yet",
-                font=ctk.CTkFont(size=18, weight="bold"),
-                text_color=COLOR_TEXT_PRIMARY
-            ).pack(pady=(0, 6))
-
-            ctk.CTkLabel(
-                placeholder,
-                text="Click '+ Add Playlist' above to save your first Spotify playlist.",
-                font=ctk.CTkFont(size=13),
-                text_color=COLOR_TEXT_MUTED
-            ).pack()
+            self._grid_cols = 0
+            box = ctk.CTkFrame(self.cards_scroll, fg_color="transparent")
+            box.pack(fill="both", expand=True, pady=70)
+            ctk.CTkLabel(box, text="♪", font=self._font(54), text_color="#535353").pack()
+            ctk.CTkLabel(box, text="No playlists yet", font=self._font(20, "bold"), text_color=COLOR_TEXT_PRIMARY).pack(pady=(4, 4))
+            ctk.CTkLabel(box, text="Paste a Spotify playlist link to start your offline library.",
+                         font=self._font(13), text_color=COLOR_TEXT_MUTED).pack()
+            ctk.CTkButton(box, text="+  Add playlist", height=40, corner_radius=20, fg_color=COLOR_ACCENT,
+                          hover_color=COLOR_ACCENT_HOVER, text_color="#000000", font=self._font(13, "bold"),
+                          command=self._open_add_dialog).pack(pady=18)
             return
 
+        width = self.cards_scroll.winfo_width()
+        cols = max(1, (width - 10) // 200) if width > 1 else 3
+        self._grid_cols = cols
+        for c in range(cols):
+            self.cards_scroll.grid_columnconfigure(c, weight=1, uniform="tile")
+
         for idx, pl in enumerate(self.playlists):
-            card = ctk.CTkFrame(
-                self.cards_scroll,
-                fg_color=COLOR_CARD,
-                corner_radius=10,
-                border_width=1,
-                border_color=COLOR_BORDER
-            )
-            card.pack(fill="x", padx=10, pady=6)
+            count, size = stats[idx]
+            tile = self._playlist_tile(idx, pl, count, size)
+            tile.grid(row=idx // cols, column=idx % cols, padx=8, pady=8, sticky="nsew")
 
-            thumb_label = ctk.CTkLabel(card, text="♪", font=ctk.CTkFont(size=24), width=65, height=65)
-            thumb_label.pack(side="left", padx=10, pady=10)
+    def _playlist_tile(self, idx, pl, count, size):
+        tile = ctk.CTkFrame(self.cards_scroll, fg_color=COLOR_SURFACE, corner_radius=10)
+        cover = self._cover_image(pl.get("img_path", ""), 160)
+        art = ctk.CTkLabel(tile, text="" if cover else "♪", image=cover, width=160, height=160,
+                           fg_color="transparent" if cover else COLOR_CARD, corner_radius=8,
+                           font=self._font(48), text_color="#535353")
+        art.pack(padx=14, pady=(14, 10))
 
-            img_path = pl.get("img_path", "")
-            if img_path and os.path.exists(img_path):
-                try:
-                    pil_img = Image.open(img_path).resize((65, 65), Image.Resampling.LANCZOS)
-                    ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(65, 65))
-                    thumb_label.configure(image=ctk_img, text="")
-                except Exception:
-                    pass
+        ctk.CTkLabel(tile, text=pl.get("title", "Spotify Playlist"), font=self._font(14, "bold"),
+                     text_color=COLOR_TEXT_PRIMARY, anchor="w", wraplength=165, justify="left").pack(fill="x", padx=16)
 
-            info_frame = ctk.CTkFrame(card, fg_color="transparent")
-            info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=12)
+        target = os.path.join(self.master_folder, pl.get("folder", ""))
+        if pl.get("has_synced", False) and not os.path.exists(target):
+            sub, color = "Folder missing", COLOR_DANGER
+        elif not pl.get("has_synced", False):
+            sub, color = "Not synced yet", COLOR_TEXT_MUTED
+        else:
+            sub, color = f"{count} songs  •  {size / 1024 / 1024:.0f} MB", COLOR_TEXT_MUTED
+        ctk.CTkLabel(tile, text=sub, font=self._font(12), text_color=color, anchor="w").pack(fill="x", padx=16, pady=(2, 0))
 
-            ctk.CTkLabel(
-                info_frame,
-                text=pl.get("title", "Spotify Playlist"),
-                font=ctk.CTkFont(size=15, weight="bold"),
-                text_color=COLOR_TEXT_PRIMARY,
-                anchor="w"
-            ).pack(fill="x")
-
-            target_path = os.path.join(self.master_folder, pl.get("folder", ""))
-            status_text = f"Folder: {pl.get('folder', '')}"
-            status_color = COLOR_TEXT_MUTED
-
-            # Warning only activates if it was synced before AND is now missing
-            if pl.get("has_synced", False) and not os.path.exists(target_path):
-                status_text += " [Missing / Deleted]"
-                status_color = COLOR_DANGER
-
-            ctk.CTkLabel(
-                info_frame,
-                text=status_text,
-                font=ctk.CTkFont(size=12),
-                text_color=status_color,
-                anchor="w"
-            ).pack(fill="x", pady=(2, 0))
-
-            btn_box = ctk.CTkFrame(card, fg_color="transparent")
-            btn_box.pack(side="right", padx=15, pady=10)
-
-            ctk.CTkButton(
-                btn_box,
-                text="Sync",
-                width=75,
-                height=34,
-                corner_radius=17,
-                font=ctk.CTkFont(size=12, weight="bold"),
-                fg_color=COLOR_ACCENT,
-                hover_color=COLOR_ACCENT_HOVER,
-                text_color="#000000",
-                command=lambda p=pl: self._sync_single_playlist(p)
-            ).pack(side="left", padx=(0, 6))
-
-            ctk.CTkButton(
-                btn_box,
-                text="✕",
-                width=34,
-                height=34,
-                corner_radius=17,
-                fg_color=COLOR_SURFACE,
-                hover_color=COLOR_DANGER,
-                command=lambda idx=idx: self._remove_playlist(idx)
-            ).pack(side="left")
+        row = ctk.CTkFrame(tile, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=(10, 14))
+        ctk.CTkButton(row, text="Sync", height=32, width=80, corner_radius=16, fg_color=COLOR_ACCENT,
+                      hover_color=COLOR_ACCENT_HOVER, text_color="#000000", font=self._font(12, "bold"),
+                      command=lambda p=pl: self._sync_single_playlist(p)).pack(side="left")
+        ctk.CTkButton(row, text="✕", height=32, width=32, corner_radius=16, fg_color=COLOR_CARD,
+                      hover_color=COLOR_DANGER, font=self._font(12, "bold"),
+                      command=lambda i=idx: self._remove_playlist(i)).pack(side="right")
+        return tile
 
     def _open_add_dialog(self):
         AddPlaylistDialog(self, self._handle_add_playlist)
+
+    def _open_phone_dialog(self):
+        if self.phone_dialog is not None and self.phone_dialog.winfo_exists():
+            self.phone_dialog.refresh()
+            self.phone_dialog.focus()
+            return
+        self.phone_dialog = PhoneSyncDialog(self)
 
     def _handle_add_playlist(self, url, folder):
         meta = fetch_spotify_metadata(url)
@@ -580,7 +713,6 @@ class SpotifyLibraryApp(ctk.CTk):
         chosen = filedialog.askdirectory(initialdir=self.master_folder)
         if chosen:
             self.master_folder = os.path.normpath(chosen)
-            self.lbl_master_path.configure(text=f"📁 {self.master_folder}")
             self._save_config()
             self._render_library_cards()
 
@@ -655,52 +787,48 @@ class SpotifyLibraryApp(ctk.CTk):
     def _start_sync(self):
         for w in self.feed_scroll.winfo_children():
             w.destroy()
+        self.counts = {"done": 0, "skip": 0, "fail": 0}
+        self._update_counters()
         self.is_running = True
         self.progress_bar.set(0.0)
-        self.lbl_status.configure(text="Syncing...")
-        self.btn_sync_all.configure(state="disabled")
+        self.lbl_status.configure(text="Syncing", fg_color=COLOR_ACCENT)
+        self.btn_sync_all.configure(state="disabled", text="Syncing…")
         threading.Thread(target=self._download_worker, daemon=True).start()
 
+    def _update_counters(self):
+        self.lbl_cnt_done.configure(text=str(self.counts["done"]))
+        self.lbl_cnt_skip.configure(text=str(self.counts["skip"]))
+        self.lbl_cnt_fail.configure(text=str(self.counts["fail"]))
+
     def _add_activity_card(self, icon, title, subtitle):
-        card = ctk.CTkFrame(self.feed_scroll, fg_color=COLOR_CARD, corner_radius=6, height=38)
-        card.pack(fill="x", padx=4, pady=2)
+        if getattr(self, "_placeholder", None) is not None and self._placeholder.winfo_exists():
+            self._placeholder.destroy()
+        kind = {"✔": "done", "↷": "skip", "✕": "fail"}.get(icon)
+        if kind:
+            self.counts[kind] += 1
+            self._update_counters()
+        color = {"done": COLOR_ACCENT, "fail": COLOR_DANGER, "skip": "#6A6A6A"}.get(kind, "#FFFFFF")
 
-        badge_color = COLOR_TEXT_MUTED
-        if icon == "✔":
-            badge_color = COLOR_ACCENT
-        elif icon == "✕":
-            badge_color = COLOR_DANGER
-        elif icon == "↷":
-            badge_color = COLOR_TEXT_MUTED
+        if icon == "📁":  # start of a playlist: show a section header
+            ctk.CTkLabel(self.feed_scroll, text=title.replace("Syncing: ", "").upper(), font=self._font(11, "bold"),
+                         text_color=COLOR_TEXT_MUTED, anchor="w").pack(fill="x", padx=10, pady=(12, 4))
+            self.feed_scroll._parent_canvas.yview_moveto(1.0)
+            return
 
-        ctk.CTkLabel(
-            card,
-            text=icon,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color=badge_color,
-            width=24
-        ).pack(side="left", padx=(6, 2), pady=4)
-
+        card = ctk.CTkFrame(self.feed_scroll, fg_color=COLOR_SURFACE, corner_radius=8)
+        card.pack(fill="x", padx=4, pady=3)
+        ctk.CTkFrame(card, width=3, height=10, fg_color=color, corner_radius=2).pack(side="left", fill="y", padx=(6, 0), pady=8)
         box = ctk.CTkFrame(card, fg_color="transparent")
-        box.pack(side="left", fill="both", expand=True, padx=4, pady=2)
-
-        ctk.CTkLabel(
-            box,
-            text=title,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=COLOR_TEXT_PRIMARY,
-            anchor="w"
-        ).pack(fill="x")
-
+        box.pack(side="left", fill="both", expand=True, padx=10, pady=6)
+        ctk.CTkLabel(box, text=title, font=self._font(12, "bold"), text_color=COLOR_TEXT_PRIMARY,
+                     anchor="w", justify="left", wraplength=220).pack(fill="x")
         if subtitle:
-            ctk.CTkLabel(
-                box,
-                text=subtitle,
-                font=ctk.CTkFont(size=9),
-                text_color=COLOR_TEXT_MUTED,
-                anchor="w"
-            ).pack(fill="x")
+            ctk.CTkLabel(box, text=subtitle, font=self._font(10), text_color=COLOR_TEXT_MUTED,
+                         anchor="w", justify="left", wraplength=220).pack(fill="x")
 
+        # Keep the feed light: long syncs can post hundreds of items.
+        for w in self.feed_scroll.winfo_children()[:-150]:
+            w.destroy()
         self.feed_scroll._parent_canvas.yview_moveto(1.0)
 
     def _handle_raw_log(self, text):
@@ -720,14 +848,20 @@ class SpotifyLibraryApp(ctk.CTk):
                 if kind == "item":
                     self._add_activity_card(value[0], value[1], value[2])
                 elif kind == "status":
-                    self.lbl_status.configure(text=value)
+                    self.lbl_status.configure(text=value.replace("Playlist ", ""), fg_color=COLOR_ACCENT)
                 elif kind == "progress":
                     self.progress_bar.set(value)
+                elif kind == "phone":
+                    stamp = time.strftime("%H:%M:%S")
+                    self.phone_events.append(f"[{stamp}] {value}")
+                    del self.phone_events[:-500]
+                    if self.phone_dialog is not None and self.phone_dialog.winfo_exists():
+                        self.phone_dialog.refresh()
                 elif kind == "done":
                     self.is_running = False
                     self.progress_bar.set(1.0)
-                    self.lbl_status.configure(text="Finished")
-                    self.btn_sync_all.configure(state="normal")
+                    self.lbl_status.configure(text="Done", fg_color=COLOR_ACCENT)
+                    self.btn_sync_all.configure(state="normal", text="⟳  Sync all")
                     self._render_library_cards()
         except queue.Empty:
             pass
@@ -744,6 +878,15 @@ class SpotifyLibraryApp(ctk.CTk):
         os._exit(0)
 
     def _download_worker(self):
+        # Any crash here used to kill the thread silently and leave the UI
+        # stuck on "Syncing..." forever. Report it and unlock the UI instead.
+        try:
+            self._download_worker_inner()
+        except Exception as e:
+            self._post("item", ("✕", "Sync crashed", f"{type(e).__name__}: {e}"))
+            self._post("done")
+
+    def _download_worker_inner(self):
         try:
             from spotdl.console import console_entry_point
         except ImportError:
