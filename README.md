@@ -1,11 +1,28 @@
 
-                          SPOTVAULT (v1.0)
+                          SPOTVAULT (v1.1.0)
              Offline Spotify Playlist Sync & Downloader
 
 
 SpotVault keeps your local music collection synchronized with your 
 Spotify playlists. It downloads high-quality audio files, embeds full 
 metadata and album artwork, and skips existing tracks automatically.
+The companion phone app (Android & iPhone) copies your playlists from
+the PC over Wi-Fi and plays them offline.
+
+Website:  https://spotvault-web.vercel.app
+Releases: https://github.com/sarathlal-12/spotvault/releases
+
+----------------------------------------------------------------------
+DOWNLOADS (v1.1.0)
+----------------------------------------------------------------------
+  Platform   File                            Size    Install
+  ---------  ------------------------------  ------  ----------------
+  Windows    SpotVault_Setup_v1.1.exe        52 MB   Run the installer
+  Android    SpotVault_v1.1.apk              54 MB   Open on the phone
+  iPhone     SpotVault_v1.1.0_unsigned.ipa    8 MB   Sideload (see 4)
+
+All files are attached to the v1.1.0 release on GitHub. Older
+versions stay available on the Releases page.
 
 ----------------------------------------------------------------------
 1. FIRST-TIME LAUNCH & REQUIREMENTS
@@ -31,8 +48,8 @@ metadata and album artwork, and skips existing tracks automatically.
 ----------------------------------------------------------------------
 * SELECT STORAGE LOCATION:
   By default, music downloads to your Windows "Music" directory. 
-  Click "Change" in the top bar to save tracks to an external drive 
-  or another folder.
+  Click "Change" under MUSIC FOLDER in the sidebar to save tracks to
+  an external drive or another folder.
 
 * ADD A PLAYLIST:
   1. Click "+ Add Playlist".
@@ -43,7 +60,7 @@ metadata and album artwork, and skips existing tracks automatically.
 
 * SYNCING SONGS:
   - To sync one playlist: Click the "Sync" button on its card.
-  - To sync everything: Click "⚡ Sync All Playlists" at the top.
+  - To sync everything: Click "Sync all" at the top.
 
 * SMART INCREMENTAL UPDATES:
   When you add new songs to your Spotify playlist weeks or months later, 
@@ -56,14 +73,17 @@ metadata and album artwork, and skips existing tracks automatically.
   recreate or reassign the folder before downloading.
 
 ----------------------------------------------------------------------
-3. PHONE SYNC (ANDROID COMPANION APP)
+3. PHONE SYNC (ANDROID & IPHONE)
 ----------------------------------------------------------------------
-* Install the SpotVault Android app (spotvault_mobile/) on your phone.
+* Install the phone app: the APK on Android, or the IPA on iPhone
+  (see section 4).
 * Put the PC and the phone on the same Wi-Fi network.
-* On the PC, click "📱 Phone Sync" in the top bar. It shows this PC's
+* On the PC, click "Connect phone" in the sidebar. It shows this PC's
   address (e.g. 192.168.0.113:50505) and a 6-digit PIN.
 * On the phone, open the Sync tab. Tap "Scan" to find the PC, or type
   the address. Enter the PIN and tap "Sync now".
+  On iPhone, Scan cannot find the PC (Apple blocks Wi-Fi discovery for
+  sideloaded apps): type the address instead.
 * Every playlist folder is copied with its songs, cover art and order.
   Later syncs copy only new or changed songs. Songs deleted on the PC
   are removed from the phone (switch this off in the Sync tab).
@@ -76,7 +96,32 @@ Recently/Most Played, search, shuffle, repeat, queue editing, sleep
 timer, playback speed, and lock-screen / notification controls.
 
 ----------------------------------------------------------------------
-4. TROUBLESHOOTING
+4. INSTALL ON IPHONE (SIDELOAD WITH ALTSTORE)
+----------------------------------------------------------------------
+SpotVault is not on the App Store. Install the IPA with your own
+Apple ID using AltStore (free; apps renew every 7 days).
+
+  1. Install iTunes and iCloud using the direct (NOT Microsoft Store)
+     installers linked in the AltStore guide: https://faq.altstore.io
+  2. Install AltServer from https://altstore.io and run it (tray icon).
+  3. Plug in the iPhone and tap "Trust". Click the AltServer tray icon
+     -> Install AltStore -> your iPhone, and sign in with your Apple ID.
+  4. On the iPhone: Settings -> General -> VPN & Device Management ->
+     your Apple ID -> Trust. On iOS 16+, also turn on Settings ->
+     Privacy & Security -> Developer Mode.
+  5. Download SpotVault_v1.1.0_unsigned.ipa on the iPhone in Safari.
+     In the Files app, tap it -> Share -> AltStore.
+  6. Open SpotVault -> Sync tab, type the PC address and PIN, and allow
+     Local Network access.
+
+* Keep AltServer running and turn on "Sync with this iPhone over Wi-Fi"
+  in iTunes once: AltStore then renews SpotVault automatically.
+* Alternative: Sideloadly (https://sideloadly.io). Drag the IPA in and
+  sign in; reinstall every 7 days.
+* Synced songs also appear in the iPhone Files app under SpotVault.
+
+----------------------------------------------------------------------
+5. TROUBLESHOOTING
 ----------------------------------------------------------------------
 * Q: A track shows "Provider match failed"?
   A: SpotVault matches tracks against audio streaming providers. Very 

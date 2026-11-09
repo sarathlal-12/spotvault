@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SpotVault: Spotify playlists, offline, on PC and phone</title>
-  <meta name="description" content="SpotVault downloads your Spotify playlists as offline audio on Windows, then syncs them to your Android phone over Wi-Fi. Free, local, no account.">
+  <meta name="description" content="SpotVault downloads your Spotify playlists as offline audio on Windows, then syncs them to your Android phone or iPhone over Wi-Fi. Free, local, no account.">
   <meta name="theme-color" content="#121212">
   <link rel="icon" type="image/png" href="logo.png">
   <link rel="icon" type="image/x-icon" href="app_icon.ico">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://spotvault-web.vercel.app">
   <meta property="og:title" content="SpotVault: your playlists, offline, everywhere">
-  <meta property="og:description" content="Download Spotify playlists on Windows and sync them to your Android phone over Wi-Fi.">
+  <meta property="og:description" content="Download Spotify playlists on Windows and sync them to your Android phone or iPhone over Wi-Fi.">
   <meta property="og:image" content="https://spotvault-web.vercel.app/og.png">
   <meta name="twitter:card" content="summary_large_image">
 
@@ -310,6 +310,43 @@
     .final img { width: 72px; height: 72px; border-radius: 18px; margin: 0 auto 24px; }
     .final .cta-row { justify-content: center; margin: 30px 0 0; }
 
+    /* Download cards */
+    .downloads { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .dl {
+      display: flex; flex-direction: column;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px;
+    }
+    .dl-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+    .dl-head .icon { margin: 0; }
+    .dl-head h3 { font-family: var(--font-head); font-size: 1.3rem; line-height: 1.2; }
+    .dl-head span { color: var(--faint); font-size: .88rem; }
+    .dl dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: .92rem; margin-bottom: 22px; }
+    .dl dt { color: var(--faint); }
+    .dl dd { color: var(--text); font-weight: 500; text-align: right; }
+    .dl .btn { margin-top: auto; width: 100%; }
+    .dl .note { margin-top: 12px; text-align: center; font-size: .85rem; color: var(--faint); }
+    .dl .note a { color: var(--green); }
+    .version-line { text-align: center; margin-top: 22px; color: var(--faint); font-size: .92rem; }
+    .version-line a { color: var(--muted); }
+
+    /* iPhone sideload guide */
+    .guide { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; align-items: start; }
+    .guide-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 30px; }
+    .guide-card h3 { font-family: var(--font-head); font-size: 1.25rem; margin-bottom: 4px; }
+    .guide-card > p { color: var(--muted); margin-bottom: 20px; font-size: .95rem; }
+    .guide ol { list-style: none; counter-reset: g; display: grid; gap: 16px; }
+    .guide ol li { counter-increment: g; display: grid; grid-template-columns: 32px 1fr; gap: 14px; color: var(--muted); font-size: .96rem; }
+    .guide ol li::before {
+      content: counter(g); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(30, 215, 96, .14); color: var(--green); font-family: var(--font-head); font-weight: 700;
+    }
+    .guide ol li b { color: var(--text); font-weight: 600; }
+    .guide a { color: var(--green); }
+    .callout { border-left: 3px solid var(--green); background: var(--card); border-radius: 10px; padding: 16px 18px; color: var(--muted); font-size: .93rem; }
+    .callout + .callout { margin-top: 12px; }
+    .callout b { color: var(--text); }
+    .callout.warn { border-left-color: #f5a524; }
+
     /* Footer */
     footer { border-top: 1px solid var(--border); padding: 40px 0 56px; color: var(--faint); font-size: .9rem; }
     footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px; }
@@ -327,6 +364,8 @@
       .hero .wrap, .split { grid-template-columns: 1fr; gap: 48px; }
       .stage { height: 440px; max-width: 560px; }
       .grid-3, .steps { grid-template-columns: 1fr 1fr; }
+      .downloads { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
+      .guide { grid-template-columns: 1fr; }
       .stats .wrap { grid-template-columns: 1fr 1fr; }
       .stat:nth-child(2) { border-right: 0; }
       .stat:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
@@ -362,6 +401,8 @@
     <defs>
       <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5.5 10.5 4.4v7.1H3V5.5Zm0 13 7.5 1.1v-7H3v5.9Zm8.5 1.3L21 21v-8.4h-9.5v7.2Zm0-15.6v7.3H21V3l-9.5 1.2Z"/></symbol>
       <symbol id="i-android" viewBox="0 0 24 24"><path fill="currentColor" d="M6 18c0 .55.45 1 1 1h1v3.5a1.5 1.5 0 0 0 3 0V19h2v3.5a1.5 1.5 0 0 0 3 0V19h1c.55 0 1-.45 1-1V8H6v10ZM3.5 8A1.5 1.5 0 0 0 2 9.5v7a1.5 1.5 0 0 0 3 0v-7A1.5 1.5 0 0 0 3.5 8Zm17 0A1.5 1.5 0 0 0 19 9.5v7a1.5 1.5 0 0 0 3 0v-7A1.5 1.5 0 0 0 20.5 8Zm-4.97-5.84 1.3-1.3a.5.5 0 0 0-.7-.7l-1.48 1.48A5.96 5.96 0 0 0 12 1c-.96 0-1.86.23-2.66.63L7.85.15a.5.5 0 0 0-.7.7l1.31 1.31A5.97 5.97 0 0 0 6 7h12a5.97 5.97 0 0 0-2.47-4.84ZM10 5H9V4h1v1Zm5 0h-1V4h1v1Z"/></symbol>
+      <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.15-2.76.83-3.48.83-.72 0-1.82-.81-3-.79-1.54.02-2.96.9-3.76 2.28-1.6 2.78-.41 6.9 1.15 9.16.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74s1.78.74 2.99.72c1.24-.02 2.02-1.12 2.77-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.39-3.69ZM14.1 5.86c.63-.77 1.06-1.83.94-2.89-.91.04-2.02.61-2.67 1.37-.58.67-1.1 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.28Z"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></symbol>
       <symbol id="i-free" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7Zm0 0h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></symbol>
@@ -396,9 +437,10 @@
       <nav class="nav-links" aria-label="Main">
         <a href="#features">Features</a>
         <a href="#phone">Phone sync</a>
+        <a href="#iphone">iPhone</a>
         <a href="#faq">FAQ</a>
         <a href="https://github.com/sarathlal-12/spotvault" target="_blank" rel="noopener">GitHub</a>
-        <a class="btn btn-primary btn-sm" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download>Download</a>
+        <a class="btn btn-primary btn-sm" href="#download">Download</a>
       </nav>
     </div>
   </header>
@@ -407,21 +449,21 @@
   <div class="hero" id="top">
     <div class="wrap">
       <div>
-        <a class="badge" href="#phone"><b>NEW</b> v1.1: Android app + Wi-Fi sync</a>
+        <a class="badge" href="#download"><b>NEW</b> v1.1: Android &amp; iPhone apps + Wi-Fi sync</a>
         <h1>Your Spotify playlists. <em>Offline.</em> On every device.</h1>
-        <p class="lead">SpotVault downloads your playlists on Windows with cover art and tags, then sends them to your Android phone over Wi-Fi. No account, no cloud, no ads.</p>
+        <p class="lead">SpotVault downloads your playlists on Windows with cover art and tags, then sends them to your Android phone or iPhone over Wi-Fi. No account, no cloud, no ads.</p>
         <div class="cta-row">
           <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download>
             <svg aria-hidden="true"><use href="#i-windows"/></svg> Download for Windows
           </a>
-          <a class="btn btn-outline" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.apk" download>
-            <svg aria-hidden="true"><use href="#i-android"/></svg> Get the Android app
+          <a class="btn btn-outline" href="#download">
+            <svg aria-hidden="true"><use href="#i-phone"/></svg> Android &amp; iPhone
           </a>
         </div>
         <div class="meta">
           <span><svg aria-hidden="true"><use href="#i-free"/></svg>Free, source on GitHub</span>
           <span><svg aria-hidden="true"><use href="#i-shield"/></svg>Zero telemetry</span>
-          <span><svg aria-hidden="true"><use href="#i-windows"/></svg>Windows 10 &amp; 11 (64-bit)</span>
+          <span><svg aria-hidden="true"><use href="#i-download"/></svg>Version 1.1.0</span>
         </div>
       </div>
 
@@ -484,7 +526,7 @@
     <div class="stats">
       <div class="wrap reveal">
         <div class="stat"><b>3</b><span>audio sources with fallback</span></div>
-        <div class="stat"><b>2</b><span>apps: Windows + Android</span></div>
+        <div class="stat"><b>3</b><span>platforms: Windows, Android, iPhone</span></div>
         <div class="stat"><b>0</b><span>accounts, ads or trackers</span></div>
         <div class="stat"><b>Auto</b><span>resume after any interruption</span></div>
       </div>
@@ -600,6 +642,93 @@
       </div>
     </section>
 
+    <!-- ===================== DOWNLOAD ===================== -->
+    <section id="download">
+      <div class="wrap">
+        <div class="section-head center">
+          <p class="eyebrow">Download</p>
+          <h2>Get SpotVault 1.1.0</h2>
+          <p class="section-lead">Start with the Windows app, then add the phone app to carry your playlists with you.</p>
+        </div>
+        <div class="downloads">
+          <article class="dl reveal">
+            <div class="dl-head">
+              <div class="icon"><svg aria-hidden="true"><use href="#i-windows"/></svg></div>
+              <div><h3>Windows</h3><span>Desktop app &amp; downloader</span></div>
+            </div>
+            <dl>
+              <dt>Version</dt><dd>1.1.0</dd>
+              <dt>File</dt><dd>Installer (.exe)</dd>
+              <dt>Size</dt><dd>52 MB</dd>
+              <dt>Needs</dt><dd>Windows 10 or 11, 64-bit</dd>
+            </dl>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download for Windows</a>
+            <p class="note">Allow SpotVault on Private networks if Windows Firewall asks.</p>
+          </article>
+          <article class="dl reveal">
+            <div class="dl-head">
+              <div class="icon"><svg aria-hidden="true"><use href="#i-android"/></svg></div>
+              <div><h3>Android</h3><span>Phone player &amp; sync</span></div>
+            </div>
+            <dl>
+              <dt>Version</dt><dd>1.1.0</dd>
+              <dt>File</dt><dd>App package (.apk)</dd>
+              <dt>Size</dt><dd>54 MB</dd>
+              <dt>Needs</dt><dd>Android phone</dd>
+            </dl>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.apk" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download APK</a>
+            <p class="note">Allow "install unknown apps" when Android asks.</p>
+          </article>
+          <article class="dl reveal">
+            <div class="dl-head">
+              <div class="icon"><svg aria-hidden="true"><use href="#i-apple"/></svg></div>
+              <div><h3>iPhone</h3><span>Phone player &amp; sync</span></div>
+            </div>
+            <dl>
+              <dt>Version</dt><dd>1.1.0</dd>
+              <dt>File</dt><dd>Unsigned app (.ipa)</dd>
+              <dt>Size</dt><dd>8 MB</dd>
+              <dt>Needs</dt><dd>Sideloading, iOS 15+</dd>
+            </dl>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.0_unsigned.ipa" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download IPA</a>
+            <p class="note">Not on the App Store. <a href="#iphone">How to install it</a></p>
+          </article>
+        </div>
+        <p class="version-line">Latest: v1.1.0 · <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">All versions &amp; release notes</a></p>
+      </div>
+    </section>
+
+    <!-- ===================== IPHONE SIDELOAD GUIDE ===================== -->
+    <section id="iphone" style="padding-top:0">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">iPhone</p>
+          <h2>Install on iPhone with AltStore</h2>
+          <p class="section-lead">SpotVault isn't on the App Store, so you install it yourself with your own Apple ID. It takes about 10 minutes the first time.</p>
+        </div>
+        <div class="guide">
+          <div class="guide-card reveal">
+            <h3>Step by step (Windows PC)</h3>
+            <p>You need your iPhone, its cable and your Apple ID.</p>
+            <ol>
+              <li><span><b>Install iTunes and iCloud</b> using the direct (non-Microsoft Store) installers linked in the <a href="https://faq.altstore.io" target="_blank" rel="noopener">AltStore install guide</a>. Uninstall the Store versions first if you have them.</span></li>
+              <li><span><b>Install AltServer</b> from <a href="https://altstore.io" target="_blank" rel="noopener">altstore.io</a> and run it. It lives in the system tray.</span></li>
+              <li><span><b>Plug in your iPhone</b>, tap <b>Trust</b>, then click the AltServer tray icon → <b>Install AltStore</b> → your iPhone, and sign in with your Apple ID.</span></li>
+              <li><span>On the iPhone, open <b>Settings → General → VPN &amp; Device Management</b>, tap your Apple ID and tap <b>Trust</b>. On iOS 16+, also turn on <b>Settings → Privacy &amp; Security → Developer Mode</b>.</span></li>
+              <li><span><b>Download the IPA</b> on the iPhone in Safari (button above). In the Files app, tap it → Share → <b>AltStore</b>. AltStore installs SpotVault.</span></li>
+              <li><span><b>Open SpotVault</b> → Sync tab. Type the address from <b>Connect phone</b> on your PC and the PIN, then allow <b>Local Network</b> access.</span></li>
+            </ol>
+          </div>
+          <div class="reveal">
+            <div class="callout"><b>Keep it working:</b> with a free Apple ID, apps expire after 7 days. Leave AltServer running on your PC and turn on <b>Wi-Fi sync</b> for your iPhone in iTunes once; AltStore then renews SpotVault automatically when both are on the same Wi-Fi.</div>
+            <div class="callout warn"><b>Type the address:</b> the Scan button can't find your PC on iPhone (Apple blocks Wi-Fi discovery for sideloaded apps). Enter the address shown in the Connect phone window instead.</div>
+            <div class="callout"><b>Prefer one-off installs?</b> <a href="https://sideloadly.io" target="_blank" rel="noopener">Sideloadly</a> also works: install iTunes, plug in the phone, drag the IPA in and sign in. Reinstall every 7 days.</div>
+            <div class="callout"><b>Bonus:</b> synced songs also show up in the iPhone <b>Files</b> app under SpotVault.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== FAQ ===================== -->
     <section id="faq">
       <div class="wrap">
@@ -621,12 +750,16 @@
             <div>Download <code>SpotVault_v1.1.apk</code> on your phone, open it, and allow installing apps from your browser or file manager when Android asks.</div>
           </details>
           <details class="reveal">
+            <summary>Why isn't SpotVault on the App Store?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <div>It's a free side project, so it's shared as an IPA you install yourself. Follow the <a href="#iphone" style="color:var(--green)">iPhone guide</a>: AltStore signs the app with your own Apple ID and keeps it renewed.</div>
+          </details>
+          <details class="reveal">
             <summary>Why does the first sync take a while?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
             <div>The first run sets up the audio converter (FFmpeg), and each song is matched, downloaded and tagged. Later syncs only fetch new songs, so they're much faster.</div>
           </details>
           <details class="reveal">
             <summary>Where are my songs saved?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
-            <div>On the PC, in your Music folder by default (change it under Music folder). Each playlist gets its own folder. On the phone, inside the SpotVault app's storage.</div>
+            <div>On the PC, in your Music folder by default (change it under Music folder). Each playlist gets its own folder. On the phone, inside the SpotVault app's storage (on iPhone you can also see them in the Files app).</div>
           </details>
         </div>
       </div>
@@ -638,13 +771,16 @@
         <div class="final reveal">
           <img src="logo.png" alt="" width="72" height="72">
           <h2>Take your music offline</h2>
-          <p class="section-lead" style="margin:0 auto">Free for Windows and Android. Install in under a minute.</p>
+          <p class="section-lead" style="margin:0 auto">Free for Windows, Android and iPhone. Version 1.1.0.</p>
           <div class="cta-row">
             <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download>
               <svg aria-hidden="true"><use href="#i-windows"/></svg> Download for Windows
             </a>
             <a class="btn btn-outline" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.apk" download>
-              <svg aria-hidden="true"><use href="#i-android"/></svg> Get the Android app
+              <svg aria-hidden="true"><use href="#i-android"/></svg> Android
+            </a>
+            <a class="btn btn-outline" href="#iphone">
+              <svg aria-hidden="true"><use href="#i-apple"/></svg> iPhone
             </a>
           </div>
         </div>
