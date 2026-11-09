@@ -15,7 +15,58 @@
   <meta property="og:title" content="SpotVault: your playlists, offline, everywhere">
   <meta property="og:description" content="Download Spotify playlists on Windows and sync them to your Android phone or iPhone over Wi-Fi.">
   <meta property="og:image" content="https://spotvault-web.vercel.app/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="SpotVault: your playlists, offline, on Windows, Android and iPhone">
+  <meta property="og:site_name" content="SpotVault">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SpotVault: your playlists, offline, everywhere">
+  <meta name="twitter:description" content="Download Spotify playlists on Windows and sync them to your Android phone or iPhone over Wi-Fi.">
+  <meta name="twitter:image" content="https://spotvault-web.vercel.app/og.png">
+
+  <!-- Search engines -->
+  <link rel="canonical" href="https://spotvault-web.vercel.app/">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+
+  <!-- Structured data: lets search engines and AI assistants describe the app correctly -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "SpotVault",
+        "url": "https://spotvault-web.vercel.app/",
+        "image": "https://spotvault-web.vercel.app/og.png",
+        "description": "SpotVault downloads your Spotify playlists as offline audio on Windows, then syncs them to your Android phone or iPhone over Wi-Fi. Free, local, no account.",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Windows, Android, iOS",
+        "softwareVersion": "1.1.0",
+        "downloadUrl": "https://github.com/sarathlal-12/spotvault/releases/tag/v1.1.0",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Sarath Lal", "url": "https://github.com/sarathlal-12" },
+        "codeRepository": "https://github.com/sarathlal-12/spotvault"
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          { "@type": "Question", "name": "Does my playlist need to be public?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Set it to Public in Spotify, or share it by link. Private playlists can't be read." } },
+          { "@type": "Question", "name": "The phone can't find my PC. What do I check?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Put both on the same Wi-Fi (not a guest network) and keep SpotVault open on the PC. The first time, Windows Firewall asks about network access: allow SpotVault on Private networks. You can also type the address shown in the Connect phone window." } },
+          { "@type": "Question", "name": "How do I install the Android app?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Download SpotVault_v1.1.apk on your phone, open it, and allow installing apps from your browser or file manager when Android asks." } },
+          { "@type": "Question", "name": "Why isn't SpotVault on the App Store?",
+            "acceptedAnswer": { "@type": "Answer", "text": "It's a free side project, so it's shared as an IPA you install yourself. Follow the iPhone guide: AltStore signs the app with your own Apple ID and keeps it renewed." } },
+          { "@type": "Question", "name": "Why does the first sync take a while?",
+            "acceptedAnswer": { "@type": "Answer", "text": "The first run sets up the audio converter (FFmpeg), and each song is matched, downloaded and tagged. Later syncs only fetch new songs, so they're much faster." } },
+          { "@type": "Question", "name": "Where are my songs saved?",
+            "acceptedAnswer": { "@type": "Answer", "text": "On the PC, in your Music folder by default (change it under Music folder). Each playlist gets its own folder. On the phone, inside the SpotVault app's storage (on iPhone you can also see them in the Files app)." } }
+        ]
+      }
+    ]
+  }
+  </script>
 
   <!-- Mark JS early so scroll-reveal content doesn't flash before hiding -->
   <script>

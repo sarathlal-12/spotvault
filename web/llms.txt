@@ -1,0 +1,22 @@
+# SpotVault
+
+> Free app that keeps your Spotify playlists offline. The Windows app saves each playlist as audio files with cover art, one folder per playlist. The Android and iPhone companion app copies those playlists from the PC over Wi-Fi and plays them with no signal.
+
+- Website: https://spotvault-web.vercel.app/
+- Source code: https://github.com/sarathlal-12/spotvault
+- Downloads (v1.1.0): https://github.com/sarathlal-12/spotvault/releases/tag/v1.1.0
+- Price: free. No account needed; everything runs locally.
+- Platforms: Windows (installer), Android (APK), iPhone (IPA, sideloaded with AltStore)
+- Author: Sarath Lal (https://github.com/sarathlal-12)
+
+## How it works
+
+1. Paste a public Spotify playlist link into SpotVault on Windows. It saves every song with cover art into its own folder. Later syncs only fetch new songs.
+2. Click Phone Sync on the PC. The phone app connects over the same Wi-Fi using the PC's address and a 6-digit PIN, and copies every playlist across. Interrupted copies resume.
+3. Play offline on the phone: playlists, Liked Songs, search, shuffle, repeat, queue editing, sleep timer, playback speed and lock-screen controls.
+
+## Notes
+
+- Playlists must be public or shared by link; private playlists can't be read.
+- Both devices must be on the same Wi-Fi, and Windows Firewall must allow SpotVault on Private networks.
+- Not on the Google Play Store or Apple App Store; it is distributed through GitHub releases.
