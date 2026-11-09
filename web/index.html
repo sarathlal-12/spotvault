@@ -4,14 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SpotVault — Sovereign Desktop Audio Engine</title>
-  <meta name="description" content="Direct-bitrate audio acquisition engine built on Python and Inno Setup. Sovereign local audio with zero telemetry.">
+  <meta name="description" content="SpotVault keeps your Spotify playlists as offline audio on Windows, then syncs them to your Android phone over Wi-Fi. Free, local, no account.">
   <link rel="icon" type="image/x-icon" href="app_icon.ico">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://spotvault-web.vercel.app">
   <meta property="og:title" content="SpotVault — Sovereign Desktop Audio Engine">
-  <meta property="og:description" content="Offline Spotify synchronization, clean audio filters, tri-provider fallback, and auto-resume.">
+  <meta property="og:description" content="Offline Spotify playlists on Windows, synced to your Android phone over Wi-Fi. Clean audio filter, tri-provider fallback, auto-resume.">
+  <meta name="theme-color" content="#16181b">
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,6 +28,9 @@
       --border-line: rgba(22, 24, 27, 0.12);
       --pixel-green: #1ed760;
       --pixel-orange: #f26835;
+      /* Text-safe orange: 4.5:1+ on cream and card backgrounds (bright orange is decoration only). */
+      --orange-text: #a63c12;
+      --focus-ring: #1a73e8;
       --font-body: 'Plus Jakarta Sans', -apple-system, sans-serif;
       --font-pixel: 'DotGothic16', monospace;
       --font-mono: 'Space Mono', monospace;
@@ -130,6 +134,16 @@
       width: 100%;
       height: 100%;
       z-index: 1;
+    }
+
+    /* Legibility scrim: keeps white hero text readable on the light Morning/Day skies */
+    section.hero-stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(10, 12, 16, 0.62) 0%, rgba(10, 12, 16, 0.38) 45%, rgba(10, 12, 16, 0) 75%);
     }
 
     /* Hero Headline & Controls */
@@ -281,8 +295,9 @@
       border: none;
       color: rgba(255, 255, 255, 0.7);
       font-family: var(--font-mono);
-      font-size: 0.75rem;
-      padding: 6px 14px;
+      font-size: 0.78rem;
+      min-height: 36px;
+      padding: 8px 16px;
       border-radius: 20px;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -378,7 +393,7 @@
       font-size: 1.4rem;
       font-weight: 700;
       display: block;
-      color: var(--pixel-orange);
+      color: var(--orange-text);
     }
 
     .enso-center small {
@@ -397,13 +412,21 @@
     .accordion-item {
       border-bottom: 1px solid var(--border-line);
       padding: 1.5rem 0;
-      cursor: pointer;
     }
 
     .accordion-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 1rem;
+      width: 100%;
+      padding: 0;
+      background: none;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
     }
 
     .accordion-head h3 {
@@ -430,14 +453,14 @@
     }
 
     .accordion-item.active .accordion-body {
-      max-height: 300px;
+      max-height: 420px;
       opacity: 1;
       padding-top: 1rem;
     }
 
     .accordion-item.active .accordion-icon {
       transform: rotate(45deg);
-      color: var(--pixel-orange);
+      color: var(--orange-text);
     }
 
     /* Feature Grid Section */
@@ -467,7 +490,7 @@
       font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: var(--pixel-orange);
+      color: var(--orange-text);
       margin-bottom: 0.75rem;
     }
 
@@ -563,7 +586,43 @@
     }
 
     .footer-links a:hover {
-      color: var(--pixel-orange);
+      color: var(--orange-text);
+    }
+
+    /* Keyboard focus: visible on every control, never on mouse click */
+    a:focus-visible, button:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+    .hero-stage a:focus-visible, .hero-stage button:focus-visible,
+    .terminal-card a:focus-visible {
+      outline-color: #ffffff;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 1rem;
+      top: -60px;
+      z-index: 200;
+      padding: 10px 16px;
+      background: var(--ink-black);
+      color: var(--bg-cream);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      border-radius: 4px;
+      text-decoration: none;
+      transition: top 0.15s ease;
+    }
+    .skip-link:focus { top: 12px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation: none !important;
+        transition-duration: 0.01ms !important;
+      }
+      .btn-pixel-primary:hover, .feature-card:hover, .task-toast:hover { transform: none; }
     }
 
     @media (max-width: 860px) {
@@ -572,19 +631,36 @@
       .split-grid { grid-template-columns: 1fr; }
       .feature-showcase-grid { grid-template-columns: 1fr; }
       .terminal-grid { grid-template-columns: 1fr; }
+      /* Text spans the full width here, over the mountain and snow: scrim the whole hero */
+      section.hero-stage::before {
+        background: linear-gradient(180deg, rgba(10, 12, 16, 0.62) 0%, rgba(10, 12, 16, 0.5) 55%, rgba(10, 12, 16, 0.25) 100%);
+      }
+      .editorial-section { padding: 3.5rem 1.25rem 5rem; }
+      .zen-circle-box { padding: 2rem; }
+      .terminal-card { padding: 2rem 1.5rem; }
+      .feature-card { padding: 1.6rem; }
+    }
+
+    @media (max-width: 520px) {
+      header.agentic-nav { padding: 0 1rem; }
+      .nav-github { display: none; }
+      section.hero-stage { padding: 88px 1.25rem 32px; }
+      .hero-btn-row a { flex: 1 1 100%; text-align: center; }
+      .task-toast { font-size: 0.74rem; }
     }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
 
   <!-- Top Navigation -->
   <header class="agentic-nav">
-    <a href="#" class="brand-wrap">
-      <div class="brand-zen"></div>
+    <a href="#hero-stage" class="brand-wrap" aria-label="SpotVault home">
+      <div class="brand-zen" aria-hidden="true"></div>
       <span class="brand-title">SpotVault</span>
     </a>
     <div class="nav-actions">
-      <a href="https://github.com/sarathlal-12/spotvault" target="_blank" style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-black); text-decoration: none;">GitHub</a>
+      <a class="nav-github" href="https://github.com/sarathlal-12/spotvault" target="_blank" rel="noopener" style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-black); text-decoration: none;">GitHub</a>
       <a href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" class="btn-top-download" download>
         Download v1.1
       </a>
@@ -593,7 +669,7 @@
 
   <!-- Hero Section -->
   <section class="hero-stage" id="hero-stage">
-    <canvas id="pixel-canvas"></canvas>
+    <canvas id="pixel-canvas" aria-hidden="true"></canvas>
 
     <div class="hero-content">
       <div class="hero-title-area">
@@ -606,49 +682,49 @@
             Download for Windows (v1.1)
           </a>
           <a href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.apk" class="btn-pixel-ghost" download>
-            Get the Android App
+            Get the Android App (APK)
           </a>
-          <a href="https://github.com/sarathlal-12/spotvault" target="_blank" class="btn-pixel-ghost">
+          <a href="https://github.com/sarathlal-12/spotvault" target="_blank" rel="noopener" class="btn-pixel-ghost">
             View Source Code
           </a>
         </div>
       </div>
 
       <!-- Live Notification Badges -->
-      <div class="task-toasts">
+      <div class="task-toasts" aria-label="What SpotVault does">
         <div class="task-toast">
-          <div class="toast-dot"></div>
+          <div class="toast-dot" aria-hidden="true"></div>
           <span>Multi-playlist queue: 5 Vaults armed</span>
         </div>
         <div class="task-toast">
-          <div class="toast-dot"></div>
+          <div class="toast-dot" aria-hidden="true"></div>
           <span>Lyric video filter: Skits & dialogue bypassed</span>
         </div>
         <div class="task-toast">
-          <div class="toast-dot" style="background: var(--pixel-orange); box-shadow: 0 0 8px var(--pixel-orange);"></div>
+          <div class="toast-dot" aria-hidden="true" style="background: var(--pixel-orange); box-shadow: 0 0 8px var(--pixel-orange);"></div>
           <span>Tri-provider: YT Music / SoundCloud / YT ready</span>
         </div>
         <div class="task-toast">
-          <div class="toast-dot"></div>
+          <div class="toast-dot" aria-hidden="true"></div>
           <span>Phone sync: playlists sent over Wi-Fi</span>
         </div>
       </div>
     </div>
 
     <!-- Atmosphere Time Switcher -->
-    <div class="stage-dock">
-      <button class="time-chip" onclick="setTimeOfDay('morning')">Morning</button>
-      <button class="time-chip" onclick="setTimeOfDay('day')">Day</button>
-      <button class="time-chip active" onclick="setTimeOfDay('sunset')">Sunset</button>
-      <button class="time-chip" onclick="setTimeOfDay('night')">Night</button>
+    <div class="stage-dock" role="group" aria-label="Scene time of day">
+      <button type="button" class="time-chip" aria-pressed="false" data-theme="morning" onclick="setTimeOfDay('morning')">Morning</button>
+      <button type="button" class="time-chip" aria-pressed="false" data-theme="day" onclick="setTimeOfDay('day')">Day</button>
+      <button type="button" class="time-chip active" aria-pressed="true" data-theme="sunset" onclick="setTimeOfDay('sunset')">Sunset</button>
+      <button type="button" class="time-chip" aria-pressed="false" data-theme="night" onclick="setTimeOfDay('night')">Night</button>
     </div>
   </section>
 
   <!-- Pixel Sand Transition Canvas -->
-  <canvas id="sand-canvas"></canvas>
+  <canvas id="sand-canvas" aria-hidden="true"></canvas>
 
   <!-- Editorial Section -->
-  <main class="editorial-section">
+  <main class="editorial-section" id="main" tabindex="-1">
     <div class="sub-brand">01 // AUTONOMOUS SYNCHRONIZATION ENGINE</div>
     <h2 class="editorial-h2">
       You curate the music. <br>
@@ -657,7 +733,7 @@
 
     <div class="split-grid">
       <div class="zen-circle-box">
-        <div class="zen-enso">
+        <div class="zen-enso" aria-hidden="true">
           <div class="enso-center">
             <span>SV</span>
             <small>ENGINE READY</small>
@@ -667,37 +743,37 @@
 
       <div class="accordion-list">
         <div class="accordion-item active">
-          <div class="accordion-head">
+          <button type="button" class="accordion-head">
             <h3>1.0 / Clean Audio & Lyric-Only Filter</h3>
-            <span class="accordion-icon">+</span>
-          </div>
+            <span class="accordion-icon" aria-hidden="true">+</span>
+          </button>
           <div class="accordion-body">
             Music videos often contain minute-long intro dialogue, car crash sound effects, movie cuts, or quiet outro sequences. SpotVault’s filtering heuristics target official audio tracks and verified lyric uploads, stripping out non-musical audio interruptions.
           </div>
         </div>
         <div class="accordion-item">
-          <div class="accordion-head">
+          <button type="button" class="accordion-head">
             <h3>2.0 / Persistent State & Auto-Resume</h3>
-            <span class="accordion-icon">+</span>
-          </div>
+            <span class="accordion-icon" aria-hidden="true">+</span>
+          </button>
           <div class="accordion-body">
             Never download the same song twice. SpotVault verifies track hashes and existing ID3 metadata in your local destination folder. If an acquisition session is stopped or internet connection drops, it automatically resumes starting right from the last interrupted song.
           </div>
         </div>
         <div class="accordion-item">
-          <div class="accordion-head">
+          <button type="button" class="accordion-head">
             <h3>3.0 / Multi-Playlist Batch Acquisition</h3>
-            <span class="accordion-icon">+</span>
-          </div>
+            <span class="accordion-icon" aria-hidden="true">+</span>
+          </button>
           <div class="accordion-body">
             Queue multiple Spotify playlist URLs simultaneously. SpotVault maintains separate destination directory allocations for each playlist, isolates threads, and tags folders without mix-up.
           </div>
         </div>
         <div class="accordion-item">
-          <div class="accordion-head">
+          <button type="button" class="accordion-head">
             <h3>4.0 / Wi-Fi Phone Sync (New in v1.1)</h3>
-            <span class="accordion-icon">+</span>
-          </div>
+            <span class="accordion-icon" aria-hidden="true">+</span>
+          </button>
           <div class="accordion-body">
             Install SpotVault Mobile on Android, click "Connect phone" on your PC, and every playlist lands on your phone with its songs, cover art and order intact. The phone finds your PC on the Wi-Fi automatically, a 6-digit PIN keeps the library private, and later syncs copy only the new songs.
           </div>
@@ -772,8 +848,8 @@
     <div class="footer-inner">
       <div>© 2026 SpotVault Engine. Distributed under Open-Source License.</div>
       <div class="footer-links">
-        <a href="https://github.com/sarathlal-12/spotvault" target="_blank">Repository</a>
-        <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank">Releases</a>
+        <a href="https://github.com/sarathlal-12/spotvault" target="_blank" rel="noopener">Repository</a>
+        <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">Releases</a>
         <a href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download>Download</a>
       </div>
     </div>
@@ -799,7 +875,8 @@
       const dpr = window.devicePixelRatio || 1;
       pCanvas.width = rect.width * dpr;
       pCanvas.height = rect.height * dpr;
-      pCtx.scale(dpr, dpr);
+      // setTransform (not scale) so repeated resizes don't compound the zoom.
+      pCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       width = rect.width;
       height = rect.height;
     }
@@ -906,19 +983,37 @@
       pCtx.fillStyle = t.ground;
       pCtx.fillRect(0, height - 28, width, 28);
 
-      requestAnimationFrame(renderPixelScene);
+      if (animateHero()) startHero();
     }
 
     function setTimeOfDay(theme) {
       timeTheme = theme;
       document.querySelectorAll('.time-chip').forEach(btn => {
-        btn.classList.toggle('active', btn.textContent.toLowerCase() === theme);
+        const on = btn.dataset.theme === theme;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
       });
+      if (!animateHero()) renderPixelScene();  // static mode: redraw once
     }
 
-    window.addEventListener('resize', resizePixelCanvas);
+    // At most one pending frame per canvas, however many triggers fire.
+    let heroRaf = null, sandRaf = null;
+    function startHero() { if (heroRaf === null) heroRaf = requestAnimationFrame(() => { heroRaf = null; renderPixelScene(); }); }
+    function startSand() { if (sandRaf === null) sandRaf = requestAnimationFrame(() => { sandRaf = null; renderSand(); }); }
+
+    // Motion budget: honour reduced-motion and stop drawing when nobody can see it.
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let heroVisible = true, sandVisible = false;
+    const animateHero = () => !reduceMotion.matches && heroVisible && !document.hidden;
+    const animateSand = () => !reduceMotion.matches && sandVisible && !document.hidden;
+
+    function kick() {
+      if (animateHero()) startHero(); else renderPixelScene();
+      if (animateSand()) startSand();
+    }
+
+    window.addEventListener('resize', () => { resizePixelCanvas(); if (!animateHero()) renderPixelScene(); });
     resizePixelCanvas();
-    requestAnimationFrame(renderPixelScene);
 
     // --- 2. Interactive Falling Pixel Sand Stream ---
     const sCanvas = document.getElementById('sand-canvas');
@@ -960,19 +1055,55 @@
         sCtx.fillStyle = p.color;
         sCtx.fillRect(Math.floor(p.x), Math.floor(p.y), p.size, p.size);
       }
-      requestAnimationFrame(renderSand);
+      if (animateSand()) startSand();
     }
 
     window.addEventListener('resize', resizeSand);
     resizeSand();
-    requestAnimationFrame(renderSand);
+
+    // Restart a loop only on the hidden -> visible edge, so loops never double up.
+    function watch(el, setVisible, wasVisible, restart) {
+      new IntersectionObserver(entries => {
+        for (const e of entries) {
+          const was = wasVisible();
+          setVisible(e.isIntersecting);
+          if (!was && e.isIntersecting) restart();
+        }
+      }).observe(el);
+    }
+    if ('IntersectionObserver' in window) {
+      watch(document.getElementById('hero-stage'), v => heroVisible = v, () => heroVisible,
+            () => { if (animateHero()) startHero(); });
+      watch(sCanvas, v => sandVisible = v, () => sandVisible,
+            () => { if (animateSand()) startSand(); });
+    } else {
+      sandVisible = true;
+    }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
+    reduceMotion.addEventListener('change', kick);
+    kick();
+    if (reduceMotion.matches) renderSand();  // one still frame of sand
 
     // --- 3. Interactive Accordion Listener ---
-    document.querySelectorAll('.accordion-item').forEach(item => {
-      item.addEventListener('click', () => {
+    // Heads are real <button>s, so Enter/Space and Tab work for free.
+    const accItems = document.querySelectorAll('.accordion-item');
+    accItems.forEach((item, idx) => {
+      const head = item.querySelector('.accordion-head');
+      const body = item.querySelector('.accordion-body');
+      body.id = body.id || `acc-body-${idx}`;
+      head.setAttribute('aria-controls', body.id);
+      head.setAttribute('aria-expanded', item.classList.contains('active') ? 'true' : 'false');
+      body.setAttribute('role', 'region');
+      head.addEventListener('click', () => {
         const isActive = item.classList.contains('active');
-        document.querySelectorAll('.accordion-item').forEach(i => i.classList.remove('active'));
-        if (!isActive) item.classList.add('active');
+        accItems.forEach(i => {
+          i.classList.remove('active');
+          i.querySelector('.accordion-head').setAttribute('aria-expanded', 'false');
+        });
+        if (!isActive) {
+          item.classList.add('active');
+          head.setAttribute('aria-expanded', 'true');
+        }
       });
     });
   </script>
