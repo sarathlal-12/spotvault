@@ -29,7 +29,7 @@ class NowPlayingScreen extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFF404040), kBg],
+                colors: [Color(0xFF2E2560), kBg],
                 stops: [0, 0.75],
               ),
             ),
@@ -114,13 +114,13 @@ class NowPlayingScreen extends StatelessWidget {
                               child: FilledButton(
                                 style: FilledButton.styleFrom(
                                   shape: const CircleBorder(),
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.black,
+                                  backgroundColor: kAccent,
+                                  foregroundColor: Colors.white,
                                   padding: EdgeInsets.zero,
                                 ),
                                 onPressed: playerService.togglePlay,
                                 child: buffering
-                                    ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.black))
+                                    ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
                                     : Icon(playing ? Icons.pause : Icons.play_arrow, size: 40),
                               ),
                             );
@@ -370,7 +370,7 @@ class _SeekBarState extends State<_SeekBar> {
                 trackHeight: 3,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                activeTrackColor: Colors.white,
+                activeTrackColor: kAccent,
                 inactiveTrackColor: Colors.white24,
                 thumbColor: Colors.white,
               ),

@@ -44,6 +44,26 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      # The same key must sign every release, or phones refuse the update.
+      # Secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD (see UPDATES.md).
+      - name: Set up release signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Release signing secrets are missing. Add them as described in UPDATES.md."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/spotvault-release.jks
+          {
+            echo "storeFile=spotvault-release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=upload"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+            echo "storeType=pkcs12"
+          } > android/key.properties
+
       - name: Build release APK
         run: flutter build apk --release
 

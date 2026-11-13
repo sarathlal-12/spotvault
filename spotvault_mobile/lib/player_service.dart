@@ -23,6 +23,11 @@ class PlayerService extends ChangeNotifier {
   String? _lastCountedId;
   Timer? _saveTimer;
 
+  // Preview of an online song. The user's queue is set aside and put back after.
+  bool previewing = false;
+  String? previewKey;
+  _Saved? _saved;
+
   Future<void> init() async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
@@ -33,6 +38,10 @@ class PlayerService extends ChangeNotifier {
     player.sequenceStateStream.listen((_) => notifyListeners());
     player.playerStateStream.listen((s) {
       notifyListeners();
+      if (previewing && s.processingState == ProcessingState.completed) {
+        stopPreview();
+        return;
+      }
       if (!s.playing) _persist();
     });
     player.errorStream.listen((e) => debugPrint('player error: $e'));
@@ -82,6 +91,7 @@ class PlayerService extends ChangeNotifier {
 
   // ------------------------------------------------------------ actions
   Future<void> playTracks(List<Track> tracks, {int start = 0, bool? shuffle}) async {
+    await _dropPreview();
     final startTrack = (start >= 0 && start < tracks.length) ? tracks[start] : null;
     final list = _playable(tracks);
     if (list.isEmpty) return;
@@ -100,6 +110,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> playNext(Track t) async {
+    if (previewing) await stopPreview();
     if (!hasQueue) return playTracks([t]);
     final i = (player.currentIndex ?? -1) + 1;
     await player.insertAudioSource(i, _source(t));
@@ -107,6 +118,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> addToQueue(Track t) async {
+    if (previewing) await stopPreview();
     if (!hasQueue) return playTracks([t]);
     await player.addAudioSource(_source(t));
     _persist();
@@ -190,8 +202,84 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------------------ preview
+  /// Plays an online song from the PC. Call [stopPreview] to get the queue back.
+  Future<void> playPreview(Uri uri, {required String key, required String title, String? artist, String? artUrl}) async {
+    if (!previewing) {
+      _saved = _Saved(
+        ids: [for (final s in player.sequence) (s.tag as MediaItem).id],
+        index: player.currentIndex ?? 0,
+        position: player.position,
+        wasPlaying: player.playing,
+        loop: player.loopMode,
+      );
+    }
+    previewing = true;
+    previewKey = key;
+    notifyListeners();
+    try {
+      await player.setLoopMode(LoopMode.off);
+      await player.setAudioSource(AudioSource.uri(
+        uri,
+        tag: MediaItem(
+          id: 'preview:$key',
+          title: title,
+          artist: (artist == null || artist.isEmpty) ? null : artist,
+          artUri: (artUrl == null || artUrl.isEmpty) ? null : Uri.tryParse(artUrl),
+        ),
+      ));
+      player.play();
+    } catch (e) {
+      debugPrint('preview failed: $e');
+      await stopPreview();
+      rethrow;
+    }
+  }
+
+  /// Ends the preview and puts the user's queue back where it was.
+  Future<void> stopPreview() async {
+    if (!previewing) return;
+    previewing = false;
+    previewKey = null;
+    final saved = _saved;
+    _saved = null;
+    notifyListeners();
+    try {
+      await player.stop();
+      if (saved == null) return;
+      await player.setLoopMode(saved.loop);
+      final list = _playable([for (final id in saved.ids) if (store.tracks[id] != null) store.tracks[id]!]);
+      if (list.isEmpty) {
+        await player.clearAudioSources();
+      } else {
+        final wanted = saved.index < saved.ids.length ? saved.ids[saved.index] : null;
+        var idx = list.indexWhere((t) => t.id == wanted);
+        final pos = idx >= 0 ? saved.position : Duration.zero;
+        if (idx < 0) idx = 0;
+        _lastCountedId = list[idx].id; // getting the queue back is not a new play
+        await player.setAudioSources([for (final t in list) _source(t)], initialIndex: idx, initialPosition: pos);
+        if (saved.wasPlaying) player.play();
+      }
+    } catch (e) {
+      debugPrint('restore after preview failed: $e');
+    }
+    notifyListeners();
+  }
+
+  /// The user started real playback while previewing: forget the old queue.
+  Future<void> _dropPreview() async {
+    if (!previewing) return;
+    final loop = _saved?.loop;
+    previewing = false;
+    previewKey = null;
+    _saved = null;
+    if (loop != null) await player.setLoopMode(loop);
+    notifyListeners();
+  }
+
   // ------------------------------------------------------------ internals
   void _onTrackChanged() {
+    if (previewing) return;
     final t = current;
     if (sleepMode == SleepMode.endOfTrack && _lastCountedId != null && t?.id != _lastCountedId) {
       player.pause();
@@ -206,6 +294,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   void _persist() {
+    if (previewing) return;
     final seq = player.sequence;
     store.resumeQueue = [for (final s in seq) (s.tag as MediaItem).id];
     store.resumeIndex = player.currentIndex ?? 0;
@@ -237,7 +326,7 @@ class PlayerService extends ChangeNotifier {
 
   /// Rebuilds the queue after a sync removed or replaced files.
   Future<void> refreshAfterSync() async {
-    if (!hasQueue) return;
+    if (!hasQueue || previewing) return;
     final ids = [for (final s in player.sequence) (s.tag as MediaItem).id];
     final missing = ids.where((id) => store.tracks[id] == null || !store.localFile(store.tracks[id]!).existsSync());
     if (missing.isEmpty) return;
@@ -264,4 +353,13 @@ class PlayerService extends ChangeNotifier {
     player.dispose();
     super.dispose();
   }
+}
+
+class _Saved {
+  final List<String> ids;
+  final int index;
+  final Duration position;
+  final bool wasPlaying;
+  final LoopMode loop;
+  _Saved({required this.ids, required this.index, required this.position, required this.wasPlaying, required this.loop});
 }

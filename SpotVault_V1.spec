@@ -1,9 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
+import os
+
+# FFmpeg ships inside the exe so a fresh PC needs no setup or download.
+# Get it once with:
+#   curl -L -o assets/ffmpeg.exe https://github.com/eugeneware/ffmpeg-static/releases/download/b4.4/win32-x64
+if not os.path.isfile('assets/ffmpeg.exe'):
+    raise SystemExit('assets/ffmpeg.exe is missing. Download it first (see the comment in SpotVault_V1.spec).')
+
 datas = [('assets/app_icon.ico', '.')]
-binaries = []
-hiddenimports = ['phone_sync', 'mutagen']
+binaries = [('assets/ffmpeg.exe', '.')]
+hiddenimports = ['phone_sync', 'sources', 'updater', 'mutagen', 'ytmusicapi']
 tmp_ret = collect_all('customtkinter')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('spotdl')
@@ -46,7 +54,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=['ffmpeg.exe'],
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,

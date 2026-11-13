@@ -203,7 +203,7 @@ class MiniPlayer extends StatelessWidget {
           },
           child: Container(
             margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(12)),
             clipBehavior: Clip.antiAlias,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -244,7 +244,7 @@ class MiniPlayer extends StatelessWidget {
                       value: total > 0 ? (pos / total).clamp(0.0, 1.0) : 0,
                       minHeight: 2,
                       backgroundColor: Colors.white12,
-                      color: Colors.white,
+                      color: kAccent,
                     );
                   },
                 ),

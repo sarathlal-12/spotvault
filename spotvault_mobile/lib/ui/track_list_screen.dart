@@ -71,7 +71,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Color(0xFF3A3A3A), kBg],
+                        colors: [Color(0xFF2E2560), kBg],
                       ),
                     ),
                     alignment: Alignment.center,
@@ -106,7 +106,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
                       FloatingActionButton(
                         heroTag: null,
                         backgroundColor: kAccent,
-                        foregroundColor: Colors.black,
+                        foregroundColor: Colors.white,
                         shape: const CircleBorder(),
                         onPressed: tracks.isEmpty ? null : () => playerService.playTracks(tracks, shuffle: false),
                         child: const Icon(Icons.play_arrow, size: 32),

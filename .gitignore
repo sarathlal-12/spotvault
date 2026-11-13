@@ -16,3 +16,4 @@ library_config.json
 .vscode/
 .idea/
 .claude/
+graphify-out/

@@ -24,6 +24,11 @@ class LibraryScreen extends StatelessWidget {
               title: const Text('Your Library', style: TextStyle(fontWeight: FontWeight.bold)),
               actions: [
                 IconButton(
+                  tooltip: 'Find new songs',
+                  icon: const Icon(Icons.travel_explore),
+                  onPressed: () => currentTab.value = 1,
+                ),
+                IconButton(
                   tooltip: 'Sync from PC',
                   icon: const Icon(Icons.sync),
                   onPressed: () => currentTab.value = 2,
@@ -38,7 +43,7 @@ class LibraryScreen extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.laptop_windows, size: 64, color: kMuted),
+                      const Icon(Icons.library_music_rounded, size: 64, color: kAccent),
                       const SizedBox(height: 16),
                       const Text('No music yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
@@ -49,6 +54,7 @@ class LibraryScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 20),
                       FilledButton.icon(
+                        style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.white),
                         onPressed: () => currentTab.value = 2,
                         icon: const Icon(Icons.sync),
                         label: const Text('Sync from PC'),
@@ -67,7 +73,7 @@ class LibraryScreen extends StatelessWidget {
                     children: [
                       _QuickCard(
                         icon: Icons.favorite,
-                        color: const Color(0xFF5038A0),
+                        color: const Color(0xFF6D28D9),
                         label: 'Liked Songs',
                         count: store.likedTracks.length,
                         onTap: () => _open(
@@ -77,7 +83,7 @@ class LibraryScreen extends StatelessWidget {
                       ),
                       _QuickCard(
                         icon: Icons.library_music,
-                        color: const Color(0xFF1E6B47),
+                        color: const Color(0xFF4338CA),
                         label: 'All Songs',
                         count: store.tracks.length,
                         onTap: () => _open(
@@ -87,7 +93,7 @@ class LibraryScreen extends StatelessWidget {
                       ),
                       _QuickCard(
                         icon: Icons.history,
-                        color: const Color(0xFF8A4B16),
+                        color: const Color(0xFF0E7490),
                         label: 'Recently Played',
                         count: store.recentTracks.length,
                         onTap: () => _open(
@@ -97,7 +103,7 @@ class LibraryScreen extends StatelessWidget {
                       ),
                       _QuickCard(
                         icon: Icons.trending_up,
-                        color: const Color(0xFF9A1E3C),
+                        color: const Color(0xFFBE185D),
                         label: 'Most Played',
                         count: store.mostPlayed.length,
                         onTap: () => _open(
@@ -112,7 +118,7 @@ class LibraryScreen extends StatelessWidget {
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
-                  child: Text('Playlists from your PC', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: Text('Your playlists', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
               SliverList.builder(

@@ -19,10 +19,10 @@ S = 1024          # final size
 SS = 4            # supersampling factor for smooth edges
 N = S * SS
 
-GREEN = (30, 215, 96)
-GREEN_DARK = (16, 140, 62)
-BG_TOP = (36, 36, 36)
-BG_BOTTOM = (8, 8, 8)
+ACCENT = (139, 92, 246)       # violet
+ACCENT_DARK = (79, 70, 229)   # indigo
+BG_TOP = (30, 28, 58)
+BG_BOTTOM = (11, 11, 20)
 
 
 def lerp(a, b, t):
@@ -48,9 +48,9 @@ def draw_logo():
     layer = Image.new("RGBA", (N, N), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
 
-    # Vault door: green gradient disc
+    # Vault door: violet-to-indigo gradient disc
     r_outer = N * 0.36
-    disc = vertical_gradient(N, GREEN, GREEN_DARK).convert("RGBA")
+    disc = vertical_gradient(N, ACCENT, ACCENT_DARK).convert("RGBA")
     dmask = Image.new("L", (N, N), 0)
     ImageDraw.Draw(dmask).ellipse((cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer), fill=255)
     disc.putalpha(dmask)
@@ -58,7 +58,7 @@ def draw_logo():
     # Soft glow under the disc
     glow = Image.new("RGBA", (N, N), (0, 0, 0, 0))
     ImageDraw.Draw(glow).ellipse((cx - r_outer, cy - r_outer + N * 0.02, cx + r_outer, cy + r_outer + N * 0.02),
-                                 fill=(30, 215, 96, 110))
+                                 fill=(139, 92, 246, 110))
     glow = glow.filter(ImageFilter.GaussianBlur(N * 0.04))
 
     # Dial ticks around the door (like a safe dial)
@@ -73,7 +73,7 @@ def draw_logo():
 
     # Inner black ring
     r_in = r_outer * 0.72
-    d.ellipse((cx - r_in, cy - r_in, cx + r_in, cy + r_in), fill=(14, 14, 14, 255))
+    d.ellipse((cx - r_in, cy - r_in, cx + r_in, cy + r_in), fill=(11, 11, 20, 255))
 
     # Music note (beamed eighth notes) in white
     white = (255, 255, 255, 255)
@@ -93,7 +93,7 @@ def draw_logo():
 
     # Lock handle notch at the bottom of the ring
     d.rounded_rectangle((cx - N * 0.03, cy + r_in - N * 0.01, cx + N * 0.03, cy + r_outer * 0.97),
-                        radius=int(N * 0.012), fill=(14, 14, 14, 255))
+                        radius=int(N * 0.012), fill=(11, 11, 20, 255))
 
     out = Image.alpha_composite(tile, glow)
     out = Image.alpha_composite(out, disc)

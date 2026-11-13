@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../library_store.dart';
 import '../sync_service.dart';
+import '../update_service.dart';
+import 'update_ui.dart';
 
 class SyncScreen extends StatefulWidget {
   const SyncScreen({super.key});
@@ -63,7 +65,7 @@ class _SyncScreenState extends State<SyncScreen> {
               const Text('Sync from PC', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               const Text(
-                'On your PC, open SpotVault and click "📱 Phone Sync". Keep both devices on the same Wi-Fi.',
+                'On your PC, open SpotVault and click "Connect phone". Keep both devices on the same Wi-Fi.',
                 style: TextStyle(color: kMuted),
               ),
               const SizedBox(height: 16),
@@ -143,7 +145,7 @@ class _SyncScreenState extends State<SyncScreen> {
                             )
                           : FilledButton.icon(
                               onPressed: _sync,
-                              style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.black),
+                              style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.white),
                               icon: const Icon(Icons.sync),
                               label: const Text('Sync now', style: TextStyle(fontWeight: FontWeight.bold)),
                             ),
@@ -180,6 +182,17 @@ class _SyncScreenState extends State<SyncScreen> {
                       store.lastSync == 0 ? 'Never' : _ago(DateTime.fromMillisecondsSinceEpoch(store.lastSync)),
                     ),
                     if (store.pcName.isNotEmpty) _InfoRow('PC', store.pcName),
+                    const Divider(),
+                    const _InfoRow('App version', 'v$kAppVersion'),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => runUpdateCheck(context, manual: true),
+                        icon: const Icon(Icons.system_update_alt),
+                        label: const Text('Check for updates'),
+                      ),
+                    ),
                   ],
                 ),
               ),

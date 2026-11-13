@@ -1,27 +1,29 @@
 
-                          SPOTVAULT (v1.1.0)
-             Offline Spotify Playlist Sync & Downloader
+                          SPOTVAULT (v1.3.0)
+               Offline Playlist Sync, Search & Downloader
 
 
-SpotVault keeps your local music collection synchronized with your 
-Spotify playlists. It downloads high-quality audio files, embeds full 
-metadata and album artwork, and skips existing tracks automatically.
-The companion phone app (Android & iPhone) copies your playlists from
-the PC over Wi-Fi and plays them offline.
+SpotVault keeps your local music collection in step with your online
+playlists (Spotify, YouTube, YouTube Music and SoundCloud links). It
+downloads high-quality audio, embeds full metadata and album artwork,
+and skips songs you already have. Search for any single song and save
+it into a playlist. The phone app (Android & iPhone) copies your
+playlists from the PC over Wi-Fi, plays them offline, and can add new
+songs by search through the PC.
 
 Website:  https://spotvault-web.vercel.app
 Releases: https://github.com/sarathlal-12/spotvault/releases
 
 ----------------------------------------------------------------------
-DOWNLOADS (v1.1.0)
+DOWNLOADS (v1.3.0)
 ----------------------------------------------------------------------
-  Platform   File                            Size    Install
-  ---------  ------------------------------  ------  ----------------
-  Windows    SpotVault_Setup_v1.1.exe        52 MB   Run the installer
-  Android    SpotVault_v1.1.apk              54 MB   Open on the phone
-  iPhone     SpotVault_v1.1.0_unsigned.ipa    8 MB   Sideload (see 4)
+  Platform   File                            Install
+  ---------  ------------------------------  ------------------
+  Windows    SpotVault_Setup_v1.3.exe        Run the installer
+  Android    SpotVault_v1.3.0.apk            Open on the phone
+  iPhone     SpotVault_v1.3.0_unsigned.ipa   Sideload (see 4)
 
-All files are attached to the v1.1.0 release on GitHub. Older
+All files are attached to the v1.3.0 release on GitHub. Older
 versions stay available on the Releases page.
 
 ----------------------------------------------------------------------
@@ -31,17 +33,13 @@ versions stay available on the Releases page.
   Required when adding playlists or syncing new tracks.
 
 * PLAYLIST PRIVACY SETTING:
-  Your Spotify playlist MUST be set to "Public" or shared via link 
-  (Unlisted). If a playlist is strictly set to "Private" inside 
-  Spotify, the API cannot read the tracklist.
-  -> In Spotify: Click the 3 dots (...) on the playlist -> "Make Public"
-     or click "Share" -> "Copy link to playlist".
+  The playlist MUST be public or shared by link (Unlisted). Private
+  playlists cannot be read.
+  -> Use the playlist's "Share" -> "Copy link" option.
 
-* FIRST-RUN CONVERSION SETUP:
-  The very first time you sync a track, SpotVault will automatically 
-  download portable audio conversion utilities (FFmpeg) into your local
-  AppData cache. This takes 10 to 30 seconds on the first run; do not 
-  force-close the app while it initializes.
+* NOTHING ELSE TO INSTALL:
+  The audio converter (FFmpeg) is built into SpotVault, so the first
+  sync works straight away on a new PC.
 
 ----------------------------------------------------------------------
 2. HOW TO USE
@@ -53,7 +51,8 @@ versions stay available on the Releases page.
 
 * ADD A PLAYLIST:
   1. Click "+ Add Playlist".
-  2. Paste the Spotify playlist link.
+  2. Paste the playlist link (Spotify, YouTube, YouTube Music or
+     SoundCloud).
   3. Enter a folder name (e.g., "Gym Beats" or "Favorites").
   4. Click "Add to Library". The playlist and its cover art will 
      appear on your dashboard and remain saved.
@@ -62,8 +61,19 @@ versions stay available on the Releases page.
   - To sync one playlist: Click the "Sync" button on its card.
   - To sync everything: Click "Sync all" at the top.
 
+* CLEAN SONGS, NO DIALOGUE:
+  Every song is looked up as the clean studio version: YouTube Music
+  first, then SoundCloud, then YouTube lyric videos (video songs, movie
+  scenes, trailers, loops and remixes are skipped). YouTube playlists of
+  video songs are saved as the clean songs too.
+
+* SEARCH SONGS:
+  Click "Search songs", type a song or artist and press Search. Tick
+  the songs you want, choose a playlist under "Save to", and click
+  "Download selected". Progress shows in the Activity panel.
+
 * SMART INCREMENTAL UPDATES:
-  When you add new songs to your Spotify playlist weeks or months later, 
+  When you add new songs to your playlist weeks or months later, 
   simply click "Sync" again. SpotVault will instantly skip songs you 
   already have on disk and download only the new additions.
 
@@ -88,6 +98,10 @@ versions stay available on the Releases page.
   Later syncs copy only new or changed songs. Songs deleted on the PC
   are removed from the phone (switch this off in the Sync tab).
 * An interrupted sync resumes where it stopped.
+* ADD SONGS FROM THE PHONE: open Search -> "Find new songs", type a
+  song, tap it to listen, then tap the download button and pick a
+  playlist. The PC downloads it and sends it back with cover art.
+  Keep SpotVault open on the PC and both devices on the same Wi-Fi.
 * The first time, Windows Firewall asks about network access. Allow
   SpotVault on "Private networks", or the phone cannot connect.
 
@@ -109,7 +123,7 @@ Apple ID using AltStore (free; apps renew every 7 days).
   4. On the iPhone: Settings -> General -> VPN & Device Management ->
      your Apple ID -> Trust. On iOS 16+, also turn on Settings ->
      Privacy & Security -> Developer Mode.
-  5. Download SpotVault_v1.1.0_unsigned.ipa on the iPhone in Safari.
+  5. Download SpotVault_v1.3.0_unsigned.ipa on the iPhone in Safari.
      In the Files app, tap it -> Share -> AltStore.
   6. Open SpotVault -> Sync tab, type the PC address and PIN, and allow
      Local Network access.
@@ -121,7 +135,15 @@ Apple ID using AltStore (free; apps renew every 7 days).
 * Synced songs also appear in the iPhone Files app under SpotVault.
 
 ----------------------------------------------------------------------
-5. TROUBLESHOOTING
+5. UPDATES
+----------------------------------------------------------------------
+SpotVault checks for a new version when it starts. Click "Check for
+updates" (bottom of the sidebar on Windows, Sync tab on the phone) to
+check yourself. "Update now" downloads and installs it; your playlists,
+settings and music are kept.
+
+----------------------------------------------------------------------
+6. TROUBLESHOOTING
 ----------------------------------------------------------------------
 * Q: A track shows "Provider match failed"?
   A: SpotVault matches tracks against audio streaming providers. Very 

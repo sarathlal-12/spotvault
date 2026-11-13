@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>SpotVault: Spotify playlists, offline, on PC and phone</title>
-  <meta name="description" content="SpotVault downloads your Spotify playlists as offline audio on Windows, then syncs them to your Android phone or iPhone over Wi-Fi. Free, local, no account.">
-  <meta name="theme-color" content="#121212">
+  <title>SpotVault: your playlists and any song, offline on PC and phone</title>
+  <meta name="description" content="SpotVault saves playlists from Spotify, YouTube and SoundCloud as offline music on Windows, finds any song by search, and sends it all to your Android phone or iPhone over Wi-Fi. Free, local, no account.">
+  <meta name="theme-color" content="#0b0b14">
   <link rel="icon" type="image/png" href="logo.png">
   <link rel="icon" type="image/x-icon" href="app_icon.ico">
 
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://spotvault-web.vercel.app">
   <meta property="og:title" content="SpotVault: your playlists, offline, everywhere">
-  <meta property="og:description" content="Download Spotify playlists on Windows and sync them to your Android phone or iPhone over Wi-Fi.">
+  <meta property="og:description" content="Save playlists and any song as offline music on Windows, then carry them on your Android phone or iPhone.">
   <meta property="og:image" content="https://spotvault-web.vercel.app/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -21,7 +21,7 @@
   <meta property="og:site_name" content="SpotVault">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="SpotVault: your playlists, offline, everywhere">
-  <meta name="twitter:description" content="Download Spotify playlists on Windows and sync them to your Android phone or iPhone over Wi-Fi.">
+  <meta name="twitter:description" content="Save playlists and any song as offline music on Windows, then carry them on your Android phone or iPhone.">
   <meta name="twitter:image" content="https://spotvault-web.vercel.app/og.png">
 
   <!-- Search engines -->
@@ -39,11 +39,11 @@
         "name": "SpotVault",
         "url": "https://spotvault-web.vercel.app/",
         "image": "https://spotvault-web.vercel.app/og.png",
-        "description": "SpotVault downloads your Spotify playlists as offline audio on Windows, then syncs them to your Android phone or iPhone over Wi-Fi. Free, local, no account.",
+        "description": "SpotVault saves playlists from Spotify, YouTube and SoundCloud as offline music on Windows, finds any song by search, and sends it all to your Android phone or iPhone over Wi-Fi. Free, local, no account.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Windows, Android, iOS",
-        "softwareVersion": "1.1.0",
-        "downloadUrl": "https://github.com/sarathlal-12/spotvault/releases/tag/v1.1.0",
+        "softwareVersion": "1.3.0",
+        "downloadUrl": "https://github.com/sarathlal-12/spotvault/releases/tag/v1.3.0",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "author": { "@type": "Person", "name": "Sarath Lal", "url": "https://github.com/sarathlal-12" },
         "codeRepository": "https://github.com/sarathlal-12/spotvault"
@@ -52,11 +52,11 @@
         "@type": "FAQPage",
         "mainEntity": [
           { "@type": "Question", "name": "Does my playlist need to be public?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Set it to Public in Spotify, or share it by link. Private playlists can't be read." } },
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Use a public or shared-by-link playlist. Private playlists can't be read." } },
           { "@type": "Question", "name": "The phone can't find my PC. What do I check?",
             "acceptedAnswer": { "@type": "Answer", "text": "Put both on the same Wi-Fi (not a guest network) and keep SpotVault open on the PC. The first time, Windows Firewall asks about network access: allow SpotVault on Private networks. You can also type the address shown in the Connect phone window." } },
           { "@type": "Question", "name": "How do I install the Android app?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Download SpotVault_v1.1.apk on your phone, open it, and allow installing apps from your browser or file manager when Android asks." } },
+            "acceptedAnswer": { "@type": "Answer", "text": "Download SpotVault_v1.3.0.apk on your phone, open it, and allow installing apps from your browser or file manager when Android asks." } },
           { "@type": "Question", "name": "Why isn't SpotVault on the App Store?",
             "acceptedAnswer": { "@type": "Answer", "text": "It's a free side project, so it's shared as an IPA you install yourself. Follow the iPhone guide: AltStore signs the app with your own Apple ID and keeps it renewed." } },
           { "@type": "Question", "name": "Why does the first sync take a while?",
@@ -83,19 +83,20 @@
   <style>
     /* ---------- Tokens: same palette as the SpotVault apps ---------- */
     :root {
-      --bg: #121212;
-      --bg-deep: #000000;
-      --surface: #181818;
-      --card: #242424;
-      --card-hover: #2a2a2a;
-      --border: #2e2e2e;
-      --text: #ffffff;
-      --muted: #b3b3b3;          /* 9.4:1 on --bg */
-      --faint: #8a8a8a;          /* 5.3:1 on --bg, labels only */
-      --green: #1ed760;
-      --green-hover: #3be477;
-      --green-ink: #000000;      /* text on green */
-      --danger: #e91429;
+      --bg: #0b0b14;
+      --bg-deep: #08080f;
+      --surface: #14142a;
+      --card: #1c1c36;
+      --card-hover: #26264a;
+      --border: #2a2a4a;
+      --text: #f4f4ff;
+      --muted: #a5a5c8;          /* 8.4:1 on --bg */
+      --faint: #7c7ca6;          /* 4.9:1 on --bg, labels only */
+      --accent: #8b5cf6;
+      --accent-hover: #a78bfa;
+      --accent-ink: #ffffff;     /* text on accent */
+      --accent-2: #6366f1;
+      --danger: #f43f5e;
       --radius: 12px;
       --radius-lg: 20px;
       --font-head: 'Outfit', 'Segoe UI', system-ui, sans-serif;
@@ -121,14 +122,14 @@
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
     a:focus-visible, button:focus-visible, summary:focus-visible {
-      outline: 3px solid var(--green);
+      outline: 3px solid var(--accent);
       outline-offset: 3px;
       border-radius: 8px;
     }
 
     .skip-link {
       position: absolute; left: 16px; top: -60px; z-index: 300;
-      background: var(--green); color: var(--green-ink);
+      background: var(--accent); color: var(--accent-ink);
       padding: 10px 16px; border-radius: 8px; font-weight: 600; text-decoration: none;
       transition: top .15s ease;
     }
@@ -144,8 +145,8 @@
       transition: transform .2s var(--ease-out), background-color .2s ease, border-color .2s ease, box-shadow .2s ease;
     }
     .btn svg { width: 20px; height: 20px; flex: none; }
-    .btn-primary { background: var(--green); color: var(--green-ink); box-shadow: 0 8px 28px rgba(30, 215, 96, .25); }
-    .btn-primary:hover { background: var(--green-hover); transform: translateY(-2px); box-shadow: 0 12px 34px rgba(30, 215, 96, .35); }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); box-shadow: 0 8px 28px rgba(139, 92, 246, .25); }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-2px); box-shadow: 0 12px 34px rgba(139, 92, 246, .35); }
     .btn-outline { background: transparent; color: var(--text); border: 1.5px solid #727272; }
     .btn-outline:hover { border-color: var(--text); transform: translateY(-2px); }
     .btn-sm { min-height: 40px; padding: 0 18px; font-size: .9rem; }
@@ -170,31 +171,31 @@
       position: relative; overflow: hidden;
       padding: 150px 0 90px;
       background:
-        radial-gradient(900px 500px at 78% 18%, rgba(30, 215, 96, .16), transparent 60%),
+        radial-gradient(900px 500px at 78% 18%, rgba(139, 92, 246, .16), transparent 60%),
         radial-gradient(700px 420px at 8% 0%, rgba(80, 56, 160, .18), transparent 60%),
-        linear-gradient(180deg, #0b0b0b 0%, var(--bg) 100%);
+        linear-gradient(180deg, #120f26 0%, var(--bg) 100%);
     }
     .hero .wrap { display: grid; grid-template-columns: 1.02fr 1fr; gap: 56px; align-items: center; }
     .badge {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 6px 14px 6px 8px; border-radius: 999px;
-      background: rgba(30, 215, 96, .1); border: 1px solid rgba(30, 215, 96, .3);
-      color: var(--green); font-weight: 600; font-size: .85rem; text-decoration: none;
+      background: rgba(139, 92, 246, .1); border: 1px solid rgba(139, 92, 246, .3);
+      color: var(--accent); font-weight: 600; font-size: .85rem; text-decoration: none;
       margin-bottom: 22px;
     }
-    .badge b { background: var(--green); color: var(--green-ink); border-radius: 999px; padding: 2px 8px; font-size: .72rem; letter-spacing: .04em; }
+    .badge b { background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 2px 8px; font-size: .72rem; letter-spacing: .04em; }
     h1 {
       font-family: var(--font-head);
       font-size: clamp(2.6rem, 5.6vw, 4.4rem);
       line-height: 1.04; letter-spacing: -.035em; font-weight: 800;
       margin-bottom: 22px; text-wrap: balance;
     }
-    h1 em { font-style: normal; color: var(--green); }
+    h1 em { font-style: normal; color: var(--accent); }
     .lead { font-size: 1.15rem; color: var(--muted); max-width: 520px; margin-bottom: 34px; }
     .cta-row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
     .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--faint); font-size: .88rem; }
     .meta span { display: inline-flex; align-items: center; gap: 6px; }
-    .meta svg { width: 16px; height: 16px; color: var(--green); }
+    .meta svg { width: 16px; height: 16px; color: var(--accent); }
 
     /* ---------- Device mockups (pure CSS, mirrors the real apps) ---------- */
     .stage { position: relative; height: 470px; }
@@ -207,21 +208,21 @@
     .desk-bar { display: flex; gap: 6px; padding: 10px 12px; background: #0c0c0c; border-bottom: 1px solid #1c1c1c; }
     .desk-bar i { width: 10px; height: 10px; border-radius: 50%; background: #333; }
     .desk-body { display: grid; grid-template-columns: 26% 1fr; height: 340px; }
-    .desk-side { background: #000; padding: 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+    .desk-side { background: var(--bg-deep); padding: 14px 10px; display: flex; flex-direction: column; gap: 10px; }
     .mini-brand { display: flex; align-items: center; gap: 6px; font-family: var(--font-head); font-weight: 700; font-size: .72rem; }
     .mini-brand img { width: 16px; height: 16px; border-radius: 4px; }
     .side-card { background: var(--surface); border-radius: 8px; padding: 8px; }
     .side-card small { display: block; font-size: .5rem; letter-spacing: .08em; color: var(--faint); font-weight: 600; margin-bottom: 6px; }
     .row { display: flex; justify-content: space-between; font-size: .55rem; color: var(--muted); line-height: 1.9; }
     .row b { color: var(--text); }
-    .pill-btn { margin-top: 6px; background: #fff; color: #000; text-align: center; border-radius: 99px; font-size: .5rem; font-weight: 700; padding: 4px; }
+    .pill-btn { margin-top: 6px; background: var(--accent); color: #fff; text-align: center; border-radius: 99px; font-size: .5rem; font-weight: 700; padding: 4px; }
     .desk-main { background: var(--bg); overflow: hidden; }
-    .desk-hero { background: linear-gradient(180deg, #1f3d2b, #16241b); padding: 16px 16px 14px; }
-    .desk-hero small { font-size: .45rem; letter-spacing: .1em; color: #cfefdc; font-weight: 600; }
+    .desk-hero { background: linear-gradient(180deg, #1a1636, #12102a); padding: 16px 16px 14px; }
+    .desk-hero small { font-size: .45rem; letter-spacing: .1em; color: #c9c2f2; font-weight: 600; }
     .desk-hero div { font-family: var(--font-head); font-weight: 800; font-size: 1.15rem; line-height: 1.1; }
     .desk-actions { display: flex; gap: 6px; padding: 10px 16px; }
     .desk-actions span { font-size: .5rem; font-weight: 700; border-radius: 99px; padding: 5px 10px; }
-    .desk-actions .g { background: var(--green); color: #000; }
+    .desk-actions .g { background: var(--accent); color: #fff; }
     .desk-actions .o { border: 1px solid #555; }
     .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 16px; }
     .tile { background: var(--surface); border-radius: 8px; padding: 6px; }
@@ -229,7 +230,7 @@
     .tile b { display: block; font-size: .52rem; }
     .tile span { font-size: .42rem; color: var(--faint); }
     .c1 { background: linear-gradient(135deg, #ff6b6b, #8e2de2); }
-    .c2 { background: linear-gradient(135deg, #1ed760, #0f5132); }
+    .c2 { background: linear-gradient(135deg, #8b5cf6, #4338ca); }
     .c3 { background: linear-gradient(135deg, #f9d423, #ff4e50); }
     .c4 { background: linear-gradient(135deg, #43cea2, #185a9d); }
     .c5 { background: linear-gradient(135deg, #f7971e, #ffd200); }
@@ -237,11 +238,11 @@
 
     .phone {
       position: absolute; right: 0; bottom: 0; width: 196px; height: 400px;
-      background: #000; border-radius: 34px; padding: 10px;
-      border: 1px solid #2a2a2a;
+      background: #05050a; border-radius: 34px; padding: 10px;
+      border: 1px solid var(--border);
       box-shadow: 0 40px 80px rgba(0, 0, 0, .7), 0 0 0 6px #0d0d0d;
     }
-    .screen { height: 100%; border-radius: 26px; overflow: hidden; background: linear-gradient(180deg, #404040 0%, var(--bg) 60%); padding: 26px 14px 14px; display: flex; flex-direction: column; }
+    .screen { height: 100%; border-radius: 26px; overflow: hidden; background: linear-gradient(180deg, #2e2560 0%, var(--bg) 60%); padding: 26px 14px 14px; display: flex; flex-direction: column; }
     .np-label { text-align: center; font-size: .45rem; letter-spacing: .1em; color: var(--muted); }
     .np-list { text-align: center; font-size: .58rem; font-weight: 700; margin-bottom: 14px; }
     .np-art { aspect-ratio: 1; border-radius: 10px; margin-bottom: 14px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5); }
@@ -253,8 +254,8 @@
     .np-times { display: flex; justify-content: space-between; font-size: .45rem; color: var(--faint); margin-bottom: 10px; }
     .np-ctrl { display: flex; justify-content: space-between; align-items: center; padding: 0 4px; }
     .np-ctrl svg { width: 16px; height: 16px; }
-    .np-play { width: 38px; height: 38px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; }
-    .np-ctrl .on { color: var(--green); }
+    .np-play { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; }
+    .np-ctrl .on { color: var(--accent); }
 
     .sync-chip {
       position: absolute; left: 7%; bottom: 22px; z-index: 3;
@@ -264,14 +265,14 @@
       box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
       font-size: .8rem;
     }
-    .sync-chip .dot { width: 30px; height: 30px; border-radius: 50%; background: rgba(30, 215, 96, .15); display: grid; place-items: center; color: var(--green); }
+    .sync-chip .dot { width: 30px; height: 30px; border-radius: 50%; background: rgba(139, 92, 246, .15); display: grid; place-items: center; color: var(--accent); }
     .sync-chip .dot svg { width: 16px; height: 16px; animation: spin 2.4s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .sync-chip small { display: block; color: var(--faint); font-size: .7rem; }
 
     /* ---------- Sections ---------- */
     section { padding: 110px 0; }
-    .eyebrow { color: var(--green); font-weight: 600; font-size: .85rem; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 12px; }
+    .eyebrow { color: var(--accent); font-weight: 600; font-size: .85rem; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 12px; }
     h2 { font-family: var(--font-head); font-size: clamp(2rem, 3.6vw, 3rem); line-height: 1.1; letter-spacing: -.025em; font-weight: 800; margin-bottom: 16px; text-wrap: balance; }
     .section-lead { color: var(--muted); font-size: 1.08rem; max-width: 620px; }
     .section-head { margin-bottom: 56px; }
@@ -283,7 +284,7 @@
     .stats .wrap { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
     .stat { padding: 26px 24px; border-right: 1px solid var(--border); }
     .stat:last-child { border-right: 0; }
-    .stat b { display: block; font-family: var(--font-head); font-size: 1.7rem; font-weight: 800; color: var(--green); line-height: 1.2; }
+    .stat b { display: block; font-family: var(--font-head); font-size: 1.7rem; font-weight: 800; color: var(--accent); line-height: 1.2; }
     .stat span { color: var(--muted); font-size: .92rem; }
 
     /* Feature grid */
@@ -293,11 +294,11 @@
       padding: 28px; transition: background-color .2s ease, border-color .2s ease, transform .25s var(--ease-out);
     }
     .card:hover { background: #1c1c1c; border-color: #3a3a3a; transform: translateY(-4px); }
-    .icon { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: rgba(30, 215, 96, .12); color: var(--green); margin-bottom: 18px; }
+    .icon { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: rgba(139, 92, 246, .12); color: var(--accent); margin-bottom: 18px; }
     .icon svg { width: 24px; height: 24px; }
     .card h3 { font-family: var(--font-head); font-size: 1.22rem; font-weight: 700; margin-bottom: 8px; }
     .card p { color: var(--muted); font-size: .97rem; }
-    .tag-new { display: inline-block; margin-left: 8px; vertical-align: middle; font-family: var(--font-body); font-size: .68rem; font-weight: 700; letter-spacing: .06em; color: var(--green-ink); background: var(--green); padding: 2px 7px; border-radius: 99px; }
+    .tag-new { display: inline-block; margin-left: 8px; vertical-align: middle; font-family: var(--font-body); font-size: .68rem; font-weight: 700; letter-spacing: .06em; color: var(--accent-ink); background: var(--accent); padding: 2px 7px; border-radius: 99px; }
 
     /* Steps */
     .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: step; }
@@ -305,7 +306,7 @@
     .step::before {
       counter-increment: step; content: counter(step);
       display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
-      background: var(--green); color: var(--green-ink);
+      background: var(--accent); color: var(--accent-ink);
       font-family: var(--font-head); font-weight: 800; margin-bottom: 18px;
     }
     .step h3 { font-family: var(--font-head); font-size: 1.2rem; margin-bottom: 8px; }
@@ -317,7 +318,7 @@
     .checks { list-style: none; display: grid; gap: 16px; margin-top: 28px; }
     .checks li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; color: var(--muted); }
     .checks li b { color: var(--text); font-weight: 600; }
-    .checks svg { width: 24px; height: 24px; color: var(--green); margin-top: 1px; }
+    .checks svg { width: 24px; height: 24px; color: var(--accent); margin-top: 1px; }
 
     .connect {
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
@@ -327,16 +328,16 @@
     .connect > p { text-align: center; color: var(--muted); font-size: .9rem; margin-bottom: 20px; }
     .connect-box { background: var(--card); border-radius: 14px; padding: 18px 20px; }
     .connect-box small { display: block; color: var(--faint); font-size: .72rem; font-weight: 600; letter-spacing: .08em; }
-    .connect-box .addr { font-family: var(--font-head); font-size: 1.9rem; font-weight: 800; color: var(--green); margin-bottom: 10px; }
+    .connect-box .addr { font-family: var(--font-head); font-size: 1.9rem; font-weight: 800; color: var(--accent); margin-bottom: 10px; }
     .connect-box .pin { font-family: var(--font-head); font-size: 1.9rem; font-weight: 800; letter-spacing: .06em; }
-    .connect .ready { text-align: center; margin-top: 16px; color: var(--green); font-weight: 600; font-size: .92rem; }
+    .connect .ready { text-align: center; margin-top: 16px; color: var(--accent); font-weight: 600; font-size: .92rem; }
     .log { margin-top: 14px; background: #0d0d0d; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: .8rem; color: var(--muted); font-family: ui-monospace, Consolas, monospace; line-height: 1.8; }
-    .log b { color: var(--green); font-weight: 500; }
+    .log b { color: var(--accent); font-weight: 500; }
 
     /* Player list */
     .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
     .chip { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--card); border: 1px solid #333; font-weight: 500; font-size: .93rem; }
-    .chip svg { width: 18px; height: 18px; color: var(--green); }
+    .chip svg { width: 18px; height: 18px; color: var(--accent); }
 
     /* FAQ */
     .faq { max-width: 820px; margin: 0 auto; display: grid; gap: 12px; }
@@ -349,14 +350,14 @@
     }
     summary::-webkit-details-marker { display: none; }
     summary svg { width: 20px; height: 20px; flex: none; color: var(--muted); transition: transform .25s var(--ease-out); }
-    details[open] summary svg { transform: rotate(45deg); color: var(--green); }
+    details[open] summary svg { transform: rotate(45deg); color: var(--accent); }
     details > div { padding: 0 24px 22px; color: var(--muted); }
     details code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; color: var(--text); background: var(--card); padding: 1px 6px; border-radius: 5px; }
 
     /* Final CTA */
     .final {
       text-align: center; border-radius: 28px; padding: 72px 32px;
-      background: radial-gradient(600px 300px at 50% 0%, rgba(30, 215, 96, .22), transparent 70%), var(--surface);
+      background: radial-gradient(600px 300px at 50% 0%, rgba(139, 92, 246, .22), transparent 70%), var(--surface);
       border: 1px solid var(--border);
     }
     .final img { width: 72px; height: 72px; border-radius: 18px; margin: 0 auto 24px; }
@@ -377,7 +378,7 @@
     .dl dd { color: var(--text); font-weight: 500; text-align: right; }
     .dl .btn { margin-top: auto; width: 100%; }
     .dl .note { margin-top: 12px; text-align: center; font-size: .85rem; color: var(--faint); }
-    .dl .note a { color: var(--green); }
+    .dl .note a { color: var(--accent); }
     .version-line { text-align: center; margin-top: 22px; color: var(--faint); font-size: .92rem; }
     .version-line a { color: var(--muted); }
 
@@ -390,11 +391,11 @@
     .guide ol li { counter-increment: g; display: grid; grid-template-columns: 32px 1fr; gap: 14px; color: var(--muted); font-size: .96rem; }
     .guide ol li::before {
       content: counter(g); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
-      background: rgba(30, 215, 96, .14); color: var(--green); font-family: var(--font-head); font-weight: 700;
+      background: rgba(139, 92, 246, .14); color: var(--accent); font-family: var(--font-head); font-weight: 700;
     }
     .guide ol li b { color: var(--text); font-weight: 600; }
-    .guide a { color: var(--green); }
-    .callout { border-left: 3px solid var(--green); background: var(--card); border-radius: 10px; padding: 16px 18px; color: var(--muted); font-size: .93rem; }
+    .guide a { color: var(--accent); }
+    .callout { border-left: 3px solid var(--accent); background: var(--card); border-radius: 10px; padding: 16px 18px; color: var(--muted); font-size: .93rem; }
     .callout + .callout { margin-top: 12px; }
     .callout b { color: var(--text); }
     .callout.warn { border-left-color: #f5a524; }
@@ -501,11 +502,11 @@
   <div class="hero" id="top">
     <div class="wrap">
       <div>
-        <a class="badge" href="#download"><b>NEW</b> v1.1: Android &amp; iPhone apps + Wi-Fi sync</a>
-        <h1>Your Spotify playlists. <em>Offline.</em> On every device.</h1>
-        <p class="lead">SpotVault downloads your playlists on Windows with cover art and tags, then sends them to your Android phone or iPhone over Wi-Fi. No account, no cloud, no ads.</p>
+        <a class="badge" href="#download"><b>NEW</b> v1.3: search any song, YouTube playlists, fresh look</a>
+        <h1>Your music. <em>Offline.</em> On every device.</h1>
+        <p class="lead">Paste a playlist link or search for any song. SpotVault saves it on Windows with cover art and tags, and your Android phone or iPhone picks it up over Wi-Fi. No account, no cloud, no ads.</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download>
+          <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.3.0/SpotVault_Setup_v1.3.exe" download>
             <svg aria-hidden="true"><use href="#i-windows"/></svg> Download for Windows
           </a>
           <a class="btn btn-outline" href="#download">
@@ -515,7 +516,7 @@
         <div class="meta">
           <span><svg aria-hidden="true"><use href="#i-free"/></svg>Free, source on GitHub</span>
           <span><svg aria-hidden="true"><use href="#i-shield"/></svg>Zero telemetry</span>
-          <span><svg aria-hidden="true"><use href="#i-download"/></svg>Version 1.1.0</span>
+          <span><svg aria-hidden="true"><use href="#i-download"/></svg>Version 1.3.0</span>
         </div>
       </div>
 
@@ -529,11 +530,11 @@
               <div class="side-card"><small>YOUR LIBRARY</small>
                 <div class="row">Playlists <b>6</b></div><div class="row">Songs <b>248</b></div><div class="row">On disk <b>1.4 GB</b></div>
               </div>
-              <div class="side-card"><small>PHONE SYNC</small><div class="row" style="color:var(--green)">● Ready</div><div class="pill-btn">Connect phone</div></div>
+              <div class="side-card"><small>PHONE SYNC</small><div class="row" style="color:var(--accent)">● Ready</div><div class="pill-btn">Connect phone</div></div>
             </div>
             <div class="desk-main">
               <div class="desk-hero"><small>LIBRARY</small><div>Your Playlists</div></div>
-              <div class="desk-actions"><span class="g">⟳ Sync all</span><span class="o">+ Add playlist</span></div>
+              <div class="desk-actions"><span class="g">⟳ Sync all</span><span class="o">+ Add playlist</span><span class="o">⌕ Search songs</span></div>
               <div class="tiles">
                 <div class="tile"><div class="cover c1"></div><b>Late Night</b><span>42 songs</span></div>
                 <div class="tile"><div class="cover c2"></div><b>Gym Beats</b><span>55 songs</span></div>
@@ -577,7 +578,7 @@
     <!-- ===================== STATS ===================== -->
     <div class="stats">
       <div class="wrap reveal">
-        <div class="stat"><b>3</b><span>audio sources with fallback</span></div>
+        <div class="stat"><b>3</b><span>kinds of playlist links</span></div>
         <div class="stat"><b>3</b><span>platforms: Windows, Android, iPhone</span></div>
         <div class="stat"><b>0</b><span>accounts, ads or trackers</span></div>
         <div class="stat"><b>Auto</b><span>resume after any interruption</span></div>
@@ -590,33 +591,33 @@
         <div class="section-head">
           <p class="eyebrow">Features</p>
           <h2>Everything your offline library needs</h2>
-          <p class="section-lead">Paste a playlist link once. SpotVault keeps that folder in step with Spotify and fills in the details music players care about.</p>
+          <p class="section-lead">Paste a playlist link once, or search for a single song. SpotVault keeps each folder up to date and fills in the details music players care about.</p>
         </div>
         <div class="grid-3">
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-layers"/></svg></div>
-            <h3>Three-source fallback</h3>
-            <p>Each song is matched on YouTube Music first, then YouTube and SoundCloud, so rare tracks still come through.</p>
+            <h3>Any playlist link <span class="tag-new">NEW</span></h3>
+            <p>Spotify, YouTube, YouTube Music and SoundCloud playlists all work. Each one becomes its own folder of songs.</p>
           </article>
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-filter"/></svg></div>
-            <h3>Clean audio</h3>
-            <p>Prefers official audio and lyric uploads, so you don't get movie dialogue, skits or long video intros in your songs.</p>
+            <h3>Search any song <span class="tag-new">NEW</span></h3>
+            <p>Missing a track? Search for it, listen first, then save it straight into any playlist, from your PC or your phone.</p>
           </article>
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-image"/></svg></div>
             <h3>Cover art &amp; tags</h3>
-            <p>Album art, title, artist and album are written into every file, so they look right in any player and in your car.</p>
+            <p>Clean studio songs, never movie dialogue or video intros. Album art, title, artist and album are written into every file.</p>
           </article>
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-refresh"/></svg></div>
             <h3>Smart re-sync</h3>
-            <p>Added songs to a playlist on Spotify? Press Sync and only the new ones download. Songs already on disk are skipped.</p>
+            <p>Added songs to a playlist? Press Sync and only the new ones download. Songs already on disk are skipped.</p>
           </article>
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-wifi"/></svg></div>
-            <h3>Wi-Fi phone sync <span class="tag-new">NEW</span></h3>
-            <p>Send every playlist to your Android phone with one tap. Folders, order and artwork arrive exactly as on your PC.</p>
+            <h3>Wi-Fi phone sync</h3>
+            <p>Send every playlist to your Android phone or iPhone with one tap. Folders, order and artwork arrive exactly as on your PC.</p>
           </article>
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-lock"/></svg></div>
@@ -637,7 +638,7 @@
         <div class="steps">
           <div class="step reveal">
             <h3>Add a playlist</h3>
-            <p>Copy a playlist link in Spotify, click <kbd>+ Add playlist</kbd> and give it a folder name.</p>
+            <p>Copy a playlist link from Spotify, YouTube or SoundCloud, click <kbd>+ Add playlist</kbd> and give it a folder name.</p>
           </div>
           <div class="step reveal">
             <h3>Sync on your PC</h3>
@@ -645,20 +646,21 @@
           </div>
           <div class="step reveal">
             <h3>Send to your phone</h3>
-            <p>Click <kbd>Connect phone</kbd>, open the Android app on the same Wi-Fi and tap <kbd>Sync now</kbd>.</p>
+            <p>Click <kbd>Connect phone</kbd>, open the phone app on the same Wi-Fi and tap <kbd>Sync now</kbd>.</p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ===================== PHONE SYNC ===================== -->
-    <section id="phone" style="background:linear-gradient(180deg,var(--bg),#0b0b0b)">
+    <section id="phone" style="background:linear-gradient(180deg,var(--bg),#0e0c1f)">
       <div class="wrap split">
         <div class="reveal">
-          <p class="eyebrow">New in v1.1</p>
+          <p class="eyebrow">New in v1.3</p>
           <h2>Your whole library, on your phone</h2>
-          <p class="section-lead">SpotVault Mobile finds your PC on the Wi-Fi and copies every playlist across. No cables, no cloud uploads.</p>
+          <p class="section-lead">SpotVault Mobile copies every playlist from your PC over Wi-Fi. Now you can also search for a song on the phone, listen to it, and save it to a playlist. Your PC does the downloading and sends it straight back.</p>
           <ul class="checks">
+            <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Add songs from the phone.</b> Search, tap to listen, tap Download, pick a playlist. It arrives with cover art.</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Finds your PC automatically.</b> Or type the address shown on the PC.</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>PIN protected.</b> Only phones with your 6-digit PIN can connect.</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Only new songs.</b> Later syncs copy what changed, and a stopped sync picks up where it left off.</span></li>
@@ -669,7 +671,7 @@
             <span class="chip"><svg aria-hidden="true"><use href="#i-list"/></svg>Editable queue</span>
             <span class="chip"><svg aria-hidden="true"><use href="#i-heart"/></svg>Liked Songs</span>
             <span class="chip"><svg aria-hidden="true"><use href="#i-moon"/></svg>Sleep timer</span>
-            <span class="chip"><svg aria-hidden="true"><use href="#i-search"/></svg>Search</span>
+            <span class="chip"><svg aria-hidden="true"><use href="#i-search"/></svg>Search &amp; preview</span>
             <span class="chip"><svg aria-hidden="true"><use href="#i-phone"/></svg>Lock-screen controls</span>
           </div>
         </div>
@@ -686,9 +688,9 @@
           <div class="ready">● Ready for phone sync</div>
           <div class="log" aria-hidden="true">
             [21:04:12] Android phone connected<br>
-            [21:04:13] <b>Sent</b> Neon Coast - Midnight Drive.m4a<br>
-            [21:04:13] <b>Sent</b> Lumen - Afterglow.m4a<br>
-            [21:04:14] <b>Sent</b> The Static - Overpass.m4a
+            [21:04:20] Phone asked for Afterglow<br>
+            [21:04:26] <b>Downloaded for phone:</b> Afterglow<br>
+            [21:04:27] <b>Sent</b> Lumen - Afterglow.m4a
           </div>
         </div>
       </div>
@@ -699,7 +701,7 @@
       <div class="wrap">
         <div class="section-head center">
           <p class="eyebrow">Download</p>
-          <h2>Get SpotVault 1.1.0</h2>
+          <h2>Get SpotVault 1.3.0</h2>
           <p class="section-lead">Start with the Windows app, then add the phone app to carry your playlists with you.</p>
         </div>
         <div class="downloads">
@@ -709,44 +711,41 @@
               <div><h3>Windows</h3><span>Desktop app &amp; downloader</span></div>
             </div>
             <dl>
-              <dt>Version</dt><dd>1.1.0</dd>
+              <dt>Version</dt><dd>1.3.0</dd>
               <dt>File</dt><dd>Installer (.exe)</dd>
-              <dt>Size</dt><dd>52 MB</dd>
               <dt>Needs</dt><dd>Windows 10 or 11, 64-bit</dd>
             </dl>
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download for Windows</a>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.3.0/SpotVault_Setup_v1.3.exe" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download for Windows</a>
             <p class="note">Allow SpotVault on Private networks if Windows Firewall asks.</p>
           </article>
           <article class="dl reveal">
             <div class="dl-head">
               <div class="icon"><svg aria-hidden="true"><use href="#i-android"/></svg></div>
-              <div><h3>Android</h3><span>Phone player &amp; sync</span></div>
+              <div><h3>Android</h3><span>Player, search &amp; sync</span></div>
             </div>
             <dl>
-              <dt>Version</dt><dd>1.1.0</dd>
+              <dt>Version</dt><dd>1.3.0</dd>
               <dt>File</dt><dd>App package (.apk)</dd>
-              <dt>Size</dt><dd>54 MB</dd>
               <dt>Needs</dt><dd>Android phone</dd>
             </dl>
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.apk" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download APK</a>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.3.0/SpotVault_v1.3.0.apk" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download APK</a>
             <p class="note">Allow "install unknown apps" when Android asks.</p>
           </article>
           <article class="dl reveal">
             <div class="dl-head">
               <div class="icon"><svg aria-hidden="true"><use href="#i-apple"/></svg></div>
-              <div><h3>iPhone</h3><span>Phone player &amp; sync</span></div>
+              <div><h3>iPhone</h3><span>Player, search &amp; sync</span></div>
             </div>
             <dl>
-              <dt>Version</dt><dd>1.1.0</dd>
+              <dt>Version</dt><dd>1.3.0</dd>
               <dt>File</dt><dd>Unsigned app (.ipa)</dd>
-              <dt>Size</dt><dd>8 MB</dd>
               <dt>Needs</dt><dd>Sideloading, iOS 15+</dd>
             </dl>
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.0_unsigned.ipa" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download IPA</a>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.3.0/SpotVault_v1.3.0_unsigned.ipa" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download IPA</a>
             <p class="note">Not on the App Store. <a href="#iphone">How to install it</a></p>
           </article>
         </div>
-        <p class="version-line">Latest: v1.1.0 · <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">All versions &amp; release notes</a></p>
+        <p class="version-line">Latest: v1.3.0 · <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">All versions &amp; release notes</a></p>
       </div>
     </section>
 
@@ -772,6 +771,10 @@
             </ol>
           </div>
           <div class="reveal">
+            <div class="callout"><b>Get updates in AltStore:</b> on your iPhone, tap
+              <a href="altstore://source?url=https://spotvault-web.vercel.app/altstore.json">Add SpotVault to AltStore</a>.
+              AltStore then shows <b>Update</b> for SpotVault whenever a new version is out. If the link does nothing, open AltStore → Sources → <b>+</b> and paste
+              <code>https://spotvault-web.vercel.app/altstore.json</code>.</div>
             <div class="callout"><b>Keep it working:</b> with a free Apple ID, apps expire after 7 days. Leave AltServer running on your PC and turn on <b>Wi-Fi sync</b> for your iPhone in iTunes once; AltStore then renews SpotVault automatically when both are on the same Wi-Fi.</div>
             <div class="callout warn"><b>Type the address:</b> the Scan button can't find your PC on iPhone (Apple blocks Wi-Fi discovery for sideloaded apps). Enter the address shown in the Connect phone window instead.</div>
             <div class="callout"><b>Prefer one-off installs?</b> <a href="https://sideloadly.io" target="_blank" rel="noopener">Sideloadly</a> also works: install iTunes, plug in the phone, drag the IPA in and sign in. Reinstall every 7 days.</div>
@@ -791,23 +794,35 @@
         <div class="faq">
           <details class="reveal">
             <summary>Does my playlist need to be public?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
-            <div>Yes. Set it to Public in Spotify, or share it by link. Private playlists can't be read.</div>
+            <div>Yes. Use a public playlist or one shared by link. Private playlists can't be read.</div>
           </details>
           <details class="reveal">
             <summary>The phone can't find my PC. What do I check?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
             <div>Put both on the same Wi-Fi (not a guest network) and keep SpotVault open on the PC. The first time, Windows Firewall asks about network access: allow SpotVault on <b>Private networks</b>. You can also type the address shown in the Connect phone window.</div>
           </details>
           <details class="reveal">
+            <summary>Will songs have movie dialogue or video intros?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <div>No. SpotVault looks for the clean studio song first on YouTube Music, then SoundCloud, and only then on YouTube, where it picks lyric videos and skips video songs, scenes, trailers, loops and remixes. Even a YouTube playlist full of movie video songs is saved as the clean songs.</div>
+          </details>
+          <details class="reveal">
+            <summary>Can I add songs from my phone?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <div>Yes. Open <b>Search → Find new songs</b>, type a song, tap it to listen, then tap download and pick a playlist. Your PC downloads it and sends it back, so keep SpotVault open on the PC and both devices on the same Wi-Fi.</div>
+          </details>
+          <details class="reveal">
+            <summary>How do I update from an older version?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
+            <div>From v1.3 on, SpotVault tells you when an update is ready and installs it for you. Coming from v1.1: on Windows and iPhone, install v1.3 over the old app and everything is kept. On Android, uninstall v1.1 first, install v1.3, then sync from your PC again (this one-time step is needed because of a change in how the app is signed).</div>
+          </details>
+          <details class="reveal">
             <summary>How do I install the Android app?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
-            <div>Download <code>SpotVault_v1.1.apk</code> on your phone, open it, and allow installing apps from your browser or file manager when Android asks.</div>
+            <div>Download <code>SpotVault_v1.3.0.apk</code> on your phone, open it, and allow installing apps from your browser or file manager when Android asks.</div>
           </details>
           <details class="reveal">
             <summary>Why isn't SpotVault on the App Store?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
-            <div>It's a free side project, so it's shared as an IPA you install yourself. Follow the <a href="#iphone" style="color:var(--green)">iPhone guide</a>: AltStore signs the app with your own Apple ID and keeps it renewed.</div>
+            <div>It's a free side project, so it's shared as an IPA you install yourself. Follow the <a href="#iphone" style="color:var(--accent)">iPhone guide</a>: AltStore signs the app with your own Apple ID and keeps it renewed.</div>
           </details>
           <details class="reveal">
             <summary>Why does the first sync take a while?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
-            <div>The first run sets up the audio converter (FFmpeg), and each song is matched, downloaded and tagged. Later syncs only fetch new songs, so they're much faster.</div>
+            <div>Each song is found, downloaded, converted and tagged. Later syncs only fetch new songs, so they're much faster. Everything the app needs is built in, so there is nothing extra to install.</div>
           </details>
           <details class="reveal">
             <summary>Where are my songs saved?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
@@ -823,12 +838,12 @@
         <div class="final reveal">
           <img src="logo.png" alt="" width="72" height="72">
           <h2>Take your music offline</h2>
-          <p class="section-lead" style="margin:0 auto">Free for Windows, Android and iPhone. Version 1.1.0.</p>
+          <p class="section-lead" style="margin:0 auto">Free for Windows, Android and iPhone. Version 1.3.0.</p>
           <div class="cta-row">
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_Setup_v1.1.exe" download>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.3.0/SpotVault_Setup_v1.3.exe" download>
               <svg aria-hidden="true"><use href="#i-windows"/></svg> Download for Windows
             </a>
-            <a class="btn btn-outline" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.1.0/SpotVault_v1.1.apk" download>
+            <a class="btn btn-outline" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.3.0/SpotVault_v1.3.0.apk" download>
               <svg aria-hidden="true"><use href="#i-android"/></svg> Android
             </a>
             <a class="btn btn-outline" href="#iphone">
@@ -848,7 +863,7 @@
         <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">All releases</a>
         <a href="https://github.com/sarathlal-12/spotvault/issues" target="_blank" rel="noopener">Report a problem</a>
       </nav>
-      <div>© 2026 SpotVault · v1.1</div>
+      <div>© 2026 SpotVault · v1.3</div>
     </div>
   </footer>
 

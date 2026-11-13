@@ -117,6 +117,7 @@ class LibraryStore extends ChangeNotifier {
 
   // Settings
   bool mirrorDeletes = true;
+  String skipUpdate = ''; // version the user chose to skip
 
   // Playback resume
   List<String> resumeQueue = [];
@@ -158,6 +159,7 @@ class LibraryStore extends ChangeNotifier {
       pin = j['pin'] ?? '';
       lastSync = j['lastSync'] ?? 0;
       mirrorDeletes = j['mirrorDeletes'] ?? true;
+      skipUpdate = j['skipUpdate'] ?? '';
       final r = Map<String, dynamic>.from(j['resume'] ?? const {});
       resumeQueue = List<String>.from(r['queue'] ?? const []);
       resumeIndex = r['index'] ?? 0;
@@ -193,6 +195,7 @@ class LibraryStore extends ChangeNotifier {
           'pin': pin,
           'lastSync': lastSync,
           'mirrorDeletes': mirrorDeletes,
+          'skipUpdate': skipUpdate,
           'resume': {
             'queue': resumeQueue,
             'index': resumeIndex,

@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>SpotVault Admin</title>
+<style>
+  :root {
+    --bg: #0b0b14; --deep: #08080f; --surface: #14142a; --card: #1c1c36; --raised: #26264a;
+    --border: #2a2a4a; --text: #f4f4ff; --muted: #a5a5c8; --faint: #7c7ca6;
+    --accent: #8b5cf6; --accent-2: #6366f1; --accent-hover: #a78bfa;
+    --ok: #34d399; --warn: #fbbf24; --danger: #f43f5e;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; min-height: 100vh; }
+  a { color: var(--accent-hover); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 16px 60px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+  header img { width: 40px; height: 40px; border-radius: 10px; }
+  header h1 { font-size: 1.45rem; font-weight: 800; letter-spacing: -.01em; }
+  header .sub { color: var(--muted); font-size: .9rem; }
+  header .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 99px; padding: 3px 10px; font-size: .75rem; font-weight: 700; letter-spacing: .03em; }
+  .pill.live { background: rgba(52, 211, 153, .14); color: var(--ok); }
+  .pill.test { background: rgba(251, 191, 36, .14); color: var(--warn); }
+  .pill.draft { background: var(--raised); color: var(--muted); }
+  .pill.old { background: transparent; color: var(--faint); border: 1px solid var(--border); }
+  .pill.auth { background: rgba(139, 92, 246, .15); color: var(--accent-hover); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 18px; }
+  .panel h2 { font-size: 1.05rem; margin-bottom: 6px; }
+  .muted { color: var(--muted); }
+  .small { font-size: .85rem; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  input[type=password], input[type=text], textarea {
+    background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 10px;
+    padding: 10px 12px; font: inherit; width: 100%;
+  }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  textarea { min-height: 150px; resize: vertical; }
+  button {
+    font: inherit; font-weight: 700; border: 0; border-radius: 99px; padding: 9px 18px; cursor: pointer;
+    background: var(--raised); color: var(--text); transition: transform .15s, background .15s;
+  }
+  button:hover:not(:disabled) { transform: translateY(-1px); background: #303060; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+  button.primary:hover:not(:disabled) { background: linear-gradient(135deg, var(--accent-hover), var(--accent)); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid rgba(244, 63, 94, .4); }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  button:focus-visible { outline: 3px solid var(--accent-hover); outline-offset: 2px; }
+  .live-box { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+  .big { font-size: 2rem; font-weight: 800; line-height: 1.1; }
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
+  .stat b { display: block; font-size: 1.25rem; }
+  .stat span { color: var(--muted); font-size: .8rem; }
+  .rel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 12px; }
+  .rel.is-live { border-color: rgba(52, 211, 153, .45); }
+  .rel.is-test { border-color: rgba(251, 191, 36, .45); }
+  .rel-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .rel-head h3 { font-size: 1.1rem; }
+  .rel-head .date { color: var(--faint); font-size: .85rem; }
+  .rel-head .spacer { flex: 1; }
+  .assets { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 2px; }
+  .asset { background: var(--card); border-radius: 10px; padding: 6px 10px; font-size: .82rem; color: var(--muted); }
+  .asset b { color: var(--text); }
+  .asset.missing { color: var(--danger); background: rgba(244, 63, 94, .08); }
+  .notes { color: var(--muted); font-size: .88rem; margin-top: 8px; white-space: pre-wrap; max-height: 4.6em; overflow: hidden; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .steps { counter-reset: s; list-style: none; display: grid; gap: 10px; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 30px 1fr; gap: 10px; }
+  .steps li::before { content: counter(s); width: 26px; height: 26px; border-radius: 50%; background: var(--raised); display: grid; place-items: center; font-weight: 800; font-size: .8rem; color: var(--accent-hover); }
+  code { background: var(--card); padding: 1px 6px; border-radius: 6px; font-size: .85em; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(120%); background: var(--raised); color: var(--text); padding: 12px 18px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.4); transition: transform .25s; max-width: calc(100% - 32px); z-index: 20; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.err { background: #4a1426; }
+  dialog { margin: auto; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: min(560px, calc(100% - 32px)); }
+  dialog::backdrop { background: rgba(5, 5, 12, .7); }
+  dialog h2 { font-size: 1.15rem; margin-bottom: 8px; }
+  .preview { background: var(--deep); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin: 12px 0; }
+  .preview .t { font-weight: 800; margin-bottom: 4px; }
+  .preview .n { color: var(--muted); font-size: .88rem; white-space: pre-wrap; max-height: 9em; overflow: auto; }
+  .warn { color: var(--warn); font-size: .88rem; margin-top: 8px; }
+  .hidden { display: none !important; }
+  .empty { text-align: center; color: var(--muted); padding: 30px; }
+  @media (max-width: 640px) { .live-box { grid-template-columns: 1fr; } .big { font-size: 1.6rem; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="../web/logo.png" alt="">
+    <div>
+      <h1>SpotVault Admin</h1>
+      <div class="sub">Approve tested builds and send updates to every user.</div>
+    </div>
+    <div class="spacer"></div>
+    <span id="authPill" class="pill old">Read-only</span>
+    <button id="btnRefresh" class="ghost">Refresh</button>
+  </header>
+
+  <!-- Sign in -->
+  <section class="panel" id="signin">
+    <h2>Your admin key</h2>
+    <p class="muted small" style="margin-bottom:12px">
+      Approving changes your GitHub releases, so it needs a GitHub key only you have. The key is sent only to
+      <code>api.github.com</code>. Without it you can still look around, but the buttons stay locked.
+    </p>
+    <div class="row">
+      <input id="token" type="password" placeholder="Paste your GitHub token (github_pat_…)" autocomplete="off" style="flex:1;min-width:240px">
+      <button id="btnSave" class="primary">Unlock</button>
+    </div>
+    <label class="row small muted" style="margin-top:10px"><input type="checkbox" id="remember" checked> Remember on this computer</label>
+    <details class="small muted" style="margin-top:12px">
+      <summary style="cursor:pointer">How do I get a key?</summary>
+      <ol class="steps" style="margin-top:10px">
+        <li><span>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → New fine-grained token</a>.</span></li>
+        <li><span>Name it <b>SpotVault admin</b>. Under <b>Repository access</b> pick <b>Only select repositories → spotvault</b>.</span></li>
+        <li><span>Under <b>Permissions → Repository → Contents</b> choose <b>Read and write</b>. Nothing else.</span></li>
+        <li><span>Click <b>Generate token</b>, copy it and paste it above.</span></li>
+      </ol>
+    </details>
+  </section>
+
+  <!-- Signed in strip -->
+  <section class="panel hidden" id="signedin">
+    <div class="row">
+      <div style="flex:1"><b>Unlocked</b> <span class="muted small" id="whoami"></span></div>
+      <button id="btnLock" class="ghost">Lock</button>
+    </div>
+  </section>
+
+  <!-- What users get now -->
+  <section class="panel">
+    <div class="live-box">
+      <div>
+        <div class="muted small">USERS ARE BEING OFFERED</div>
+        <div class="big" id="liveVersion">…</div>
+        <div class="muted small" id="liveSub"></div>
+        <div class="stats" id="liveStats"></div>
+      </div>
+      <div class="muted small" style="max-width:320px">
+        Apps check this when they start. Anyone on an older version sees an <b>Update</b> prompt.
+        Builds marked <span class="pill test">TESTING</span> are invisible to users until you approve them.
+      </div>
+    </div>
+  </section>
+
+  <h2 style="font-size:1.1rem;margin:22px 0 12px">Releases</h2>
+  <div id="list"><div class="empty">Loading…</div></div>
+
+  <section class="panel" style="margin-top:22px">
+    <h2>How a new version goes out</h2>
+    <ol class="steps small" style="margin-top:10px">
+      <li><span>Build the Windows installer and publish the release on GitHub as a <b>pre-release</b> (it shows here as <span class="pill test">TESTING</span>). Pushing the tag builds the Android and iPhone files and attaches them automatically.</span></li>
+      <li><span>Install it yourself from the release page and test it. Users don't see it yet.</span></li>
+      <li><span>Check the three files are listed below, edit the notes users will read, then press <b>Approve &amp; send to users</b>.</span></li>
+      <li><span>Something wrong after approving? Press <b>Pull back</b>. Apps stop offering it on their next check.</span></li>
+    </ol>
+  </section>
+</div>
+
+<!-- Approve dialog -->
+<dialog id="dlgApprove">
+  <h2 id="apTitle">Send update to users?</h2>
+  <p class="muted small">Every SpotVault app on an older version will show this on its next start:</p>
+  <div class="preview">
+    <div class="t" id="apPreviewTitle"></div>
+    <div class="n" id="apPreviewNotes"></div>
+  </div>
+  <div id="apMissing" class="warn hidden"></div>
+  <div class="actions" style="justify-content:flex-end">
+    <button class="ghost" data-close>Cancel</button>
+    <button class="primary" id="apGo">Approve &amp; send</button>
+  </div>
+</dialog>
+
+<!-- Pull back dialog -->
+<dialog id="dlgPull">
+  <h2 id="pbTitle">Pull back this update?</h2>
+  <p class="muted small" id="pbText"></p>
+  <div class="actions" style="justify-content:flex-end">
+    <button class="ghost" data-close>Cancel</button>
+    <button class="danger" id="pbGo">Pull back</button>
+  </div>
+</dialog>
+
+<!-- Notes dialog -->
+<dialog id="dlgNotes">
+  <h2 id="ntTitle">What's new</h2>
+  <p class="muted small" style="margin-bottom:10px">Users read this in the update prompt. Short lines work best.</p>
+  <textarea id="ntText"></textarea>
+  <div class="actions" style="justify-content:flex-end">
+    <button class="ghost" data-close>Cancel</button>
+    <button class="primary" id="ntGo">Save notes</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const REPO = 'sarathlal-12/spotvault';
+  const API = 'https://api.github.com';
+  const KEY = 'spotvault-admin-token';
+  const DEMO = new URLSearchParams(location.search).has('demo');
+  const $ = (id) => document.getElementById(id);
+
+  let token = '';
+  try { token = localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || ''; } catch (_) {}
+  let releases = [];
+  let latestId = null;
+
+  // ---------- GitHub API ----------
+  async function gh(path, opts = {}) {
+    if (DEMO) return demoApi(path, opts);
+    const headers = { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    const res = await fetch(API + path, { ...opts, headers });
+    if (res.status === 401) throw new Error('GitHub rejected the key. It may be wrong or expired.');
+    if (res.status === 403 || res.status === 404 && opts.method) throw new Error('This key is not allowed to change releases. Give it Contents: Read and write on the spotvault repo.');
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('GitHub answered ' + res.status);
+    return res.status === 204 ? null : res.json();
+  }
+
+  // ---------- helpers ----------
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmtDate = (s) => s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'not published';
+  const parseV = (t) => { const n = (String(t).match(/\d+/g) || []).slice(0, 3).map(Number); while (n.length < 3) n.push(0); return n; };
+  const cmpV = (a, b) => { const x = parseV(a), y = parseV(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
+  const PLATFORMS = [
+    { key: 'win', label: 'Windows', test: (n) => /setup.*\.exe$/i.test(n) },
+    { key: 'apk', label: 'Android', test: (n) => /\.apk$/i.test(n) },
+    { key: 'ipa', label: 'iPhone', test: (n) => /\.ipa$/i.test(n) },
+  ];
+  function platformAssets(r) {
+    return PLATFORMS.map((p) => {
+      const a = (r.assets || []).find((x) => p.test(x.name));
+      return { ...p, asset: a, downloads: a ? a.download_count : 0 };
+    });
+  }
+  function status(r) {
+    if (r.draft) return 'draft';
+    if (r.prerelease) return 'test';
+    if (r.id === latestId) return 'live';
+    return 'old';
+  }
+
+  let toastTimer;
+  function toast(msg, err = false) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'show' + (err ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.className = ''), 4200);
+  }
+
+  // ---------- auth UI ----------
+  function renderAuth() {
+    const on = !!token || DEMO;
+    $('signin').classList.toggle('hidden', on);
+    $('signedin').classList.toggle('hidden', !on);
+    $('authPill').className = 'pill ' + (on ? 'auth' : 'old');
+    $('authPill').textContent = on ? 'Admin' : 'Read-only';
+  }
+
+  $('btnSave').onclick = async () => {
+    const v = $('token').value.trim();
+    if (!v) return toast('Paste your GitHub key first.', true);
+    token = v;
+    try {
+      const repo = await gh('/repos/' + REPO);
+      if (!repo || !repo.permissions || !repo.permissions.push) {
+        token = '';
+        return toast('This key can read but not change the spotvault repo. Give it Contents: Read and write.', true);
+      }
+      try {
+        localStorage.removeItem(KEY); sessionStorage.removeItem(KEY);
+        ($('remember').checked ? localStorage : sessionStorage).setItem(KEY, v);
+      } catch (_) {}
+      $('token').value = '';
+      $('whoami').textContent = '· can manage ' + REPO;
+      renderAuth();
+      toast('Unlocked.');
+      load();
+    } catch (e) {
+      token = '';
+      toast(e.message, true);
+    }
+  };
+  $('btnLock').onclick = () => {
+    token = '';
+    try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (_) {}
+    renderAuth();
+    load();
+    toast('Locked. The key was removed from this computer.');
+  };
+  $('btnRefresh').onclick = () => load();
+  document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => b.closest('dialog').close()));
+
+  // ---------- data ----------
+  async function load() {
+    $('list').innerHTML = '<div class="empty">Loading…</div>';
+    try {
+      const [all, latest] = await Promise.all([gh('/repos/' + REPO + '/releases?per_page=50'), gh('/repos/' + REPO + '/releases/latest')]);
+      releases = (all || []).sort((a, b) => cmpV(b.tag_name, a.tag_name));
+      latestId = latest ? latest.id : null;
+      render();
+    } catch (e) {
+      $('list').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+    }
+  }
+
+  function render() {
+    const live = releases.find((r) => r.id === latestId);
+    $('liveVersion').textContent = live ? live.tag_name : 'Nothing approved yet';
+    $('liveSub').textContent = live ? (live.name || '') + ' · approved release since ' + fmtDate(live.published_at) : '';
+    $('liveStats').innerHTML = live ? platformAssets(live).map((p) =>
+      `<div class="stat"><b>${p.asset ? p.downloads.toLocaleString() : '—'}</b><span>${p.label} downloads</span></div>`).join('') : '';
+
+    if (!releases.length) { $('list').innerHTML = '<div class="empty">No releases yet.</div>'; return; }
+    const admin = !!token || DEMO;
+    $('list').innerHTML = releases.map((r) => {
+      const st = status(r);
+      const pill = { live: '<span class="pill live">LIVE · users get this</span>', test: '<span class="pill test">TESTING · hidden from users</span>',
+                     draft: '<span class="pill draft">DRAFT</span>', old: '<span class="pill old">older</span>' }[st];
+      const assets = platformAssets(r).map((p) => p.asset
+        ? `<span class="asset"><b>${p.label}</b> · ${p.downloads.toLocaleString()} downloads</span>`
+        : `<span class="asset missing"><b>${p.label}</b> · file missing</span>`).join('');
+      const lock = admin ? '' : ' disabled title="Unlock with your admin key first"';
+      let actions = '';
+      if (st === 'test' || st === 'draft') actions += `<button class="primary" data-act="approve" data-id="${r.id}"${lock}>Approve &amp; send to users</button>`;
+      if (st === 'live') actions += `<button class="danger" data-act="pull" data-id="${r.id}"${lock}>Pull back</button>`;
+      if (st === 'old') actions += `<button class="ghost" data-act="mark-test" data-id="${r.id}"${lock}>Move to testing</button>`;
+      actions += `<button class="ghost" data-act="notes" data-id="${r.id}"${lock}>Edit what's new</button>`;
+      actions += `<a class="small" href="${esc(r.html_url)}" target="_blank" rel="noopener" style="align-self:center;margin-left:4px">Open on GitHub</a>`;
+      return `<article class="rel is-${st}">
+        <div class="rel-head"><h3>${esc(r.tag_name)}</h3>${pill}<span class="date">${fmtDate(r.published_at || r.created_at)}</span></div>
+        <div class="muted small">${esc(r.name || '')}</div>
+        <div class="assets">${assets}</div>
+        <div class="notes">${esc(r.body || 'No notes yet.')}</div>
+        <div class="actions">${actions}</div>
+      </article>`;
+    }).join('');
+    $('list').querySelectorAll('button[data-act]').forEach((b) => (b.onclick = () => act(b.dataset.act, Number(b.dataset.id))));
+  }
+
+  // ---------- actions ----------
+  let current = null;
+  function act(kind, id) {
+    current = releases.find((r) => r.id === id);
+    if (!current) return;
+    if (kind === 'approve') {
+      const live = releases.find((r) => r.id === latestId);
+      $('apTitle').textContent = 'Send ' + current.tag_name + ' to users?';
+      $('apPreviewTitle').textContent = 'SpotVault ' + current.tag_name.replace(/^v/i, '') + ' is available';
+      $('apPreviewNotes').textContent = (current.body || '').trim() || 'Improvements and fixes.';
+      const missing = platformAssets(current).filter((p) => !p.asset).map((p) => p.label);
+      const older = live && cmpV(current.tag_name, live.tag_name) <= 0;
+      const warn = [];
+      if (missing.length) warn.push(missing.join(' and ') + ' file missing: those users will be sent to the release page instead.');
+      if (older) warn.push('This is not newer than ' + live.tag_name + ', so apps will not offer it as an update.');
+      $('apMissing').textContent = warn.join(' ');
+      $('apMissing').classList.toggle('hidden', !warn.length);
+      $('dlgApprove').showModal();
+    } else if (kind === 'pull') {
+      const prev = releases.filter((r) => r.id !== current.id && !r.draft && !r.prerelease)[0];
+      $('pbTitle').textContent = 'Pull back ' + current.tag_name + '?';
+      $('pbText').textContent = 'It goes back to testing. Apps stop offering it on their next check' +
+        (prev ? ', and ' + prev.tag_name + ' becomes the approved version again.' : '.') +
+        ' People who already installed it keep it.';
+      $('dlgPull').showModal();
+    } else if (kind === 'mark-test') {
+      update(current, { prerelease: true }, current.tag_name + ' moved to testing.');
+    } else if (kind === 'notes') {
+      $('ntTitle').textContent = "What's new in " + current.tag_name;
+      $('ntText').value = current.body || '';
+      $('dlgNotes').showModal();
+    }
+  }
+
+  async function update(rel, body, okMsg) {
+    try {
+      await gh('/repos/' + REPO + '/releases/' + rel.id, { method: 'PATCH', body: JSON.stringify(body) });
+      toast(okMsg);
+      await load();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  $('apGo').onclick = async () => {
+    $('dlgApprove').close();
+    await update(current, { draft: false, prerelease: false, make_latest: 'true' },
+      current.tag_name + ' approved. Users get the update prompt on their next start.');
+  };
+  $('pbGo').onclick = async () => {
+    $('dlgPull').close();
+    const prev = releases.filter((r) => r.id !== current.id && !r.draft && !r.prerelease)[0];
+    try {
+      await gh('/repos/' + REPO + '/releases/' + current.id, { method: 'PATCH', body: JSON.stringify({ prerelease: true }) });
+      if (prev) await gh('/repos/' + REPO + '/releases/' + prev.id, { method: 'PATCH', body: JSON.stringify({ make_latest: 'true' }) });
+      toast(current.tag_name + ' pulled back.');
+    } catch (e) {
+      toast(e.message, true);
+    }
+    load();
+  };
+  $('ntGo').onclick = async () => {
+    $('dlgNotes').close();
+    await update(current, { body: $('ntText').value }, 'Notes saved.');
+  };
+
+  // ---------- demo mode (?demo): fake data, nothing leaves this page ----------
+  const demo = [
+    { id: 4, tag_name: 'v1.4.0', name: 'SpotVault v1.4.0', draft: false, prerelease: true, published_at: '2026-12-01T10:00:00Z', html_url: '#', body: '- Faster sync\n- Playlist reordering on the phone',
+      assets: [{ name: 'SpotVault_Setup_v1.4.exe', download_count: 3 }, { name: 'SpotVault_v1.4.0.apk', download_count: 1 }] },
+    { id: 3, tag_name: 'v1.3.0', name: 'SpotVault v1.3.0', draft: false, prerelease: false, published_at: '2026-11-14T10:00:00Z', html_url: '#', body: '- Search any song\n- YouTube playlists\n- Fresh look',
+      assets: [{ name: 'SpotVault_Setup_v1.3.exe', download_count: 812 }, { name: 'SpotVault_v1.3.0.apk', download_count: 455 }, { name: 'SpotVault_v1.3.0_unsigned.ipa', download_count: 97 }] },
+    { id: 2, tag_name: 'v1.1.0', name: 'SpotVault v1.1.0', draft: false, prerelease: false, published_at: '2026-11-09T00:14:25Z', html_url: '#', body: 'Phone app + Wi-Fi sync',
+      assets: [{ name: 'SpotVault_Setup_v1.1.exe', download_count: 29 }, { name: 'SpotVault_v1.1.apk', download_count: 12 }, { name: 'SpotVault_v1.1.0_unsigned.ipa', download_count: 4 }] },
+  ];
+  let demoLatest = 3;
+  async function demoApi(path, opts) {
+    await new Promise((r) => setTimeout(r, 150));
+    if (path.endsWith('/releases/latest')) return demo.find((r) => r.id === demoLatest) || null;
+    if (path.includes('/releases?')) return JSON.parse(JSON.stringify(demo));
+    if (opts.method === 'PATCH') {
+      const id = Number(path.split('/').pop());
+      const r = demo.find((x) => x.id === id);
+      const b = JSON.parse(opts.body);
+      Object.assign(r, Object.fromEntries(Object.entries(b).filter(([k]) => k !== 'make_latest')));
+      if (b.make_latest === 'true') demoLatest = id;
+      if (b.prerelease && demoLatest === id) demoLatest = null;
+      return r;
+    }
+    return { permissions: { push: true } };
+  }
+
+  if (DEMO) { $('whoami').textContent = '· demo mode, fake data, nothing is changed'; }
+  else if (token) { $('whoami').textContent = '· key saved on this computer'; }
+  renderAuth();
+  load();
+})();
+</script>
+</body>
+</html>
