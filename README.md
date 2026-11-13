@@ -1,5 +1,5 @@
 
-                          SPOTVAULT (v1.4.0)
+                          SPOTVAULT (v1.4.1)
                Offline Playlist Sync, Search & Downloader
 
 
@@ -15,15 +15,15 @@ Website:  https://spotvault-web.vercel.app
 Releases: https://github.com/sarathlal-12/spotvault/releases
 
 ----------------------------------------------------------------------
-DOWNLOADS (v1.4.0)
+DOWNLOADS (v1.4.1)
 ----------------------------------------------------------------------
   Platform   File                            Install
   ---------  ------------------------------  ------------------
-  Windows    SpotVault_Setup_v1.4.exe        Run the installer
-  Android    SpotVault_v1.4.0.apk            Open on the phone
-  iPhone     SpotVault_v1.4.0_unsigned.ipa   Sideload (see 4)
+  Windows    SpotVault_Setup_v1.4.1.exe        Run the installer
+  Android    SpotVault_v1.4.1.apk            Open on the phone
+  iPhone     SpotVault_v1.4.1_unsigned.ipa   Sideload (see 4)
 
-All files are attached to the v1.4.0 release on GitHub. Older
+All files are attached to the v1.4.1 release on GitHub. Older
 versions stay available on the Releases page.
 
 ----------------------------------------------------------------------
@@ -123,7 +123,7 @@ Apple ID using AltStore (free; apps renew every 7 days).
   4. On the iPhone: Settings -> General -> VPN & Device Management ->
      your Apple ID -> Trust. On iOS 16+, also turn on Settings ->
      Privacy & Security -> Developer Mode.
-  5. Download SpotVault_v1.4.0_unsigned.ipa on the iPhone in Safari.
+  5. Download SpotVault_v1.4.1_unsigned.ipa on the iPhone in Safari.
      In the Files app, tap it -> Share -> AltStore.
   6. Open SpotVault -> Sync tab, type the PC address and PIN, and allow
      Local Network access.

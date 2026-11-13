@@ -208,20 +208,66 @@ class MiniPlayer extends StatelessWidget {
         final t = playerService.current;
         if (t == null) return const SizedBox.shrink();
         final p = playerService.player;
-        return GestureDetector(
-          onTap: () => openNowPlaying(context),
+        return MiniPlayerBar(
+          track: t,
+          playing: p.playing,
+          liked: store.isLiked(t.id),
+          progress: p.positionStream.map((pos) {
+            final total = p.duration?.inMilliseconds ?? 0;
+            return total > 0 ? (pos.inMilliseconds / total).clamp(0.0, 1.0) : 0.0;
+          }),
+          onOpen: () => openNowPlaying(context),
+          onNext: playerService.next,
+          onPrevious: playerService.previous,
+          onLike: () => store.toggleLike(t.id),
+          onPlayPause: playerService.togglePlay,
+        );
+      },
+    );
+  }
+}
+
+/// The mini player's look. Always its natural height, wherever it is placed
+/// (a screen's bottom bar may offer it the whole screen height).
+class MiniPlayerBar extends StatelessWidget {
+  final Track track;
+  final bool playing;
+  final bool liked;
+  final Stream<double> progress;
+  final VoidCallback onOpen, onNext, onPrevious, onLike, onPlayPause;
+  const MiniPlayerBar({
+    super.key,
+    required this.track,
+    required this.playing,
+    required this.liked,
+    required this.progress,
+    required this.onOpen,
+    required this.onNext,
+    required this.onPrevious,
+    required this.onLike,
+    required this.onPlayPause,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = track;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onOpen,
           onVerticalDragEnd: (d) {
-            if ((d.primaryVelocity ?? 0) < -200) openNowPlaying(context);
+            if ((d.primaryVelocity ?? 0) < -200) onOpen();
           },
           onHorizontalDragEnd: (d) {
             final v = d.primaryVelocity ?? 0;
-            if (v < -300) playerService.next();
-            if (v > 300) playerService.previous();
+            if (v < -300) onNext();
+            if (v > 300) onPrevious();
           },
           child: Container(
             margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             decoration: BoxDecoration(
-              color: pal.dark ? const Color(0xF0181524) : const Color(0xF5FFFFFF),
+              color: pal.dark ? const Color(0xF2171717) : const Color(0xF5FFFFFF),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: kLine),
               boxShadow: [
@@ -239,6 +285,7 @@ class MiniPlayer extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(t.title,
@@ -247,20 +294,20 @@ class MiniPlayer extends StatelessWidget {
                           ],
                         ),
                       ),
-                      if (p.playing) Padding(padding: const EdgeInsets.only(right: 4), child: EqBars(color: kAccent, height: 14, bars: 3)),
+                      if (playing) Padding(padding: const EdgeInsets.only(right: 4), child: EqBars(color: kAccent, height: 14, bars: 3)),
                       IconButton(
-                        tooltip: store.isLiked(t.id) ? 'Remove from Liked Songs' : 'Add to Liked Songs',
-                        icon: Icon(store.isLiked(t.id) ? Icons.favorite : Icons.favorite_border, color: store.isLiked(t.id) ? kPink : kMuted),
-                        onPressed: () => store.toggleLike(t.id),
+                        tooltip: liked ? 'Remove from Liked Songs' : 'Add to Liked Songs',
+                        icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? kPink : kMuted),
+                        onPressed: onLike,
                       ),
                       Pressable(
-                        onTap: playerService.togglePlay,
+                        onTap: onPlayPause,
                         child: Container(
                           width: 42,
                           height: 42,
                           decoration: BoxDecoration(color: kText, shape: BoxShape.circle),
-                          child: Icon(p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                              color: kBg, size: 26, semanticLabel: p.playing ? 'Pause' : 'Play'),
+                          child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                              color: kBg, size: 26, semanticLabel: playing ? 'Pause' : 'Play'),
                         ),
                       ),
                     ],
@@ -270,27 +317,22 @@ class MiniPlayer extends StatelessWidget {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: StreamBuilder<Duration>(
-                    stream: p.positionStream,
-                    builder: (context, snap) {
-                      final total = p.duration?.inMilliseconds ?? 0;
-                      final pos = snap.data?.inMilliseconds ?? 0;
-                      final f = total > 0 ? (pos / total).clamp(0.0, 1.0) : 0.0;
-                      return Align(
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: f,
-                          child: Container(height: 2.5, decoration: const BoxDecoration(gradient: kBrandGradient)),
-                        ),
-                      );
-                    },
+                  child: StreamBuilder<double>(
+                    stream: progress,
+                    builder: (context, snap) => Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: snap.data ?? 0,
+                        child: Container(height: 2.5, decoration: const BoxDecoration(gradient: kBrandGradient)),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }

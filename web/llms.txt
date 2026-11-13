@@ -4,7 +4,7 @@
 
 - Website: https://spotvault-web.vercel.app/
 - Source code: https://github.com/sarathlal-12/spotvault
-- Downloads (v1.4.0): https://github.com/sarathlal-12/spotvault/releases/tag/v1.4.0
+- Downloads (v1.4.1): https://github.com/sarathlal-12/spotvault/releases/tag/v1.4.1
 - Price: free. No account needed; everything runs locally.
 - Platforms: Windows (installer), Android (APK), iPhone (IPA, sideloaded with AltStore)
 - Author: Sarath Lal (https://github.com/sarathlal-12)
