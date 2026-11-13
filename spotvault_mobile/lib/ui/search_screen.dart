@@ -4,6 +4,7 @@ import 'package:just_audio/just_audio.dart';
 import '../app_state.dart';
 import '../library_store.dart';
 import '../pc_link.dart';
+import 'aurora.dart';
 import 'common.dart';
 
 enum _Mode { library, online }
@@ -81,15 +82,16 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     final pl = await showModalBottomSheet<PlaylistInfo>(
       context: context,
-      backgroundColor: kSurface,
       showDragHandle: true,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => _PlaylistPicker(song: song),
     );
     if (pl == null) return;
-    _snack('Saving "${song.title}" to ${pl.title}…');
-    pcLink.download(song, pl);
+    final ghost = store.ghostQueue;
+    _snack(ghost
+        ? '"${song.title}" is in your Ghost Queue. It plays next once it reaches the phone.'
+        : 'Saving "${song.title}" to ${pl.title}…');
+    pcLink.download(song, pl, playWhenReady: ghost);
   }
 
   void _snack(String text) {
@@ -102,32 +104,30 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final online = mode == _Mode.online;
     return SafeArea(
+      bottom: false,
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: SegmentedButton<_Mode>(
-              segments: const [
-                ButtonSegment(value: _Mode.library, label: Text('Your library'), icon: Icon(Icons.library_music_outlined)),
-                ButtonSegment(value: _Mode.online, label: Text('Find new songs'), icon: Icon(Icons.travel_explore)),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+            child: Row(
+              children: [
+                Expanded(child: Text(online ? 'Find new songs' : 'Search', style: displayStyle(28))),
+                const ThemeToggle(),
               ],
-              selected: {mode},
-              showSelectedIcon: false,
-              style: SegmentedButton.styleFrom(
-                backgroundColor: kCard,
-                foregroundColor: kMuted,
-                selectedBackgroundColor: kAccent,
-                selectedForegroundColor: Colors.white,
-                side: BorderSide.none,
-              ),
-              onSelectionChanged: (s) {
-                setState(() => mode = s.first);
-                if (mode == _Mode.library) playerService.stopPreview();
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _ModeSwitch(
+              online: online,
+              onChanged: (o) {
+                setState(() => mode = o ? _Mode.online : _Mode.library);
+                if (!o) playerService.stopPreview();
               },
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: TextField(
               controller: ctrl,
               onChanged: (_) {
@@ -137,26 +137,32 @@ class _SearchScreenState extends State<SearchScreen> {
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: online ? 'Search any song or artist' : 'Songs, artists or albums',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: ctrl.text.isEmpty
                     ? null
                     : IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(ctrl.clear),
                       ),
-                filled: true,
-                fillColor: kCard,
-                hintStyle: const TextStyle(color: kMuted),
-                prefixIconColor: kMuted,
+                prefixIconColor: kAccent,
                 suffixIconColor: kMuted,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: kAccent, width: 1.5),
-                ),
               ),
             ),
           ),
+          if (online)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 0, 22, 6),
+              child: Row(
+                children: [
+                  Container(width: 6, height: 6, decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Searching through your PC · clean studio versions first',
+                        style: TextStyle(fontSize: 12, color: kMuted)),
+                  ),
+                ],
+              ),
+            ),
           Expanded(child: online ? _onlineBody() : _libraryBody()),
         ],
       ),
@@ -172,7 +178,7 @@ class _SearchScreenState extends State<SearchScreen> {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('Not on this phone yet', style: TextStyle(color: kMuted)),
+          Text('Not on this phone yet', style: TextStyle(color: kMuted)),
           const SizedBox(height: 12),
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.white),
@@ -187,6 +193,7 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 180),
       itemCount: results.length,
       itemBuilder: (_, i) => TrackTile(track: results[i], list: results, index: i),
     );
@@ -202,7 +209,7 @@ class _SearchScreenState extends State<SearchScreen> {
             if (jobs.isNotEmpty)
               SliverToBoxAdapter(child: _JobsPanel(jobs: jobs)),
             if (searching)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator(color: kAccent)),
               )
@@ -214,9 +221,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.wifi_off_rounded, color: kMuted, size: 42),
+                      Icon(Icons.wifi_off_rounded, color: kMuted, size: 42),
                       const SizedBox(height: 12),
-                      Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: kMuted)),
+                      Text(error!, textAlign: TextAlign.center, style: TextStyle(color: kMuted)),
                       const SizedBox(height: 16),
                       OutlinedButton(onPressed: _runOnline, child: const Text('Try again')),
                     ],
@@ -238,7 +245,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 itemCount: results.length,
                 itemBuilder: (_, i) => _onlineTile(results[i]),
               ),
-            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            const SliverToBoxAdapter(child: SizedBox(height: 180)),
           ],
         );
       },
@@ -254,50 +261,194 @@ class _SearchScreenState extends State<SearchScreen> {
     final job = pcLink.jobFor(s);
     final subtitle = [s.artist, s.duration].where((x) => x.isNotEmpty).join(' · ');
 
-    Widget dlButton;
+    Widget saveButton;
     if (job == null || job.state == DlState.failed) {
-      dlButton = IconButton(
-        tooltip: 'Download',
-        icon: Icon(job == null ? Icons.download_rounded : Icons.refresh, color: Colors.white),
-        onPressed: () => _download(s),
+      saveButton = Pressable(
+        onTap: () => _download(s),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(99), border: Border.all(color: kLine)),
+          child: Text(job == null ? 'Save' : 'Retry', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kText)),
+        ),
       );
     } else if (job.state == DlState.saved) {
-      dlButton = const Padding(
-        padding: EdgeInsets.all(12),
-        child: Icon(Icons.check_circle, color: kAccent),
+      saveButton = Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(gradient: kBrandGradient, borderRadius: BorderRadius.circular(99)),
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.check_rounded, size: 16, color: Colors.white),
+          SizedBox(width: 4),
+          Text('Saved', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+        ]),
       );
     } else {
-      dlButton = const Padding(
-        padding: EdgeInsets.all(14),
+      saveButton = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: kAccent)),
       );
     }
 
-    return ListTile(
-      contentPadding: const EdgeInsets.only(left: 16, right: 4),
-      leading: _NetArt(url: s.thumb, size: 52),
-      title: Text(s.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: isPreview ? kAccent : Colors.white, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: kMuted, fontSize: 12)),
-      onTap: () => _togglePreview(s),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isPreview ? kViolet.withValues(alpha: pal.dark ? 0.14 : 0.08) : Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: isPreview ? kViolet.withValues(alpha: 0.35) : Colors.transparent),
+      ),
+      child: Row(
         children: [
-          loading
-              ? const Padding(
-                  padding: EdgeInsets.all(14),
-                  child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white)),
-                )
-              : IconButton(
-                  tooltip: isPreview ? 'Stop' : 'Listen',
-                  icon: Icon(isPreview ? Icons.stop_circle_rounded : Icons.play_circle_fill_rounded,
-                      color: isPreview ? kAccent : Colors.white, size: 30),
-                  onPressed: () => _togglePreview(s),
+          Semantics(
+            button: true,
+            label: isPreview ? 'Stop preview of ${s.title}' : 'Preview ${s.title}',
+            child: Pressable(
+              onTap: () => _togglePreview(s),
+              child: SizedBox(
+                width: 54,
+                height: 54,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _NetArt(url: s.thumb, size: 54),
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.28), borderRadius: BorderRadius.circular(14)),
+                    ),
+                    if (isPreview && !loading) const _PreviewRing(),
+                    loading
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                        : Icon(isPreview ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 26),
+                  ],
                 ),
-          dlButton,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _togglePreview(s),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: isPreview ? kAccent : kText, fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: kMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          saveButton,
         ],
+      ),
+    );
+  }
+}
+
+/// Library / Find new songs switch with a sliding highlight.
+class _ModeSwitch extends StatelessWidget {
+  final bool online;
+  final ValueChanged<bool> onChanged;
+  const _ModeSwitch({required this.online, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option(String label, IconData icon, bool value) => Expanded(
+          child: Semantics(
+            button: true,
+            selected: online == value,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onChanged(value),
+              child: SizedBox(
+                height: 44,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 18, color: online == value ? Colors.white : kMuted),
+                    const SizedBox(width: 6),
+                    Text(label,
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: online == value ? Colors.white : kMuted)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: pal.dark ? pal.glass : pal.surface,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: kLine),
+      ),
+      child: Stack(
+        children: [
+          AnimatedAlign(
+            duration: const Duration(milliseconds: 380),
+            curve: Curves.easeOutBack,
+            alignment: online ? Alignment.centerRight : Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: 0.5,
+              child: Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: kBrandGradient,
+                  borderRadius: BorderRadius.circular(99),
+                  boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 6))],
+                ),
+              ),
+            ),
+          ),
+          Row(children: [
+            option('Your library', Icons.library_music_rounded, false),
+            option('Find new songs', Icons.travel_explore_rounded, true),
+          ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// Expanding ring around the song being previewed.
+class _PreviewRing extends StatefulWidget {
+  const _PreviewRing();
+
+  @override
+  State<_PreviewRing> createState() => _PreviewRingState();
+}
+
+class _PreviewRingState extends State<_PreviewRing> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, __) => Transform.scale(
+        scale: 1 + 0.35 * _c.value,
+        child: Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: kCyan.withValues(alpha: 0.9 * (1 - _c.value)), width: 2),
+          ),
+        ),
       ),
     );
   }
@@ -317,7 +468,7 @@ class _Hint extends StatelessWidget {
             children: [
               Icon(icon, color: kAccent.withValues(alpha: 0.8), size: 44),
               const SizedBox(height: 14),
-              Text(text, textAlign: TextAlign.center, style: const TextStyle(color: kMuted, height: 1.4)),
+              Text(text, textAlign: TextAlign.center, style: TextStyle(color: kMuted, height: 1.4)),
             ],
           ),
         ),
@@ -340,7 +491,7 @@ class _NetArt extends StatelessWidget {
       child: Icon(Icons.music_note, color: kMuted, size: size * 0.45),
     );
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(14),
       child: url.isEmpty
           ? fallback
           : Image.network(url,
@@ -379,7 +530,7 @@ class _PlaylistPicker extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: kMuted, fontSize: 12)),
+                        Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: kMuted, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -400,7 +551,7 @@ class _PlaylistPicker extends StatelessWidget {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                     leading: ArtImage(file: store.coverFor(p), size: 48, fallback: Icons.queue_music),
                     title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text('${p.trackIds.length} songs', style: const TextStyle(color: kMuted, fontSize: 12)),
+                    subtitle: Text('${p.trackIds.length} songs', style: TextStyle(color: kMuted, fontSize: 12)),
                     onTap: () => Navigator.pop(context, p),
                   );
                 },
@@ -425,13 +576,23 @@ class _JobsPanel extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
-      decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        color: pal.dark ? pal.glass : pal.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kLine),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Downloads', style: TextStyle(fontWeight: FontWeight.bold))),
+              Expanded(
+                child: Row(children: [
+                  Text(jobs.any((j) => j.playWhenReady) ? 'Ghost Queue' : 'Downloads',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: kText)),
+                  if (jobs.any((j) => j.playWhenReady)) ...[const SizedBox(width: 6), const NewTag()],
+                ]),
+              ),
               if (anyDone) TextButton(onPressed: pcLink.clearFinished, child: const Text('Clear')),
             ],
           ),
@@ -463,8 +624,8 @@ class _JobsPanel extends StatelessWidget {
   }
 
   Widget _stateIcon(DlState s) => switch (s) {
-        DlState.saved => const Icon(Icons.check_circle, color: kAccent, size: 20),
+        DlState.saved => Icon(Icons.check_circle, color: kAccent, size: 20),
         DlState.failed => const Icon(Icons.error_outline, color: Color(0xFFF43F5E), size: 20),
-        _ => const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: kAccent)),
+        _ => SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: kAccent)),
       };
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import '../library_store.dart';
+import 'aurora.dart';
 import 'now_playing_screen.dart';
 
 /// Square artwork with a music-note fallback.
@@ -20,9 +21,15 @@ class ArtImage extends StatelessWidget {
     final placeholder = Container(
       width: size,
       height: size,
-      color: kCard,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [kViolet.withValues(alpha: 0.55), kCyan.withValues(alpha: 0.35)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
       alignment: Alignment.center,
-      child: Icon(fallback, color: kMuted, size: size * 0.45),
+      child: Icon(fallback, color: Colors.white.withValues(alpha: 0.9), size: size * 0.42),
     );
     final dpr = MediaQuery.devicePixelRatioOf(context);
     return ClipRRect(
@@ -46,7 +53,7 @@ class TrackArt extends StatelessWidget {
   final Track track;
   final double size;
   final double radius;
-  const TrackArt(this.track, {super.key, this.size = 48, this.radius = 4});
+  const TrackArt(this.track, {super.key, this.size = 48, this.radius = 10});
 
   @override
   Widget build(BuildContext context) => ArtImage(file: store.artFor(track), size: size, radius: radius);
@@ -74,29 +81,35 @@ class TrackTile extends StatelessWidget {
             track.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: isCurrent ? kAccent : Colors.white, fontWeight: FontWeight.w500),
+            style: TextStyle(color: isCurrent ? kAccent : kText, fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
             track.subtitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: kMuted, fontSize: 13),
+            style: TextStyle(color: kMuted, fontSize: 13),
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (isCurrent && playerService.player.playing)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.graphic_eq, color: kAccent, size: 18),
+              if (isCurrent)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: EqBars(color: kAccent, height: 14, bars: 3, playing: playerService.player.playing),
                 ),
               if (store.isLiked(track.id))
                 const Padding(
                   padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.favorite, color: kAccent, size: 16),
+                  child: Icon(Icons.favorite, color: kPink, size: 16),
+                ),
+              if (store.momentsOf(track.id).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 2),
+                  child: Icon(Icons.push_pin_rounded, color: kPink.withValues(alpha: 0.8), size: 15),
                 ),
               IconButton(
-                icon: const Icon(Icons.more_vert, color: kMuted),
+                tooltip: 'More',
+                icon: Icon(Icons.more_vert, color: kMuted),
                 onPressed: () => showTrackMenu(context, track),
               ),
             ],
@@ -112,7 +125,6 @@ class TrackTile extends StatelessWidget {
 void showTrackMenu(BuildContext context, Track t) {
   showModalBottomSheet(
     context: context,
-    backgroundColor: kSurface,
     showDragHandle: true,
     builder: (ctx) => SafeArea(
       child: Column(
@@ -125,7 +137,7 @@ void showTrackMenu(BuildContext context, Track t) {
           ),
           const Divider(height: 1),
           ListTile(
-            leading: Icon(store.isLiked(t.id) ? Icons.favorite : Icons.favorite_border, color: kAccent),
+            leading: Icon(store.isLiked(t.id) ? Icons.favorite : Icons.favorite_border, color: kPink),
             title: Text(store.isLiked(t.id) ? 'Remove from Liked Songs' : 'Add to Liked Songs'),
             onTap: () {
               store.toggleLike(t.id);
@@ -184,7 +196,7 @@ void _toast(BuildContext context, String text) {
     ..showSnackBar(SnackBar(content: Text(text), duration: const Duration(seconds: 1)));
 }
 
-/// Bar above the bottom navigation showing the current song.
+/// Glass dock above the bottom navigation showing the current song.
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
 
@@ -201,52 +213,78 @@ class MiniPlayer extends StatelessWidget {
           onVerticalDragEnd: (d) {
             if ((d.primaryVelocity ?? 0) < -200) openNowPlaying(context);
           },
+          onHorizontalDragEnd: (d) {
+            final v = d.primaryVelocity ?? 0;
+            if (v < -300) playerService.next();
+            if (v > 300) playerService.previous();
+          },
           child: Container(
-            margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            decoration: BoxDecoration(
+              color: pal.dark ? const Color(0xF0181524) : const Color(0xF5FFFFFF),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: kLine),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: pal.dark ? 0.35 : 0.10), blurRadius: 30, offset: const Offset(0, 12)),
+              ],
+            ),
             clipBehavior: Clip.antiAlias,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 4, 6),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
                   child: Row(
                     children: [
-                      Hero(tag: 'art', child: TrackArt(t, size: 42)),
-                      const SizedBox(width: 10),
+                      Hero(tag: 'art', child: TrackArt(t, size: 44, radius: 12)),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: kMuted, fontSize: 12)),
+                            Text(t.title,
+                                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, color: kText)),
+                            Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: kMuted, fontSize: 12)),
                           ],
                         ),
                       ),
+                      if (p.playing) Padding(padding: const EdgeInsets.only(right: 4), child: EqBars(color: kAccent, height: 14, bars: 3)),
                       IconButton(
-                        icon: Icon(store.isLiked(t.id) ? Icons.favorite : Icons.favorite_border,
-                            color: store.isLiked(t.id) ? kAccent : Colors.white),
+                        tooltip: store.isLiked(t.id) ? 'Remove from Liked Songs' : 'Add to Liked Songs',
+                        icon: Icon(store.isLiked(t.id) ? Icons.favorite : Icons.favorite_border, color: store.isLiked(t.id) ? kPink : kMuted),
                         onPressed: () => store.toggleLike(t.id),
                       ),
-                      IconButton(
-                        icon: Icon(p.playing ? Icons.pause : Icons.play_arrow, size: 30),
-                        onPressed: playerService.togglePlay,
+                      Pressable(
+                        onTap: playerService.togglePlay,
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(color: kText, shape: BoxShape.circle),
+                          child: Icon(p.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                              color: kBg, size: 26, semanticLabel: p.playing ? 'Pause' : 'Play'),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                StreamBuilder<Duration>(
-                  stream: p.positionStream,
-                  builder: (context, snap) {
-                    final total = p.duration?.inMilliseconds ?? 0;
-                    final pos = snap.data?.inMilliseconds ?? 0;
-                    return LinearProgressIndicator(
-                      value: total > 0 ? (pos / total).clamp(0.0, 1.0) : 0,
-                      minHeight: 2,
-                      backgroundColor: Colors.white12,
-                      color: kAccent,
-                    );
-                  },
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: StreamBuilder<Duration>(
+                    stream: p.positionStream,
+                    builder: (context, snap) {
+                      final total = p.duration?.inMilliseconds ?? 0;
+                      final pos = snap.data?.inMilliseconds ?? 0;
+                      final f = total > 0 ? (pos / total).clamp(0.0, 1.0) : 0.0;
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: f,
+                          child: Container(height: 2.5, decoration: const BoxDecoration(gradient: kBrandGradient)),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -259,10 +297,18 @@ class MiniPlayer extends StatelessWidget {
 
 void openNowPlaying(BuildContext context) {
   Navigator.of(context).push(PageRouteBuilder(
+    transitionDuration: const Duration(milliseconds: 480),
+    reverseTransitionDuration: const Duration(milliseconds: 360),
     pageBuilder: (_, __, ___) => const NowPlayingScreen(),
-    transitionsBuilder: (_, anim, __, child) => SlideTransition(
-      position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-      child: child,
-    ),
+    transitionsBuilder: (_, anim, __, child) {
+      final c = CurvedAnimation(parent: anim, curve: const Cubic(0.2, 0.8, 0.2, 1), reverseCurve: Curves.easeInCubic);
+      return FadeTransition(
+        opacity: c,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, 0.12), end: Offset.zero).animate(c),
+          child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(c), child: child),
+        ),
+      );
+    },
   ));
 }

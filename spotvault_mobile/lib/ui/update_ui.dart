@@ -51,15 +51,15 @@ Future<void> _showUpdateDialog(BuildContext context, UpdateInfo info) async {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('You have v$kAppVersion. Your music and playlists stay on the phone.',
+            Text('You have v$kAppVersion. Your music and playlists stay on the phone.',
                 style: TextStyle(color: kMuted, fontSize: 13)),
             const SizedBox(height: 14),
-            const Text("WHAT'S NEW", style: TextStyle(color: kMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Text("WHAT'S NEW", style: TextStyle(color: kMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 6),
             Text(info.notes.isEmpty ? 'Improvements and fixes.' : info.notes, style: const TextStyle(height: 1.4)),
             if (Platform.isIOS) ...[
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Added the SpotVault source in AltStore? Just tap Update there. '
                 'Otherwise, Update downloads the new app file: open the Files app, tap the file, '
                 'tap Share and choose AltStore. Your music stays on the phone.',
@@ -70,7 +70,7 @@ Future<void> _showUpdateDialog(BuildContext context, UpdateInfo info) async {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, 'skip'), child: const Text('Skip', style: TextStyle(color: kMuted))),
+        TextButton(onPressed: () => Navigator.pop(ctx, 'skip'), child: Text('Skip', style: TextStyle(color: kMuted))),
         TextButton(onPressed: () => Navigator.pop(ctx, 'later'), child: const Text('Later')),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.white),

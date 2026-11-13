@@ -34,9 +34,11 @@ class DlJob {
   final OnlineSong song;
   final String folder;
   final String playlistTitle;
+  /// Ghost Queue: play this song next as soon as it reaches the phone.
+  final bool playWhenReady;
   DlState state = DlState.connecting;
   String message = 'Connecting to your PC…';
-  DlJob(this.song, this.folder, this.playlistTitle);
+  DlJob(this.song, this.folder, this.playlistTitle, {this.playWhenReady = false});
 
   bool get finished => state == DlState.saved || state == DlState.failed;
 }
@@ -61,6 +63,9 @@ class PcLink extends ChangeNotifier {
 
   /// Called after a download has been copied to the phone.
   Future<void> Function()? afterSync;
+
+  /// Ghost Queue: called with the song once it is on the phone.
+  Future<void> Function(Track)? onReady;
 
   Map<String, String> get _headers => {
         'X-SpotVault-Pin': store.pin,
@@ -147,8 +152,8 @@ class PcLink extends ChangeNotifier {
   }
 
   /// Asks the PC to download [song] into [playlist], then copies it to the phone.
-  Future<void> download(OnlineSong song, PlaylistInfo playlist) async {
-    final job = DlJob(song, playlist.folder, playlist.title);
+  Future<void> download(OnlineSong song, PlaylistInfo playlist, {bool playWhenReady = false}) async {
+    final job = DlJob(song, playlist.folder, playlist.title, playWhenReady: playWhenReady);
     jobs.add(job);
     notifyListeners();
     try {
@@ -188,6 +193,13 @@ class PcLink extends ChangeNotifier {
       final arrived = path.isEmpty || store.tracks.values.any((t) => t.path == path);
       if (!arrived) throw PcException('Downloaded on the PC, but copying failed. Sync again from the Sync tab.');
       _set(job, DlState.saved, j['already'] == true ? 'Already in ${playlist.title}' : 'Saved to ${playlist.title}');
+      if (job.playWhenReady && path.isNotEmpty) {
+        final t = store.tracks.values.where((t) => t.path == path);
+        if (t.isNotEmpty) {
+          await onReady?.call(t.first);
+          _set(job, DlState.saved, 'Saved to ${playlist.title} · playing next');
+        }
+      }
     } on PcException catch (e) {
       _set(job, DlState.failed, e.message);
     } on TimeoutException {

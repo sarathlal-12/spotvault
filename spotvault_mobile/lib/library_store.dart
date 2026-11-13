@@ -118,6 +118,16 @@ class LibraryStore extends ChangeNotifier {
   // Settings
   bool mirrorDeletes = true;
   String skipUpdate = ''; // version the user chose to skip
+  bool darkTheme = true;
+  bool smartSleep = true; // fade out slowly before the sleep timer stops
+  bool ghostQueue = true; // songs saved from search play next once they arrive
+
+  // Vault Lab
+  /// Moments: favourite spots in a song, in milliseconds, per track id.
+  final Map<String, List<int>> moments = {};
+  /// Rewind: listening time per day ("2026-11-13" -> ms) and per artist.
+  final Map<String, int> listenDays = {};
+  final Map<String, int> listenArtists = {};
 
   // Playback resume
   List<String> resumeQueue = [];
@@ -160,6 +170,13 @@ class LibraryStore extends ChangeNotifier {
       lastSync = j['lastSync'] ?? 0;
       mirrorDeletes = j['mirrorDeletes'] ?? true;
       skipUpdate = j['skipUpdate'] ?? '';
+      darkTheme = j['darkTheme'] ?? true;
+      smartSleep = j['smartSleep'] ?? true;
+      ghostQueue = j['ghostQueue'] ?? true;
+      final m = Map<String, dynamic>.from(j['moments'] ?? const {});
+      m.forEach((k, v) => moments[k] = List<int>.from(v as List));
+      listenDays.addAll(Map<String, int>.from(j['listenDays'] ?? const {}));
+      listenArtists.addAll(Map<String, int>.from(j['listenArtists'] ?? const {}));
       final r = Map<String, dynamic>.from(j['resume'] ?? const {});
       resumeQueue = List<String>.from(r['queue'] ?? const []);
       resumeIndex = r['index'] ?? 0;
@@ -196,6 +213,12 @@ class LibraryStore extends ChangeNotifier {
           'lastSync': lastSync,
           'mirrorDeletes': mirrorDeletes,
           'skipUpdate': skipUpdate,
+          'darkTheme': darkTheme,
+          'smartSleep': smartSleep,
+          'ghostQueue': ghostQueue,
+          'moments': moments,
+          'listenDays': listenDays,
+          'listenArtists': listenArtists,
           'resume': {
             'queue': resumeQueue,
             'index': resumeIndex,
@@ -295,6 +318,68 @@ class LibraryStore extends ChangeNotifier {
     changed();
   }
 
+  // ---------------------------------------------------------------- Vault Lab
+  List<int> momentsOf(String id) => moments[id] ?? const [];
+
+  /// Saves a Moment; ignores one within 2 s of an existing Moment.
+  bool addMoment(String id, int ms) {
+    final list = moments.putIfAbsent(id, () => []);
+    if (list.any((x) => (x - ms).abs() < 2000)) return false;
+    list
+      ..add(ms)
+      ..sort();
+    changed();
+    return true;
+  }
+
+  void removeMoment(String id, int ms) {
+    final list = moments[id];
+    if (list == null) return;
+    list.remove(ms);
+    if (list.isEmpty) moments.remove(id);
+    changed();
+  }
+
+  static String dayKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// Adds listening time for Rewind. Saved with the next save().
+  void addListening(Track t, int ms) {
+    final day = dayKey(DateTime.now());
+    listenDays[day] = (listenDays[day] ?? 0) + ms;
+    final artist = t.artist.split(',').first.trim();
+    if (artist.isNotEmpty) listenArtists[artist] = (listenArtists[artist] ?? 0) + ms;
+    // Keep about a year of days.
+    if (listenDays.length > 400) {
+      final keys = listenDays.keys.toList()..sort();
+      for (final k in keys.take(listenDays.length - 400)) {
+        listenDays.remove(k);
+      }
+    }
+  }
+
+  /// Listening time in the last [days] days, oldest first.
+  List<int> listeningByDay(int days) {
+    final now = DateTime.now();
+    return [
+      for (var i = days - 1; i >= 0; i--) listenDays[dayKey(now.subtract(Duration(days: i)))] ?? 0,
+    ];
+  }
+
+  int listeningSince(DateTime from) {
+    final key = dayKey(from);
+    var total = 0;
+    listenDays.forEach((k, v) {
+      if (k.compareTo(key) >= 0) total += v;
+    });
+    return total;
+  }
+
+  String? get topArtist {
+    if (listenArtists.isEmpty) return null;
+    return listenArtists.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+  }
+
   void setMirrorDeletes(bool v) {
     mirrorDeletes = v;
     changed();
@@ -310,6 +395,7 @@ class LibraryStore extends ChangeNotifier {
       } catch (_) {}
     }
     favorites.remove(id);
+    moments.remove(id);
     playCounts.remove(id);
     recent.remove(id);
     for (final p in playlists) {

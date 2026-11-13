@@ -22,6 +22,19 @@ class PlayerService extends ChangeNotifier {
 
   String? _lastCountedId;
   Timer? _saveTimer;
+  Timer? _fadeTimer;
+
+  // A-B Loop: repeat one part of the current song.
+  Duration? loopA;
+  Duration? loopB;
+  bool get abActive => loopA != null && loopB != null;
+
+  // Rewind: counts listening time while a song plays.
+  Timer? _listenTimer;
+  static const _listenTick = Duration(seconds: 5);
+
+  /// How long Smart Sleep takes to fade the volume down.
+  static const smartFade = Duration(seconds: 45);
 
   // Preview of an online song. The user's queue is set aside and put back after.
   bool previewing = false;
@@ -48,6 +61,17 @@ class PlayerService extends ChangeNotifier {
 
     _saveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (player.playing) _persist();
+    });
+
+    _listenTimer = Timer.periodic(_listenTick, (_) {
+      final t = current;
+      if (player.playing && !previewing && t != null) {
+        store.addListening(t, (_listenTick.inMilliseconds * player.speed).round());
+      }
+    });
+
+    player.positionStream.listen((pos) {
+      if (abActive && !previewing && pos >= loopB!) player.seek(loopA);
     });
 
     await _restore();
@@ -179,27 +203,104 @@ class PlayerService extends ChangeNotifier {
   // ------------------------------------------------------------ sleep timer
   void setSleepTimer(Duration? d) {
     _sleepTimer?.cancel();
+    _stopFade();
     if (d == null) {
       sleepMode = SleepMode.off;
       sleepAt = null;
     } else {
       sleepMode = SleepMode.timer;
       sleepAt = DateTime.now().add(d);
-      _sleepTimer = Timer(d, () {
-        player.pause();
-        sleepMode = SleepMode.off;
-        sleepAt = null;
-        notifyListeners();
-      });
+      // Smart Sleep: start fading before the end instead of a sudden stop.
+      final fadeStart = store.smartSleep && d > smartFade ? d - smartFade : null;
+      if (fadeStart != null) {
+        _sleepTimer = Timer(fadeStart, () => _fadeOut(smartFade, _sleepNow));
+      } else {
+        _sleepTimer = Timer(d, _sleepNow);
+      }
     }
     notifyListeners();
   }
 
-  void sleepAtEndOfTrack() {
-    _sleepTimer?.cancel();
-    sleepMode = SleepMode.endOfTrack;
+  void _sleepNow() {
+    _stopFade();
+    player.pause();
+    sleepMode = SleepMode.off;
     sleepAt = null;
     notifyListeners();
+  }
+
+  /// Lowers the volume step by step over [over], then calls [done].
+  void _fadeOut(Duration over, void Function() done) {
+    _stopFade();
+    const steps = 30;
+    var i = 0;
+    _fadeTimer = Timer.periodic(over ~/ steps, (t) {
+      i++;
+      player.setVolume((1 - i / steps).clamp(0.0, 1.0));
+      if (i >= steps) {
+        t.cancel();
+        done();
+      }
+    });
+  }
+
+  void _stopFade() {
+    _fadeTimer?.cancel();
+    _fadeTimer = null;
+    player.setVolume(1);
+  }
+
+  void sleepAtEndOfTrack() {
+    _sleepTimer?.cancel();
+    _stopFade();
+    sleepMode = SleepMode.endOfTrack;
+    sleepAt = null;
+    _watchEndOfTrack();
+    notifyListeners();
+  }
+
+  StreamSubscription<Duration>? _endWatch;
+
+  /// Smart Sleep with "end of song": fade during the last seconds of the song.
+  void _watchEndOfTrack() {
+    _endWatch?.cancel();
+    if (!store.smartSleep) return;
+    const fade = Duration(seconds: 12);
+    _endWatch = player.positionStream.listen((pos) {
+      final total = player.duration;
+      if (sleepMode != SleepMode.endOfTrack) {
+        _endWatch?.cancel();
+        return;
+      }
+      if (total != null && total - pos <= fade && _fadeTimer == null && player.playing) {
+        _fadeOut(total - pos, () {});
+      }
+    });
+  }
+
+  // ------------------------------------------------------------ A-B Loop
+  /// First tap sets A, second sets B (and starts looping), third clears.
+  void tapAbLoop() {
+    final pos = player.position;
+    if (loopA == null) {
+      loopA = pos;
+    } else if (loopB == null) {
+      if (pos <= loopA! + const Duration(seconds: 1)) {
+        loopA = pos; // B must come after A: treat it as a new A
+      } else {
+        loopB = pos;
+        player.seek(loopA);
+      }
+    } else {
+      clearAbLoop(notify: false);
+    }
+    notifyListeners();
+  }
+
+  void clearAbLoop({bool notify = true}) {
+    loopA = null;
+    loopB = null;
+    if (notify) notifyListeners();
   }
 
   // ------------------------------------------------------------ preview
@@ -281,9 +382,12 @@ class PlayerService extends ChangeNotifier {
   void _onTrackChanged() {
     if (previewing) return;
     final t = current;
+    if (t?.id != _lastCountedId) clearAbLoop(notify: false);
     if (sleepMode == SleepMode.endOfTrack && _lastCountedId != null && t?.id != _lastCountedId) {
       player.pause();
       sleepMode = SleepMode.off;
+      _endWatch?.cancel();
+      _stopFade();
     }
     if (t != null && t.id != _lastCountedId) {
       _lastCountedId = t.id;
@@ -350,6 +454,9 @@ class PlayerService extends ChangeNotifier {
   void dispose() {
     _saveTimer?.cancel();
     _sleepTimer?.cancel();
+    _fadeTimer?.cancel();
+    _listenTimer?.cancel();
+    _endWatch?.cancel();
     player.dispose();
     super.dispose();
   }

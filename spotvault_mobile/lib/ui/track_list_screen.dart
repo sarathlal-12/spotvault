@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import '../library_store.dart';
+import 'aurora.dart';
 import 'common.dart';
 
 /// Song list for a playlist, Liked Songs, All Songs, etc.
@@ -67,11 +68,11 @@ class _TrackListScreenState extends State<TrackListScreen> {
                   titlePadding: const EdgeInsetsDirectional.only(start: 56, bottom: 14, end: 56),
                   title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                   background: Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Color(0xFF2E2560), kBg],
+                        colors: [kViolet.withValues(alpha: pal.dark ? 0.45 : 0.25), kBg],
                       ),
                     ),
                     alignment: Alignment.center,
@@ -79,7 +80,13 @@ class _TrackListScreenState extends State<TrackListScreen> {
                     child: AspectRatio(
                       aspectRatio: 1,
                       child: LayoutBuilder(
-                        builder: (_, c) => ArtImage(file: widget.cover, size: c.maxWidth, radius: 4, fallback: widget.icon),
+                        builder: (_, c) => Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(26),
+                            boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.45), blurRadius: 40, offset: const Offset(0, 16))],
+                          ),
+                          child: ArtImage(file: widget.cover, size: c.maxWidth, radius: 26, fallback: widget.icon),
+                        ),
                       ),
                     ),
                   ),
@@ -93,23 +100,30 @@ class _TrackListScreenState extends State<TrackListScreen> {
                       Expanded(
                         child: Text(
                           '${tracks.length} songs · ${formatDuration(total)}',
-                          style: const TextStyle(color: kMuted, fontSize: 13),
+                          style: TextStyle(color: kMuted, fontSize: 13),
                         ),
                       ),
                       IconButton(
                         tooltip: 'Shuffle',
                         iconSize: 28,
-                        icon: const Icon(Icons.shuffle, color: kAccent),
+                        icon: Icon(Icons.shuffle, color: kAccent),
                         onPressed: tracks.isEmpty ? null : () => playerService.playTracks(tracks, start: -1, shuffle: true),
                       ),
                       const SizedBox(width: 4),
-                      FloatingActionButton(
-                        heroTag: null,
-                        backgroundColor: kAccent,
-                        foregroundColor: Colors.white,
-                        shape: const CircleBorder(),
-                        onPressed: tracks.isEmpty ? null : () => playerService.playTracks(tracks, shuffle: false),
-                        child: const Icon(Icons.play_arrow, size: 32),
+                      Pressable(
+                        onTap: () {
+                          if (tracks.isNotEmpty) playerService.playTracks(tracks, shuffle: false);
+                        },
+                        child: Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            gradient: kBrandGradient,
+                            shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.5), blurRadius: 22, offset: const Offset(0, 8))],
+                          ),
+                          child: const Icon(Icons.play_arrow_rounded, size: 34, color: Colors.white, semanticLabel: 'Play all'),
+                        ),
                       ),
                     ],
                   ),
@@ -125,14 +139,13 @@ class _TrackListScreenState extends State<TrackListScreen> {
                       hintText: 'Find in ${widget.title}',
                       prefixIcon: const Icon(Icons.search, size: 20),
                       filled: true,
-                      fillColor: kCard,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+
                     ),
                   ),
                 ),
               ),
               if (tracks.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: Text('No songs here yet', style: TextStyle(color: kMuted))),
                 )

@@ -4,6 +4,7 @@ import '../app_state.dart';
 import '../library_store.dart';
 import '../sync_service.dart';
 import '../update_service.dart';
+import 'aurora.dart';
 import 'update_ui.dart';
 
 class SyncScreen extends StatefulWidget {
@@ -59,12 +60,18 @@ class _SyncScreenState extends State<SyncScreen> {
       builder: (context, _) {
         final s = syncService;
         return SafeArea(
+          bottom: false,
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
             children: [
-              const Text('Sync from PC', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Expanded(child: Text('Sync from PC', style: displayStyle(28))),
+                  const ThemeToggle(),
+                ],
+              ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'On your PC, open SpotVault and click "Connect phone". Keep both devices on the same Wi-Fi.',
                 style: TextStyle(color: kMuted),
               ),
@@ -88,17 +95,17 @@ class _SyncScreenState extends State<SyncScreen> {
                       ],
                     ),
                     if (s.found.isEmpty && !s.scanning)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
                         child: Text('None found. Type the address from your PC below.', style: TextStyle(color: kMuted, fontSize: 13)),
                       ),
                     for (final pc in s.found)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.laptop_windows, color: kAccent),
+                        leading: Icon(Icons.laptop_windows, color: kAccent),
                         title: Text(pc.name),
-                        subtitle: Text(_hostText(pc), style: const TextStyle(color: kMuted)),
-                        trailing: hostCtrl.text == _hostText(pc) ? const Icon(Icons.check_circle, color: kAccent) : null,
+                        subtitle: Text(_hostText(pc), style: TextStyle(color: kMuted)),
+                        trailing: hostCtrl.text == _hostText(pc) ? Icon(Icons.check_circle, color: kAccent) : null,
                         onTap: () => setState(() => hostCtrl.text = _hostText(pc)),
                       ),
                   ],
@@ -143,12 +150,7 @@ class _SyncScreenState extends State<SyncScreen> {
                               icon: const Icon(Icons.stop),
                               label: const Text('Stop'),
                             )
-                          : FilledButton.icon(
-                              onPressed: _sync,
-                              style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.white),
-                              icon: const Icon(Icons.sync),
-                              label: const Text('Sync now', style: TextStyle(fontWeight: FontWeight.bold)),
-                            ),
+                          : GradientButton(icon: Icons.sync_rounded, label: 'Sync now', onTap: _sync),
                     ),
                   ],
                 ),
@@ -170,7 +172,7 @@ class _SyncScreenState extends State<SyncScreen> {
                         value: store.mirrorDeletes,
                         onChanged: s.busy ? null : store.setMirrorDeletes,
                         title: const Text('Remove songs deleted on PC'),
-                        subtitle: const Text('Keeps the phone an exact copy of your PC library', style: TextStyle(color: kMuted, fontSize: 12)),
+                        subtitle: Text('Keeps the phone an exact copy of your PC library', style: TextStyle(color: kMuted, fontSize: 12)),
                       ),
                     ),
                     const Divider(),
@@ -196,7 +198,7 @@ class _SyncScreenState extends State<SyncScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 90),
+              const SizedBox(height: 180),
             ],
           ),
         );
@@ -238,11 +240,24 @@ class _ProgressCard extends StatelessWidget {
           ),
           if (s.state == SyncState.syncing && s.filesTotal > 0) ...[
             const SizedBox(height: 12),
-            LinearProgressIndicator(value: s.progress, minHeight: 6, color: kAccent, backgroundColor: Colors.white12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: s.progress),
+                duration: const Duration(milliseconds: 400),
+                builder: (_, v, __) => Stack(children: [
+                  Container(height: 6, color: pal.track),
+                  FractionallySizedBox(
+                    widthFactor: v.clamp(0.0, 1.0),
+                    child: Container(height: 6, decoration: const BoxDecoration(gradient: kBrandGradient)),
+                  ),
+                ]),
+              ),
+            ),
             const SizedBox(height: 8),
             Text(
               '${s.filesDone} / ${s.filesTotal} songs · ${formatBytes(s.bytesDone)} of ${formatBytes(s.bytesTotal)}',
-              style: const TextStyle(color: kMuted, fontSize: 12),
+              style: TextStyle(color: kMuted, fontSize: 12),
             ),
             for (final name in s.active)
               Padding(
@@ -252,7 +267,7 @@ class _ProgressCard extends StatelessWidget {
           ],
           if (s.state == SyncState.connecting) ...[
             const SizedBox(height: 12),
-            const LinearProgressIndicator(minHeight: 6, color: kAccent, backgroundColor: Colors.white12),
+            LinearProgressIndicator(minHeight: 6, color: kAccent, backgroundColor: pal.track),
           ],
         ],
       ),
@@ -267,7 +282,11 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white10)),
+        decoration: BoxDecoration(
+          color: pal.dark ? pal.glass : pal.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: kLine),
+        ),
         child: child,
       );
 }
@@ -282,7 +301,7 @@ class _InfoRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            Expanded(child: Text(label, style: const TextStyle(color: kMuted))),
+            Expanded(child: Text(label, style: TextStyle(color: kMuted))),
             Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),
