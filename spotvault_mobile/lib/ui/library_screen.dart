@@ -175,7 +175,7 @@ class _EmptyState extends StatelessWidget {
               height: 96,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(30),
-                gradient: const SweepGradient(colors: [kViolet, kCyan, kPink, kViolet]),
+                gradient: const SweepGradient(colors: [kViolet, kEmber, kForest, kViolet]),
                 boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.45), blurRadius: 40, offset: const Offset(0, 14))],
               ),
               child: const Icon(Icons.library_music_rounded, size: 44, color: Colors.white),
@@ -238,8 +238,8 @@ class _ContinueCard extends StatelessWidget {
         onTap: () => openNowPlaying(context),
         gradient: LinearGradient(
           colors: pal.dark
-              ? [kViolet.withValues(alpha: 0.24), kCyan.withValues(alpha: 0.08)]
-              : [Colors.white, const Color(0xFFEFEAFE)],
+              ? [kViolet.withValues(alpha: 0.26), kForest.withValues(alpha: 0.22)]
+              : [Colors.white, const Color(0xFFF6E6E2)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

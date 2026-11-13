@@ -23,7 +23,7 @@ class ArtImage extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [kViolet.withValues(alpha: 0.55), kCyan.withValues(alpha: 0.35)],
+          colors: [kViolet.withValues(alpha: 0.75), kForest.withValues(alpha: 0.85)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

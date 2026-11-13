@@ -378,8 +378,8 @@ class NewTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-        decoration: BoxDecoration(color: kPink, borderRadius: BorderRadius.circular(99)),
-        child: const Text('NEW', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: Color(0xFF1A0B14))),
+        decoration: BoxDecoration(color: kCyan, borderRadius: BorderRadius.circular(99)),
+        child: const Text('NEW', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: Color(0xFF06110C))),
       );
 }
 
@@ -425,9 +425,11 @@ class _PulseDotState extends State<PulseDot> with SingleTickerProviderStateMixin
 
 /// Header title in the app's display style.
 TextStyle displayStyle(double size) => TextStyle(
+      fontFamily: kDisplayFont,
+      fontFamilyFallback: kDisplayFallback,
       fontSize: size,
-      fontWeight: FontWeight.w800,
-      letterSpacing: -0.6,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
       height: 1.1,
       color: kText,
     );
@@ -435,11 +437,11 @@ TextStyle displayStyle(double size) => TextStyle(
 /// Picks a pair of colors for art-less playlists, stable per name.
 List<Color> artColorsFor(String key) {
   const sets = [
-    [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-    [Color(0xFF0EA5E9), Color(0xFF22D3EE)],
+    [Color(0xFFA31C1B), Color(0xFF5C0F0E)],
+    [Color(0xFF2F6B52), Color(0xFF06110C)],
     [Color(0xFFF97316), Color(0xFFE11D48)],
-    [Color(0xFF1E1B4B), Color(0xFF8B5CF6)],
-    [Color(0xFF059669), Color(0xFF22D3EE)],
+    [Color(0xFF171717), Color(0xFFA31C1B)],
+    [Color(0xFF9CC5B0), Color(0xFF2F6B52)],
     [Color(0xFFDB2777), Color(0xFFF59E0B)],
   ];
   var h = 0;

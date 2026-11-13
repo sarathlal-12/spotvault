@@ -2,7 +2,7 @@
 ; Build the exe first:  python -m PyInstaller --noconfirm --clean SpotVault_V1.spec
 ; Then open this file in Inno Setup and press Compile (or run ISCC.exe on it).
 #define MyAppName "SpotVault"
-#define MyAppVersion "1.3"
+#define MyAppVersion "1.4"
 #define MyAppPublisher "Sarath"
 #define MyAppURL "https://github.com/sarathlal-12/spotvault"
 #define MyAppExeName "SpotVault_V1.exe"

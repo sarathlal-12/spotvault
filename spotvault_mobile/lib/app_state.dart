@@ -17,7 +17,8 @@ final PcLink pcLink = PcLink(store, syncService)
 final ValueNotifier<int> currentTab = ValueNotifier<int>(0);
 
 // ---------------------------------------------------------------------------
-// "Aurora" palette: violet + cyan glow, in a dark and a light version.
+// "Crimson" palette: forest-green night, charcoal panels, crimson red and
+// sage green, in a dark and a light (ivory) version.
 // ---------------------------------------------------------------------------
 class Palette {
   final bool dark;
@@ -41,42 +42,50 @@ class Palette {
 
 const Palette kDarkPalette = Palette(
   dark: true,
-  bg: Color(0xFF0A0912),
-  surface: Color(0xFF15131F),
-  card: Color(0xFF1C1929),
-  raised: Color(0xFF242036),
-  text: Color(0xFFF4F2FA),
-  muted: Color(0xFFA29DB8),
-  accent: Color(0xFFA78BFA),
+  bg: Color(0xFF06110C), // forest green
+  surface: Color(0xFF171717), // charcoal black
+  card: Color(0xFF1F2421),
+  raised: Color(0xFF262B28),
+  text: Color(0xFFF2EFE8),
+  muted: Color(0xFFA3ADA7),
+  accent: Color(0xFFF0605A), // crimson, lightened for text on dark
   line: Color(0x17FFFFFF),
   track: Color(0x1FFFFFFF),
   glass: Color(0x0DFFFFFF),
-  orbA: Color(0x738B5CF6),
-  orbB: Color(0x4D22D3EE),
+  orbA: Color(0x80A31C1B),
+  orbB: Color(0x403C6E58),
 );
 
 const Palette kLightPalette = Palette(
   dark: false,
-  bg: Color(0xFFF5F4FA),
+  bg: Color(0xFFF4F1EA), // ivory
   surface: Color(0xFFFFFFFF),
-  card: Color(0xFFECE9F5),
+  card: Color(0xFFE8E2D6),
   raised: Color(0xFFFFFFFF),
-  text: Color(0xFF15121F),
-  muted: Color(0xFF5E5873),
-  accent: Color(0xFF6D28D9),
-  line: Color(0x1A15121F),
-  track: Color(0xFFE2DEEE),
+  text: Color(0xFF06110C),
+  muted: Color(0xFF4F5A54),
+  accent: Color(0xFFA31C1B),
+  line: Color(0x1A06110C),
+  track: Color(0xFFE2DCCF),
   glass: Color(0xB3FFFFFF),
-  orbA: Color(0x4D8B5CF6),
-  orbB: Color(0x4722D3EE),
+  orbA: Color(0x47E8A8A0),
+  orbB: Color(0x4DBED8C8),
 );
 
-/// Brand colors that stay the same in both themes.
-const Color kViolet = Color(0xFF8B5CF6);
-const Color kCyan = Color(0xFF22D3EE);
-const Color kPink = Color(0xFFF472B6);
+/// Brand colours that stay the same in both themes.
+/// (Names kept from the first design so every screen picks up the new skin.)
+const Color kViolet = Color(0xFFA31C1B); // crimson red: buttons, fills, glow
+const Color kEmber = Color(0xFFD9443F); // brighter crimson for gradients
+const Color kCyan = Color(0xFF9CC5B0); // sage green: second accent
+const Color kForest = Color(0xFF2F6B52); // deep green for glows
+const Color kPink = Color(0xFFF0605A); // likes and Moments
 const Color kDanger = Color(0xFFF43F5E);
-const LinearGradient kBrandGradient = LinearGradient(colors: [kViolet, kCyan]);
+const LinearGradient kBrandGradient = LinearGradient(colors: [kViolet, kEmber]);
+
+/// Serif display type, like the brand headline. System fonts only, so the
+/// app works offline: Georgia on iPhone, the system serif on Android.
+const String kDisplayFont = 'Georgia';
+const List<String> kDisplayFallback = ['serif', 'Noto Serif', 'Times New Roman'];
 
 /// The theme in use. Changing it repaints the whole app (see main.dart).
 final ValueNotifier<bool> darkMode = ValueNotifier<bool>(true);

@@ -364,7 +364,7 @@ class _ReportLogger:
 
     def debug(self, msg):
         if "has already been recorded in the archive" in msg:
-            self.report("skip", "Already in this folder", "Skipped")
+            self.report("skip", "A song already in this folder", "Already on disk (in the folder's download list)")
 
     def info(self, msg):
         self.debug(msg)
@@ -374,7 +374,9 @@ class _ReportLogger:
 
     def error(self, msg):
         text = re.sub(r"\x1b\[[0-9;]*m", "", str(msg)).replace("ERROR:", "").strip()
-        self.report("fail", text[:140], "Could not download")
+        m = re.match(r"\[[^\]]+\]\s*([^:]+):\s*(.*)", text)
+        title, why = (m.group(1), m.group(2)) if m else ("A song", text)
+        self.report("fail", title[:140], why[:200] or "Could not download")
 
 
 def download(urls, target_dir, report, ffmpeg_path=None):
@@ -387,9 +389,12 @@ def download(urls, target_dir, report, ffmpeg_path=None):
 
     os.makedirs(target_dir, exist_ok=True)
 
+    names = {source_name_for_url(u) for u in urls}
+    saved = f"Saved from {names.pop()}" if len(names) == 1 else "Saved"
+
     def post_hook(filepath):
         name = os.path.splitext(os.path.basename(filepath))[0]
-        report("done", name, "Saved (.m4a)")
+        report("done", name, saved)
 
     opts = {
         "format": "bestaudio[ext=m4a]/bestaudio/best",
@@ -489,7 +494,7 @@ def sync_youtube(url, target_dir, report, ffmpeg_path=None):
             report("skip", done[vid].get("name") or title, "Already in this folder")
             continue
         if title in ("[Private video]", "[Deleted video]"):
-            report("fail", title, "Video is private or deleted")
+            report("fail", f"{title} ({vid})", "Not available: the video is private or deleted")
             continue
 
         clean_url, key = find_clean(title, e.get("uploader") or e.get("channel") or "", e.get("duration"))
@@ -498,8 +503,11 @@ def sync_youtube(url, target_dir, report, ffmpeg_path=None):
 
         def item_report(kind, name, detail):
             outcome.setdefault(kind, name)
-            if kind == "done" and not clean_url:
-                detail = "Saved (original video, no clean copy found)"
+            if kind == "done":
+                detail = (f"Saved from {source_name_for_url(clean_url)}" if clean_url
+                          else "Saved from the original video (no clean copy found)")
+            elif kind == "fail":
+                name, detail = title or name, detail
             report(kind, name, detail)
 
         download([target], target_dir, item_report, ffmpeg_path)
@@ -544,13 +552,14 @@ def apply_spotdl_clean_rules():
 
     def search_with_fallback(self, song):
         try:
-            return original_search(self, song)
+            url = original_search(self, song)
         except LookupError:
             artists = ", ".join(song.artists or [])
             url, _ = find_clean(f"{artists} - {song.name}" if artists else song.name, "", song.duration)
-            if url:
-                return url
-            raise
+            if not url:
+                raise
+        _spotdl_picked[song.url] = url
+        return url
 
     Downloader.search = search_with_fallback
 
@@ -564,12 +573,28 @@ def apply_spotdl_clean_rules():
         for attempt in range(3):
             song_out, path = await original_download(self, song)
             if path is not None:
+                picked = _spotdl_picked.pop(song.url, None)
+                if picked is None:
+                    # spotdl found the file before searching: nothing downloaded.
+                    _spotdl_emit("skip", song.display_name, f"Already on disk: {os.path.basename(str(path))}", str(path))
+                else:
+                    _spotdl_emit("done", song.display_name, f"Saved from {source_name_for_url(picked)}", str(path))
                 return song_out, path
             mine = [e for e in self.errors if e.startswith(song.url)]
             not_found = any("LookupError" in e for e in mine)
             if attempt == 2 or not_found:
-                reason = "No clean copy found on YouTube Music, SoundCloud or YouTube" if not_found                     else "Download refused by the source after 3 tries"
-                spotdl_failures.append((song.display_name, reason))
+                text = " ".join(mine)
+                if not_found:
+                    detail = "No clean copy found on YouTube Music, SoundCloud or YouTube"
+                elif classify_failure(text) == "unavailable":
+                    detail = "Not available: " + _short_error(text)
+                elif classify_failure(text) == "other":
+                    detail = "Error: " + _short_error(text)
+                else:
+                    detail = "Download refused by the source after 3 tries (" + _short_error(text) + ")"
+                _spotdl_picked.pop(song.url, None)
+                spotdl_failures.append((song.display_name, detail))
+                _spotdl_emit("fail", song.display_name, detail, "")
                 return song_out, path
             for e in mine:
                 self.errors.remove(e)
@@ -581,3 +606,112 @@ def apply_spotdl_clean_rules():
 
 # Songs spotdl could not get, filled during a run: [(display name, reason)].
 spotdl_failures = []
+
+# Set by the app: called as listener(kind, title, detail, path) for each song.
+spotdl_listener = None
+_spotdl_picked = {}
+
+
+def _spotdl_emit(kind, title, detail, path):
+    if spotdl_listener is not None:
+        try:
+            spotdl_listener(kind, title, detail, path)
+        except Exception:
+            pass
+
+
+def _short_error(text, limit=110):
+    text = re.sub(r"https?://\S+", "", text or "")
+    text = re.sub(r"^.*?(Error|Exception):\s*", "", text.strip())
+    text = " ".join(text.split())
+    return (text[:limit] + "…") if len(text) > limit else (text or "unknown error")
+
+
+def source_name_for_url(url):
+    u = (url or "").lower()
+    if "music.youtube.com" in u:
+        return "YouTube Music"
+    if "soundcloud.com" in u:
+        return "SoundCloud"
+    if "youtube.com" in u or "youtu.be" in u:
+        return "YouTube"
+    return "the web"
+
+
+# ---------------------------------------------------------------------------
+# Sync report: why each song failed, was skipped or where it came from
+# ---------------------------------------------------------------------------
+# kind -> group -> (title, why it happens, what you can do)
+REASONS = {
+    "fail": {
+        "no_clean": ("No clean copy found",
+                     "Only covers, teasers, live versions or movie-scene cuts exist online. SpotVault skips those so "
+                     "your library never gets dialogue or the wrong singer.",
+                     "Fix: pick a version yourself with Find a version."),
+        "refused": ("Source refused the download",
+                    "YouTube or SoundCloud turned the download away 3 times in a row because it was busy or "
+                    "rate-limited. It usually works on the next try.",
+                    "Fix: Retry, ideally in a few minutes."),
+        "unavailable": ("Not available",
+                        "The song or video was removed, made private, age-restricted or blocked in your country.",
+                        "Nothing to fix. Find another version if you still want it."),
+        "other": ("Other errors",
+                  "Something unexpected went wrong. Each song shows the message.",
+                  "Fix: Retry. If it keeps failing, copy the list and report it."),
+    },
+    "skip": {
+        "on_disk": ("Already on your PC",
+                    "Downloaded in an earlier sync, so it wasn't downloaded again.",
+                    "Nothing to do."),
+        "local": ("Local file or podcast",
+                  "Someone added this to the Spotify playlist from their own computer, or it is a podcast episode. "
+                  "There is nothing online to download.",
+                  "Copy the file into the playlist folder yourself."),
+        "explicit": ("Explicit song filtered",
+                     "This song is marked explicit and explicit songs were turned off.",
+                     "Nothing to do."),
+    },
+    "done": {
+        "ytmusic": ("From YouTube Music", "Clean studio versions, the first choice.", ""),
+        "soundcloud": ("From SoundCloud", "Used when YouTube Music didn't have the song.", ""),
+        "youtube": ("From YouTube", "Lyric videos and audio uploads, checked for scenes and dialogue.", ""),
+        "original": ("Original video", "Saved from the playlist's own video because no clean copy was found.", ""),
+        "other": ("Saved", "Songs you picked in Search, or saved without a source label.", ""),
+    },
+}
+
+
+def classify_failure(text):
+    t = (text or "").lower()
+    if "lookuperror" in t or "no clean copy" in t or "no results" in t:
+        return "no_clean"
+    if any(k in t for k in ("private", "deleted", "unavailable", "not available", "removed", "copyright",
+                            "age-restricted", "age restricted", "confirm your age", "region", "blocked", "missing required fields",
+                            "terminated")):
+        return "unavailable"
+    if any(k in t for k in ("403", "429", "too many requests", "refused", "forbidden", "timed out", "timeout",
+                            "connection", "http error", "rate", "busy", "reset", "temporarily")):
+        return "refused"
+    return "other"
+
+
+def group_for(kind, detail):
+    """Report group for one song, from its kind and detail text."""
+    d = (detail or "").lower()
+    if kind == "fail":
+        return classify_failure(d)
+    if kind == "skip":
+        if "local" in d or "podcast" in d:
+            return "local"
+        if "explicit" in d:
+            return "explicit"
+        return "on_disk"
+    if "original video" in d:
+        return "original"
+    if "youtube music" in d:
+        return "ytmusic"
+    if "soundcloud" in d:
+        return "soundcloud"
+    if "youtube" in d:
+        return "youtube"
+    return "other"

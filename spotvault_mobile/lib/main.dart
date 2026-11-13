@@ -216,7 +216,7 @@ class _GlassNav extends StatelessWidget {
                               padding: EdgeInsets.symmetric(horizontal: i == index ? 18 : 10, vertical: 4),
                               decoration: BoxDecoration(
                                 gradient: i == index
-                                    ? LinearGradient(colors: [kViolet.withValues(alpha: 0.28), kCyan.withValues(alpha: 0.18)])
+                                    ? LinearGradient(colors: [kViolet.withValues(alpha: 0.32), kEmber.withValues(alpha: 0.14)])
                                     : null,
                                 borderRadius: BorderRadius.circular(99),
                               ),

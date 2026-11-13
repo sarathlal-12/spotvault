@@ -215,7 +215,7 @@ class _GlowingArtState extends State<_GlowingArt> with SingleTickerProviderState
                       blurRadius: 70 + 20 * breathe,
                       spreadRadius: 6,
                     ),
-                    BoxShadow(color: kCyan.withValues(alpha: pal.dark ? 0.22 : 0.16), blurRadius: 90, offset: const Offset(30, 30)),
+                    BoxShadow(color: kForest.withValues(alpha: pal.dark ? 0.35 : 0.18), blurRadius: 90, offset: const Offset(30, 30)),
                   ],
                 ),
               ),
@@ -259,7 +259,7 @@ class _RingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..shader = const SweepGradient(
-        colors: [Colors.transparent, Colors.transparent, kCyan, kViolet, Colors.transparent],
+        colors: [Colors.transparent, Colors.transparent, kEmber, kViolet, Colors.transparent],
         stops: [0, 0.55, 0.75, 0.9, 1],
       ).createShader(rect);
     canvas.drawRRect(rrect, paint);
@@ -324,7 +324,7 @@ class _PlayButton extends StatelessWidget {
               height: 76,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(colors: [kViolet, kCyan], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                gradient: const LinearGradient(colors: [kEmber, kViolet], begin: Alignment.topLeft, end: Alignment.bottomRight),
                 boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.55), blurRadius: 30, offset: const Offset(0, 12))],
               ),
               child: buffering
@@ -442,7 +442,7 @@ class _WaveSeekState extends State<_WaveSeek> with SingleTickerProviderStateMixi
                                   progress: f,
                                   phase: p.playing ? _pulse.value : 0,
                                   rest: pal.track,
-                                  playedTop: kCyan,
+                                  playedTop: kEmber,
                                   playedBottom: pal.accent,
                                 ),
                               ),
@@ -754,7 +754,7 @@ class _Tool extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
                     gradient: active
-                        ? LinearGradient(colors: [kViolet.withValues(alpha: 0.32), kCyan.withValues(alpha: 0.18)])
+                        ? LinearGradient(colors: [kViolet.withValues(alpha: 0.36), kEmber.withValues(alpha: 0.14)])
                         : null,
                     color: active ? null : (pal.dark ? pal.glass : pal.surface),
                     border: Border.all(color: active ? kViolet.withValues(alpha: 0.6) : kLine),
