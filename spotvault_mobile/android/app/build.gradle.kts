@@ -17,7 +17,9 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.spotvault.app.spotvault_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // androidx.browser / core 1.17 (via url_launcher) need API 36 to compile against.
+    // Only the compile level: targetSdk and minSdk stay Flutter's defaults.
+    compileSdk = maxOf(flutter.compileSdkVersion, 36)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
