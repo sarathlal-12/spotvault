@@ -925,8 +925,8 @@ class VaultApp(ctk.CTk):
                 self._post("item", ("✔", match.group(1), "Saved (.m4a)"))
         elif "Skipping" in text or "already exists" in text:
             self._post("item", ("↷", text.replace("Skipping", "").strip(), "Already on disk"))
-        elif "LookupError" in text or "AudioProviderError" in text:
-            self._post("item", ("✕", text.split(":")[-1].strip(), "Provider match failed"))
+        # Failures are not taken from this log: a song may still succeed on a
+        # retry. Final failures come from sources.spotdl_failures after the run.
 
     def _poll_queue(self):
         try:
@@ -1044,6 +1044,7 @@ class VaultApp(ctk.CTk):
         from spotdl.utils.spotify import SpotifyClient
 
         sources.apply_spotdl_clean_rules()
+        sources.spotdl_failures.clear()
         SpotifyClient._instance = None
         spotdl_logger = logging.getLogger("spotdl")
         for h in list(spotdl_logger.handlers):
@@ -1081,6 +1082,9 @@ class VaultApp(ctk.CTk):
             sys.stderr = old_stderr
             sys.argv = orig_argv
             os.chdir(orig_cwd)
+            for name, reason in sources.spotdl_failures:
+                self._post("item", ("✕", name, reason))
+            sources.spotdl_failures.clear()
 
 
 # -------------------------------------------------------------

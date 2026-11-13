@@ -553,4 +553,31 @@ def apply_spotdl_clean_rules():
             raise
 
     Downloader.search = search_with_fallback
+
+    # YouTube sometimes refuses one download (busy, throttled). spotdl gives up
+    # on that song at once; retry it twice with a short pause first. Only
+    # failures that survive the retries are reported (see spotdl_failures).
+    import asyncio
+    original_download = Downloader.async_search_and_download
+
+    async def download_with_retry(self, song):
+        for attempt in range(3):
+            song_out, path = await original_download(self, song)
+            if path is not None:
+                return song_out, path
+            mine = [e for e in self.errors if e.startswith(song.url)]
+            not_found = any("LookupError" in e for e in mine)
+            if attempt == 2 or not_found:
+                reason = "No clean copy found on YouTube Music, SoundCloud or YouTube" if not_found                     else "Download refused by the source after 3 tries"
+                spotdl_failures.append((song.display_name, reason))
+                return song_out, path
+            for e in mine:
+                self.errors.remove(e)
+            await asyncio.sleep(4 + attempt * 6)
+
+    Downloader.async_search_and_download = download_with_retry
     _spotdl_patched = True
+
+
+# Songs spotdl could not get, filled during a run: [(display name, reason)].
+spotdl_failures = []
