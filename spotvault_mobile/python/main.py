@@ -202,6 +202,18 @@ def _tag(path, title, artist, album, art):
         return 0.0
 
 
+def _defrag(path):
+    """Rewrite streamed (fragmented) m4a as a normal file so every player sees the full song."""
+    if not path.lower().endswith((".m4a", ".mp4")):
+        return
+    try:
+        import m4a_fix
+        if m4a_fix.defragment(path):
+            log("rewrote fragmented file", os.path.basename(path))
+    except Exception as e:
+        log("defragment failed:", type(e).__name__, e)
+
+
 def _run(job):
     import yt_dlp
     folder_dir = os.path.join(MUSIC, job["folder"])
@@ -229,6 +241,7 @@ def _run(job):
         os.remove(src)
     else:
         os.replace(src, dest)
+        _defrag(dest)
         art = _art_bytes(job["thumb"], info)
         if art:
             os.makedirs(ART, exist_ok=True)
@@ -318,6 +331,7 @@ def _preview_file(url):
         path = reqs[0].get("filepath") if reqs else ydl.prepare_filename(info)
     if not path or not os.path.exists(path):
         raise RuntimeError("No playable stream")
+    _defrag(path)
     return path
 
 
