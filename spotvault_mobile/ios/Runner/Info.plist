@@ -67,6 +67,8 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<!-- Keep playing music with the screen locked / app in background -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pick a photo to use as a playlist cover.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

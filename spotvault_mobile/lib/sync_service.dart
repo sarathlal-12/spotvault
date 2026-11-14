@@ -178,6 +178,8 @@ class SyncService extends ChangeNotifier {
             "Can't reach $host:$port. Check both devices are on the same Wi-Fi and SpotVault is open on the PC.");
       }
 
+      await _sendPcDeletes(host, port, pin);
+
       message = 'Reading library…';
       notifyListeners();
       lib = await _getJson(host, port, '/api/library', pin);
@@ -231,8 +233,40 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Songs and playlists the user chose to "Delete from phone and PC".
+  Future<void> _sendPcDeletes(String host, int port, String pin) async {
+    if (store.pcDeletePaths.isEmpty && store.pcDeleteFolders.isEmpty) return;
+    message = 'Deleting on your PC…';
+    notifyListeners();
+    try {
+      final res = await _client!
+          .post(_uri(host, port, '/api/delete'),
+              headers: {'X-SpotVault-Pin': pin, 'Content-Type': 'application/json'},
+              body: jsonEncode({'paths': store.pcDeletePaths.toList(), 'folders': store.pcDeleteFolders.toList()}))
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode == 200) {
+        store.pcDeletePaths.clear();
+        store.pcDeleteFolders.clear();
+        await store.save();
+      }
+    } catch (e) {
+      debugPrint('PC delete failed, will retry next sync: $e');
+    }
+  }
+
   Future<void> _mirror(String host, int port, String pin, Map<String, dynamic> lib) async {
-    final remotePlaylists = (lib['playlists'] as List).cast<Map<String, dynamic>>();
+    // Playlists and songs removed on the phone stay away.
+    final remotePlaylists = (lib['playlists'] as List)
+        .cast<Map<String, dynamic>>()
+        .where((pl) => !store.excludedFolders.contains(pl['folder']))
+        .map((pl) => {
+              ...pl,
+              'tracks': (pl['tracks'] as List)
+                  .cast<Map<String, dynamic>>()
+                  .where((t) => !store.excludedTracks.contains(t['id']))
+                  .toList(),
+            })
+        .toList();
 
     // 1. Work out what is new or changed.
     final remoteTracks = <String, Track>{};
@@ -258,12 +292,15 @@ class SyncService extends ChangeNotifier {
       if (pl['has_cover'] == true) {
         hasCover = await _fetchSmall(host, port, pin, '/api/cover', {'folder': folder}, store.coverFile(folder));
       }
-      newPlaylists.add(PlaylistInfo(
+      final fresh = PlaylistInfo(
         folder: folder,
         title: pl['title'] ?? folder,
         trackIds: [for (final t in (pl['tracks'] as List)) t['id'] as String],
         hasCover: hasCover,
-      ));
+      );
+      final old = store.playlistByFolder(folder);
+      if (old != null) fresh.takeEditsFrom(old);
+      newPlaylists.add(fresh);
     }
 
     // 3. Copy songs, a few at a time.
@@ -360,6 +397,10 @@ class SyncService extends ChangeNotifier {
   List<PlaylistInfo> _withPhoneSongs(List<PlaylistInfo> fresh) {
     final byFolder = {for (final p in fresh) p.folder: p};
     for (final old in store.playlists) {
+      if (old.phoneOnly && !byFolder.containsKey(old.folder)) {
+        byFolder[old.folder] = old;
+        continue;
+      }
       final phoneIds = old.trackIds.where((id) => store.tracks[id]?.phoneOnly == true).toList();
       if (phoneIds.isEmpty) continue;
       final target = byFolder[old.folder];

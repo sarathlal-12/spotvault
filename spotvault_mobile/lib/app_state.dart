@@ -38,6 +38,9 @@ class Palette {
     required this.orbA,
     required this.orbB,
   });
+
+  /// Errors: crimson that reads on both themes.
+  Color get danger => dark ? const Color(0xFFF0605A) : const Color(0xFFA31C1B);
 }
 
 const Palette kDarkPalette = Palette(

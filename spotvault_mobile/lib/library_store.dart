@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show imageCache;
 import 'package:path_provider/path_provider.dart';
 
 /// One song that lives on the phone.
@@ -79,23 +80,83 @@ class Track {
       };
 }
 
-/// A playlist mirrored from the PC (one folder on the PC = one playlist).
+/// A playlist: mirrored from the PC (one folder on the PC = one playlist) or
+/// made on the phone. Phone-side edits (name, cover, order, pin) survive syncs.
 class PlaylistInfo {
   final String folder;
-  final String title;
+  final String title; // the PC's name
   final List<String> trackIds;
   bool hasCover;
+  bool pinned;
+  String? customTitle; // renamed on the phone
+  bool customCover; // cover picked on the phone
+  bool customOrder; // songs reordered on the phone
+  bool phoneOnly; // made on the phone
+  /// PC songs taken out of this playlist on the phone (kept out on syncs).
+  final Set<String> removed;
 
-  PlaylistInfo({required this.folder, required this.title, required this.trackIds, this.hasCover = false});
+  PlaylistInfo({
+    required this.folder,
+    required this.title,
+    required this.trackIds,
+    this.hasCover = false,
+    this.pinned = false,
+    this.customTitle,
+    this.customCover = false,
+    this.customOrder = false,
+    this.phoneOnly = false,
+    Set<String>? removed,
+  }) : removed = removed ?? {};
+
+  /// The name shown in the app.
+  String get name => (customTitle ?? '').trim().isNotEmpty ? customTitle!.trim() : title;
 
   factory PlaylistInfo.fromJson(Map<String, dynamic> j) => PlaylistInfo(
         folder: j['folder'],
         title: j['title'] ?? j['folder'],
         trackIds: List<String>.from(j['trackIds'] ?? const []),
         hasCover: j['hasCover'] ?? false,
+        pinned: j['pinned'] ?? false,
+        customTitle: j['customTitle'],
+        customCover: j['customCover'] ?? false,
+        customOrder: j['customOrder'] ?? false,
+        phoneOnly: j['phoneOnly'] ?? false,
+        removed: Set<String>.from(j['removed'] ?? const []),
       );
 
-  Map<String, dynamic> toJson() => {'folder': folder, 'title': title, 'trackIds': trackIds, 'hasCover': hasCover};
+  Map<String, dynamic> toJson() => {
+        'folder': folder,
+        'title': title,
+        'trackIds': trackIds,
+        'hasCover': hasCover,
+        if (pinned) 'pinned': true,
+        if (customTitle != null) 'customTitle': customTitle,
+        if (customCover) 'customCover': true,
+        if (customOrder) 'customOrder': true,
+        if (phoneOnly) 'phoneOnly': true,
+        if (removed.isNotEmpty) 'removed': removed.toList(),
+      };
+
+  /// Keeps the phone's edits when the PC sends a fresh copy of this playlist.
+  void takeEditsFrom(PlaylistInfo old) {
+    pinned = old.pinned;
+    customTitle = old.customTitle;
+    customCover = old.customCover;
+    customOrder = old.customOrder;
+    removed
+      ..clear()
+      ..addAll(old.removed);
+    final fresh = trackIds.where((id) => !removed.contains(id)).toList();
+    trackIds.clear();
+    if (old.customOrder) {
+      // The phone's order and added songs, then anything new from the PC.
+      trackIds
+        ..addAll(old.trackIds)
+        ..addAll(fresh.where((id) => !old.trackIds.contains(id)));
+    } else {
+      trackIds.addAll(fresh);
+    }
+  }
 }
 
 enum TrackSort { pcOrder, title, artist, recentlyAdded }
@@ -127,6 +188,15 @@ class LibraryStore extends ChangeNotifier {
   bool smartSleep = true; // fade out slowly before the sleep timer stops
   bool ghostQueue = true; // songs saved from search play next once they arrive
   bool useBridge = false; // download through the PC instead of on the phone
+  /// PC songs and playlists removed on the phone: syncs skip them.
+  final Set<String> excludedTracks = {};
+  final Set<String> excludedFolders = {};
+  /// Deletions to send to the PC at the next sync (song paths, playlist folders).
+  final Set<String> pcDeletePaths = {};
+  final Set<String> pcDeleteFolders = {};
+
+  /// Songs recently opened from online search (newest first), as OnlineSong JSON.
+  List<Map<String, dynamic>> recentSearches = [];
 
   // Vault Lab
   /// Moments: favourite spots in a song, in milliseconds, per track id.
@@ -180,6 +250,13 @@ class LibraryStore extends ChangeNotifier {
       smartSleep = j['smartSleep'] ?? true;
       ghostQueue = j['ghostQueue'] ?? true;
       useBridge = j['useBridge'] ?? false;
+      excludedTracks.addAll(List<String>.from(j['excludedTracks'] ?? const []));
+      excludedFolders.addAll(List<String>.from(j['excludedFolders'] ?? const []));
+      pcDeletePaths.addAll(List<String>.from(j['pcDeletePaths'] ?? const []));
+      pcDeleteFolders.addAll(List<String>.from(j['pcDeleteFolders'] ?? const []));
+      recentSearches = [
+        for (final r in (j['recentSearches'] as List? ?? const [])) Map<String, dynamic>.from(r as Map)
+      ];
       final m = Map<String, dynamic>.from(j['moments'] ?? const {});
       m.forEach((k, v) => moments[k] = List<int>.from(v as List));
       listenDays.addAll(Map<String, int>.from(j['listenDays'] ?? const {}));
@@ -224,6 +301,11 @@ class LibraryStore extends ChangeNotifier {
           'smartSleep': smartSleep,
           'ghostQueue': ghostQueue,
           'useBridge': useBridge,
+          'recentSearches': recentSearches,
+          'excludedTracks': excludedTracks.toList(),
+          'excludedFolders': excludedFolders.toList(),
+          'pcDeletePaths': pcDeletePaths.toList(),
+          'pcDeleteFolders': pcDeleteFolders.toList(),
           'moments': moments,
           'listenDays': listenDays,
           'listenArtists': listenArtists,
@@ -249,6 +331,151 @@ class LibraryStore extends ChangeNotifier {
     if (persist) save();
   }
 
+  // ---------------------------------------------------------- playlists
+  /// Pinned playlists first, then the rest in their usual order.
+  List<PlaylistInfo> get sortedPlaylists => [
+        ...playlists.where((p) => p.pinned),
+        ...playlists.where((p) => !p.pinned),
+      ];
+
+  PlaylistInfo? playlistByFolder(String folder) => playlists.where((p) => p.folder == folder).firstOrNull;
+
+  /// A new, empty playlist that lives only on the phone.
+  PlaylistInfo createPlaylist(String name) {
+    final clean = name.replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ').trim();
+    var folder = clean.isEmpty ? 'New playlist' : clean;
+    var n = 2;
+    final base = folder;
+    while (playlists.any((p) => p.folder.toLowerCase() == folder.toLowerCase())) {
+      folder = '$base ${n++}';
+    }
+    final p = PlaylistInfo(folder: folder, title: folder, trackIds: [], phoneOnly: true);
+    playlists = [...playlists, p];
+    excludedFolders.remove(folder);
+    changed();
+    return p;
+  }
+
+  void renamePlaylist(PlaylistInfo p, String name) {
+    p.customTitle = name.trim().isEmpty || name.trim() == p.title ? null : name.trim();
+    changed();
+  }
+
+  void setPinned(PlaylistInfo p, bool pinned) {
+    p.pinned = pinned;
+    changed();
+  }
+
+  /// Returns false if the song was already in the playlist.
+  bool addToPlaylist(PlaylistInfo p, Track t) {
+    if (p.trackIds.contains(t.id)) return false;
+    p.trackIds.add(t.id);
+    p.removed.remove(t.id);
+    p.customOrder = true; // keep it there when the PC sends this playlist again
+    changed();
+    return true;
+  }
+
+  void removeFromPlaylist(PlaylistInfo p, String id) {
+    p.trackIds.remove(id);
+    p.removed.add(id);
+    changed();
+  }
+
+  /// New order for the songs shown; songs not shown keep their place at the end.
+  void setPlaylistOrder(PlaylistInfo p, List<String> ids) {
+    final rest = p.trackIds.where((id) => !ids.contains(id)).toList();
+    p.trackIds
+      ..clear()
+      ..addAll(ids)
+      ..addAll(rest);
+    p.customOrder = true;
+    changed();
+  }
+
+  void reorderPlaylist(PlaylistInfo p, int from, int to) {
+    if (to > from) to -= 1;
+    final id = p.trackIds.removeAt(from);
+    p.trackIds.insert(to, id);
+    p.customOrder = true;
+    changed();
+  }
+
+  /// A cover the user picked on the phone (kept apart from the PC's cover).
+  File customCoverFile(String folder) =>
+      File('${coverDir.path}/c_${base64Url.encode(utf8.encode(folder)).replaceAll('=', '')}.img');
+
+  Future<void> setCustomCover(PlaylistInfo p, List<int>? bytes) async {
+    final f = customCoverFile(p.folder);
+    if (bytes == null) {
+      if (await f.exists()) await f.delete();
+      p.customCover = false;
+    } else {
+      await f.writeAsBytes(bytes, flush: true);
+      p.customCover = true;
+    }
+    imageCache.clear();
+    changed();
+  }
+
+  /// Deletes songs from the phone. PC songs stay away on later syncs; with
+  /// [alsoPc] the PC deletes its copy at the next sync too.
+  Future<void> removeSongs(Iterable<String> ids, {bool alsoPc = false}) async {
+    for (final id in ids.toList()) {
+      final t = tracks[id];
+      if (t == null) continue;
+      if (!t.phoneOnly) {
+        excludedTracks.add(id);
+        if (alsoPc) pcDeletePaths.add(t.path);
+      }
+      await deleteTrack(id);
+    }
+    changed();
+  }
+
+  /// Deletes a playlist and the songs only it had. PC playlists stay away on
+  /// later syncs; with [alsoPc] the PC removes the playlist and its folder.
+  Future<void> deletePlaylist(PlaylistInfo p, {bool alsoPc = false}) async {
+    final others = {for (final o in playlists) if (o.folder != p.folder) ...o.trackIds};
+    final only = p.trackIds.where((id) => !others.contains(id)).toList();
+    playlists = playlists.where((o) => o.folder != p.folder).toList();
+    if (!p.phoneOnly) {
+      excludedFolders.add(p.folder);
+      if (alsoPc) pcDeleteFolders.add(p.folder);
+    }
+    for (final id in only) {
+      final t = tracks[id];
+      if (t != null && !t.phoneOnly) excludedTracks.add(id);
+      await deleteTrack(id);
+    }
+    for (final f in [coverFile(p.folder), customCoverFile(p.folder)]) {
+      try {
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+    changed();
+  }
+
+  /// Lets songs and playlists removed on the phone come back at the next sync.
+  void restoreHidden() {
+    excludedTracks.clear();
+    excludedFolders.clear();
+    changed();
+  }
+
+  /// Remembers a song opened from online search (most recent first, 20 max).
+  void addRecentSearch(Map<String, dynamic> song) {
+    recentSearches.removeWhere((r) => r['url'] == song['url']);
+    recentSearches.insert(0, song);
+    if (recentSearches.length > 20) recentSearches = recentSearches.sublist(0, 20);
+    changed();
+  }
+
+  void clearRecentSearches() {
+    recentSearches = [];
+    changed();
+  }
+
   /// Adds a song the phone downloaded itself to [folder] (creating the
   /// playlist if needed). Returns the stored track.
   Track addPhoneTrack(Track t, {required String folder, required String title}) {
@@ -257,7 +484,7 @@ class LibraryStore extends ChangeNotifier {
     tracks[t.id] = t;
     var p = playlists.where((p) => p.folder == folder).firstOrNull;
     if (p == null) {
-      p = PlaylistInfo(folder: folder, title: title, trackIds: []);
+      p = PlaylistInfo(folder: folder, title: title, trackIds: [], phoneOnly: true);
       playlists = [...playlists, p];
     }
     if (!p.trackIds.contains(t.id)) p.trackIds.add(t.id);
@@ -274,6 +501,10 @@ class LibraryStore extends ChangeNotifier {
   File? artFor(Track t) => t.hasArt ? artFile(t) : null;
 
   File? coverFor(PlaylistInfo p) {
+    if (p.customCover) {
+      final c = customCoverFile(p.folder);
+      if (c.existsSync()) return c;
+    }
     if (p.hasCover) return coverFile(p.folder);
     for (final id in p.trackIds) {
       final t = tracks[id];

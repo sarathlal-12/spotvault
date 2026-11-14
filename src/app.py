@@ -446,6 +446,7 @@ class VaultApp(ctk.CTk):
             on_event=lambda text: self._post("phone", text),
         )
         self.phone_server.on_library_changed = lambda: self._post("call", self._render_library_cards)
+        self.phone_server.on_delete_playlist = lambda folder: self._post("call", lambda: self._delete_playlist_from_phone(folder))
         self.phone_server.start()
 
         self._build_ui()
@@ -457,6 +458,8 @@ class VaultApp(ctk.CTk):
         self.after(100, self._poll_queue)
 
     def _load_config(self):
+        self.spotify_id = ""
+        self.spotify_secret = ""
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -466,6 +469,8 @@ class VaultApp(ctk.CTk):
                     self.sync_pin = str(data.get("sync_pin", ""))
                     self.skip_update = str(data.get("skip_update", ""))
                     self.theme = "light" if data.get("theme") == "light" else "dark"
+                    self.spotify_id = str(data.get("spotify_client_id", ""))
+                    self.spotify_secret = str(data.get("spotify_client_secret", ""))
             except Exception:
                 pass
 
@@ -476,6 +481,8 @@ class VaultApp(ctk.CTk):
             "sync_pin": self.sync_pin,
             "skip_update": self.skip_update,
             "theme": self.theme,
+            "spotify_client_id": self.spotify_id,
+            "spotify_client_secret": self.spotify_secret,
         }
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -520,6 +527,7 @@ class VaultApp(ctk.CTk):
         self.lbl_report_badge = ctk.CTkLabel(report_btn, text="", width=26, height=20, corner_radius=10,
                                              fg_color=COLOR_DANGER, text_color="#FFFFFF", font=self._font(11, "bold"))
         self.lbl_report_badge.bind("<Button-1>", lambda e: self._open_report())
+        self._nav_button(nav, "⚙    Settings", self._open_settings)
 
         # Library stats
         stats = self._side_card(sidebar)
@@ -739,9 +747,21 @@ class VaultApp(ctk.CTk):
         if not self.is_running:
             self._draw_ring()
             return
-        self._ring_phase = (self._ring_phase - 8) % 360
+        self._ring_phase = (self._ring_phase - 12) % 360
         self._draw_ring()
-        self.after(45, self._tick_ring)
+        self.after(80, self._tick_ring)
+
+    def _delete_playlist_from_phone(self, folder):
+        """The phone asked to delete this playlist on the PC too."""
+        self.playlists = [p for p in self.playlists if p.get("folder") != folder]
+        self._save_config()
+        path = os.path.join(self.master_folder, folder)
+        if folder and os.path.isdir(path) and os.path.commonpath([os.path.realpath(path), os.path.realpath(self.master_folder)]) == os.path.realpath(self.master_folder):
+            recycle(path)
+        self._render_library_cards()
+
+    def _open_settings(self):
+        SettingsDialog(self)
 
     # ------------------------------------------------------------ sync report
     def _open_report(self):
@@ -837,7 +857,22 @@ class VaultApp(ctk.CTk):
         self._placeholder.pack(pady=60)
 
     def _folder_stats(self, folder):
+        # Cached per folder: redrawing the grid (window resize, coming back
+        # from another app) used to re-scan every song file on disk.
         path = os.path.join(self.master_folder, folder)
+        try:
+            stamp = os.stat(path).st_mtime_ns
+        except OSError:
+            stamp = None
+        cache = self.__dict__.setdefault("_stats_cache", {})
+        hit = cache.get(path)
+        if hit and hit[0] == stamp and stamp is not None:
+            return hit[1]
+        result = self._scan_folder(path)
+        cache[path] = (stamp, result)
+        return result
+
+    def _scan_folder(self, path):
         count, size = 0, 0
         try:
             for e in os.scandir(path):
@@ -867,9 +902,23 @@ class VaultApp(ctk.CTk):
         return img
 
     def _on_grid_resize(self, event):
+        # Redraw only once resizing settles (restoring the window sends a burst
+        # of sizes, and each redraw rebuilt every tile).
         scale = ctk.ScalingTracker.get_widget_scaling(self)
         cols = max(1, int((event.width / scale - 10) // 200))
-        if self.playlists and cols != self._grid_cols:
+        if not self.playlists or cols == self._grid_cols:
+            return
+        job = getattr(self, "_grid_job", None)
+        if job is not None:
+            self.after_cancel(job)
+        self._grid_job = self.after(200, self._grid_settled)
+
+    def _grid_settled(self):
+        self._grid_job = None
+        scale = ctk.ScalingTracker.get_widget_scaling(self)
+        width = self.cards_scroll._parent_canvas.winfo_width()
+        cols = max(1, int((width / scale - 10) // 200)) if width > 1 else 3
+        if cols != self._grid_cols:
             self._render_library_cards()
 
     def _render_library_cards(self):
@@ -1197,8 +1246,10 @@ class VaultApp(ctk.CTk):
             ctk.CTkLabel(box, text=subtitle, font=self._font(10), text_color=COLOR_TEXT_MUTED,
                          anchor="w", justify="left", wraplength=220).pack(fill="x")
 
-        # Keep the feed light: long syncs can post hundreds of items.
-        for w in self.feed_scroll.winfo_children()[:-150]:
+        # Keep the feed light: every card is several widgets, and hundreds of
+        # them made the window slow to scroll and to come back from other
+        # apps. The full list is in the Sync report.
+        for w in self.feed_scroll.winfo_children()[:-FEED_LIMIT]:
             w.destroy()
         self.feed_scroll._parent_canvas.yview_moveto(1.0)
 
@@ -1221,6 +1272,8 @@ class VaultApp(ctk.CTk):
                     self.lbl_status.configure(text=value, fg_color=COLOR_ACCENT)
                 elif kind == "progress":
                     self._set_progress(value)
+                elif kind == "ring_label":
+                    self._ring_label = value
                 elif kind == "call":
                     value()
                 elif kind == "phone":
@@ -1296,13 +1349,18 @@ class VaultApp(ctk.CTk):
 
         tasks = list(self.active_tasks)
         total = len(tasks)
+        sources.total_listener = self._on_song_total
         for i, task in enumerate(tasks, 1):
             folder_name = task["folder"]
             target_dir = os.path.join(self.master_folder, folder_name)
             os.makedirs(target_dir, exist_ok=True)
 
+            # Progress moves per song: (playlists done + songs done / songs in this one) / playlists.
+            self._task_pos = (i - 1, total)
+            self._songs_total = 0
+            self._songs_seen = 0
             self._post("progress", (i - 1) / total)
-            self._post("status", f"{i}/{total}")
+            self._post("status", f"{i}/{total}" if total > 1 else "Syncing")
             self._post("item", ("📁", f"Syncing: {folder_name}", target_dir))
 
             try:
@@ -1322,11 +1380,27 @@ class VaultApp(ctk.CTk):
                         pl["has_synced"] = True
             self._post("progress", i / total)
 
+        sources.total_listener = None
         self._save_config()
 
     def _report(self, kind, title, detail, path=""):
         icon = {"done": "✔", "skip": "↷", "fail": "✕"}[kind]
         self._post("item", (icon, title, detail, path))
+        self._songs_seen = getattr(self, "_songs_seen", 0) + 1
+        self._post_song_progress()
+
+    def _on_song_total(self, n):
+        self._songs_total = max(int(n), 0)
+        self._post_song_progress()
+
+    def _post_song_progress(self):
+        done, total = getattr(self, "_task_pos", (0, 1))
+        n = getattr(self, "_songs_total", 0)
+        seen = getattr(self, "_songs_seen", 0)
+        if n:
+            seen = min(seen, n)
+            self._post("progress", (done + seen / n) / max(total, 1))
+            self._post("ring_label", f"{seen} / {n} songs")
 
     def _run_spotdl(self, url, target_dir, folder_name):
         try:
@@ -1359,8 +1433,15 @@ class VaultApp(ctk.CTk):
                 "--audio", *sources.SPOTDL_AUDIO_ORDER,
                 "--threads", "8",
                 "--format", "m4a",
+                "--respect-skip-file",
+                # No lyrics lookups: they were rate-limited and slowed every
+                # song. The phone app fetches lyrics itself.
+                "--lyrics",
                 "--simple-tui"
             ]
+            if self.spotify_id and self.spotify_secret:
+                # The user's own Spotify key: no shared rate limit.
+                sys.argv += ["--client-id", self.spotify_id, "--client-secret", self.spotify_secret]
             sys.stdout = stream
             sys.stderr = stream
             console_entry_point()
@@ -1379,10 +1460,115 @@ class VaultApp(ctk.CTk):
             sources.spotdl_failures.clear()
 
 
+def recycle(path):
+    """Move a file or folder to the Windows Recycle Bin (so it can be restored)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class SHFILEOPSTRUCTW(ctypes.Structure):
+            _fields_ = [("hwnd", wintypes.HWND), ("wFunc", wintypes.UINT), ("pFrom", wintypes.LPCWSTR),
+                        ("pTo", wintypes.LPCWSTR), ("fFlags", ctypes.c_uint16), ("fAnyOperationsAborted", wintypes.BOOL),
+                        ("hNameMappings", ctypes.c_void_p), ("lpszProgressTitle", wintypes.LPCWSTR)]
+
+        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FOF_NOERRORUI = 3, 0x40, 0x10, 0x4, 0x400
+        op = SHFILEOPSTRUCTW(None, FO_DELETE, os.path.abspath(path) + "\0", None,
+                             FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI, False, None, None)
+        return ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op)) == 0
+    except Exception:
+        return False
+
+
+# -------------------------------------------------------------
+# Settings: the user's own Spotify key (faster syncs)
+# -------------------------------------------------------------
+class SettingsDialog(ctk.CTkToplevel):
+    HOWTO = (
+        "Syncing Spotify playlists uses a shared Spotify key that many people use, "
+        "so Spotify slows it down. Your own free key makes new songs faster.\n\n"
+        "1. Open developer.spotify.com/dashboard and log in with your Spotify account.\n"
+        "2. Click Create app. Any name and description are fine.\n"
+        "3. Redirect URI: type http://127.0.0.1:8888/callback and click Add.\n"
+        "4. Tick Web API, accept the terms, and click Save.\n"
+        "5. Open Settings in your new app and copy the Client ID and Client secret here."
+    )
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title("Settings")
+        self.geometry("620x560")
+        self.resizable(False, False)
+        self.configure(fg_color=COLOR_BG)
+        self.transient(app)
+        self.grab_set()
+        icon_path = get_resource_path("app_icon.ico")
+        if os.path.exists(icon_path):
+            self.after(200, lambda: self.iconbitmap(icon_path))
+
+        ctk.CTkLabel(self, text="Settings", font=ctk.CTkFont(family=DISPLAY_FONT, size=26, weight="bold"),
+                     text_color=COLOR_TEXT_PRIMARY, anchor="w").pack(fill="x", padx=28, pady=(22, 2))
+        ctk.CTkLabel(self, text="Your own Spotify key (optional)", font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color=COLOR_TEXT_PRIMARY, anchor="w").pack(fill="x", padx=28, pady=(14, 4))
+        ctk.CTkLabel(self, text=self.HOWTO, font=ctk.CTkFont(size=12), text_color=COLOR_TEXT_MUTED,
+                     anchor="w", justify="left", wraplength=560).pack(fill="x", padx=28)
+        ctk.CTkButton(self, text="Open the Spotify dashboard", height=32, fg_color="transparent",
+                      border_width=1, border_color=COLOR_TEXT_MUTED, text_color=COLOR_TEXT_PRIMARY,
+                      hover_color=COLOR_CARD,
+                      command=lambda: webbrowser.open("https://developer.spotify.com/dashboard")
+                      ).pack(anchor="w", padx=28, pady=(10, 14))
+
+        self.ent_id = self._field("Client ID", app.spotify_id)
+        self.ent_secret = self._field("Client secret", app.spotify_secret, secret=True)
+
+        self.lbl_msg = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=12), text_color=COLOR_TEXT_MUTED, anchor="w")
+        self.lbl_msg.pack(fill="x", padx=28, pady=(6, 0))
+
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x", padx=28, pady=(10, 20), side="bottom")
+        ctk.CTkButton(row, text="Save", width=120, height=38, fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
+                      text_color=COLOR_ON_ACCENT, command=self._save).pack(side="right")
+        ctk.CTkButton(row, text="Remove key", width=120, height=38, fg_color="transparent", border_width=1,
+                      border_color=COLOR_TEXT_MUTED, text_color=COLOR_TEXT_PRIMARY, hover_color=COLOR_CARD,
+                      command=self._clear).pack(side="right", padx=(0, 10))
+        if app.spotify_id:
+            self.lbl_msg.configure(text="Your own key is in use.")
+
+    def _field(self, label, value, secret=False):
+        ctk.CTkLabel(self, text=label, font=ctk.CTkFont(size=12, weight="bold"), text_color=COLOR_TEXT_PRIMARY,
+                     anchor="w").pack(fill="x", padx=28, pady=(6, 2))
+        ent = ctk.CTkEntry(self, height=36, show="•" if secret else "")
+        ent.pack(fill="x", padx=28)
+        if value:
+            ent.insert(0, value)
+        return ent
+
+    def _save(self):
+        cid, sec = self.ent_id.get().strip(), self.ent_secret.get().strip()
+        if bool(cid) != bool(sec):
+            self.lbl_msg.configure(text="Paste both the Client ID and the Client secret.", text_color=COLOR_DANGER)
+            return
+        if cid and (not re.fullmatch(r"[0-9a-fA-F]{32}", cid) or not re.fullmatch(r"[0-9a-fA-F]{32}", sec)):
+            self.lbl_msg.configure(text="Those don't look right: each is 32 letters and numbers.", text_color=COLOR_DANGER)
+            return
+        self.app.spotify_id, self.app.spotify_secret = cid, sec
+        self.app._save_config()
+        self.destroy()
+
+    def _clear(self):
+        self.ent_id.delete(0, "end")
+        self.ent_secret.delete(0, "end")
+        self.app.spotify_id = self.app.spotify_secret = ""
+        self.app._save_config()
+        self.lbl_msg.configure(text="Removed. Syncs use the shared key again.", text_color=COLOR_TEXT_MUTED)
+
+
 # -------------------------------------------------------------
 # Sync report: every failed and skipped song, and why
 # -------------------------------------------------------------
 REPORT_ROW_LIMIT = 300
+FEED_LIMIT = 40  # cards kept in the live activity feed
+REPORT_PAGE = 40  # rows drawn at a time in the report window
 
 
 def search_query_for(title):
@@ -1577,11 +1763,27 @@ class SyncReportWindow(ctk.CTkToplevel):
                                      command=lambda p=playlists: self._retry(p))
             self.btn_group.pack(side="right")
 
-        for e in items[:REPORT_ROW_LIMIT]:
+        self._items = items
+        self._shown = 0
+        self._more_btn = None
+        self._show_more()
+
+    def _show_more(self):
+        if self._more_btn is not None:
+            self._more_btn.destroy()
+            self._more_btn = None
+        items = self._items
+        end = min(len(items), self._shown + REPORT_PAGE)
+        for e in items[self._shown:end]:
             self._row(e)
-        if len(items) > REPORT_ROW_LIMIT:
-            ctk.CTkLabel(self.rows, text=f"…and {len(items) - REPORT_ROW_LIMIT} more. Use Save as text for the full list.",
-                         font=ctk.CTkFont(size=12), text_color=COLOR_TEXT_MUTED).pack(pady=10)
+        self._shown = end
+        left = len(items) - end
+        if left:
+            self._more_btn = ctk.CTkButton(self.rows, text=f"Show {min(left, REPORT_PAGE)} more ({left} left)",
+                                           height=34, fg_color="transparent", border_width=1,
+                                           border_color=COLOR_TEXT_MUTED, text_color=COLOR_TEXT_PRIMARY,
+                                           hover_color=COLOR_CARD, command=self._show_more)
+            self._more_btn.pack(pady=10)
 
     def _row(self, e):
         row = ctk.CTkFrame(self.rows, fg_color="transparent")

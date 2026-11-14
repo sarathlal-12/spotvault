@@ -149,7 +149,7 @@ class NowPlayingScreen extends StatelessWidget {
 
   String _playlistName(Track t) {
     for (final p in store.playlists) {
-      if (p.folder == t.folder) return p.title;
+      if (p.folder == t.folder) return p.name;
     }
     return t.folder;
   }

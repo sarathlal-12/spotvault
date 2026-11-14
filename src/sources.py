@@ -397,6 +397,17 @@ def download(urls, target_dir, report, ffmpeg_path=None):
     names = {source_name_for_url(u) for u in urls}
     saved = f"Saved from {names.pop()}" if len(names) == 1 else "Saved"
 
+    sent_total = []
+
+    def total_hook(d):
+        # How many songs this link has, once, for the app's progress ring.
+        if sent_total:
+            return
+        info = d.get("info_dict") or {}
+        n = info.get("n_entries") or info.get("playlist_count")
+        sent_total.append(True)
+        _emit_total(int(n) if n else len(urls))
+
     def post_hook(filepath):
         name = os.path.splitext(os.path.basename(filepath))[0]
         report("done", name, saved)
@@ -425,6 +436,7 @@ def download(urls, target_dir, report, ffmpeg_path=None):
         "fragment_retries": 5,
         "concurrent_fragment_downloads": 4,
         "post_hooks": [post_hook],
+        "progress_hooks": [total_hook],
         "logger": _ReportLogger(report),
     }
     if ffmpeg_path:
@@ -478,6 +490,7 @@ def sync_youtube(url, target_dir, report, ffmpeg_path=None):
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     entries = [e for e in (info.get("entries") if info.get("entries") is not None else [info]) if e and e.get("id")]
+    _emit_total(len(entries))
 
     path = os.path.join(target_dir, MATCHES_NAME)
     try:
@@ -575,6 +588,25 @@ def apply_spotdl_clean_rules():
     original_download = Downloader.async_search_and_download
 
     async def download_with_retry(self, song):
+        # Songs already on disk: skip them here, before spotdl looks the song
+        # up on Spotify again (10-14 s each with the shared, rate-limited key).
+        try:
+            from spotdl.utils.formatter import create_file_name
+            if song.name and song.artists:
+                out = create_file_name(song=song, template=self.settings["output"],
+                                       file_extension=self.settings["format"],
+                                       restrict=self.settings["restrict"],
+                                       file_name_length=self.settings["max_filename_length"])
+                dup = [p for p in getattr(self, "known_songs", {}).get(song.url, []) if p.exists()]
+                if os.path.exists(str(out.absolute()) + ".skip"):
+                    _spotdl_emit("skip", song.display_name, "Deleted from the phone app", "")
+                    return song, None
+                if out.exists() or dup:
+                    path = out if out.exists() else dup[0]
+                    _spotdl_emit("skip", song.display_name, f"Already on disk: {os.path.basename(str(path))}", str(path))
+                    return song, path
+        except Exception:
+            pass
         for attempt in range(3):
             song_out, path = await original_download(self, song)
             if path is not None:
@@ -606,6 +638,15 @@ def apply_spotdl_clean_rules():
             await asyncio.sleep(4 + attempt * 6)
 
     Downloader.async_search_and_download = download_with_retry
+
+    # Tell the app how many songs the playlist has, for its progress ring.
+    original_multi = Downloader.download_multiple_songs
+
+    def download_multiple_with_total(self, songs):
+        _emit_total(len(songs))
+        return original_multi(self, songs)
+
+    Downloader.download_multiple_songs = download_multiple_with_total
     _spotdl_patched = True
 
 
@@ -615,6 +656,18 @@ spotdl_failures = []
 # Set by the app: called as listener(kind, title, detail, path) for each song.
 spotdl_listener = None
 _spotdl_picked = {}
+
+
+# Set by the app: called with the number of songs in the link being synced.
+total_listener = None
+
+
+def _emit_total(n):
+    if total_listener is not None:
+        try:
+            total_listener(int(n))
+        except Exception:
+            pass
 
 
 def _spotdl_emit(kind, title, detail, path):

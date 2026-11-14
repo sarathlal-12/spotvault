@@ -230,6 +230,8 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._serve_cover(query.get("folder", [""])[0])
             if route == "/api/search":
                 return self._search(query.get("q", [""])[0])
+            if route == "/api/suggest":
+                return self._suggest(query.get("q", [""])[0])
             if route == "/api/preview":
                 return self._preview(query.get("url", [""])[0])
             if route == "/api/job":
@@ -246,6 +248,14 @@ class _Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(min(length, 64 * 1024)) if length > 0 else b""
             if not self._authorized():
                 return
+            if route == "/api/delete":
+                try:
+                    data = json.loads(body or b"{}")
+                except ValueError:
+                    return self._error(400, "Bad JSON")
+                return self._send_json(200, self.sync.delete_from_phone(
+                    [str(x) for x in data.get("paths") or []][:5000],
+                    [str(x) for x in data.get("folders") or []][:500]))
             if route == "/api/download":
                 try:
                     data = json.loads(body or b"{}")
@@ -261,6 +271,18 @@ class _Handler(BaseHTTPRequestHandler):
             pass
 
     # --- online songs --------------------------------------------
+    def _suggest(self, q):
+        """Search suggestions while the phone's user types."""
+        q = q.strip()[:100]
+        out = []
+        if q:
+            try:
+                from ytmusicapi import YTMusic
+                out = [x for x in YTMusic().get_search_suggestions(q) if isinstance(x, str)][:8]
+            except Exception:
+                out = []
+        return self._send_json(200, {"suggestions": out})
+
     def _search(self, q):
         q = q.strip()[:200]
         if not q:
@@ -413,6 +435,7 @@ class PhoneSyncServer:
         self._clients = {}
         self._lock = threading.Lock()
         self.on_library_changed = None   # set by the app: refresh after phone downloads
+        self.on_delete_playlist = None   # set by the app: remove a playlist the phone deleted
         self._jobs = {}
         self._job_queue = []
         self._job_cv = threading.Condition()
@@ -547,6 +570,41 @@ class PhoneSyncServer:
             "generated": int(time.time()),
             "playlists": out,
         }
+
+    def delete_from_phone(self, paths, folders):
+        """The phone chose "Delete from phone and PC". Songs: delete the file and
+        leave a .skip marker so the next sync doesn't download it again.
+        Playlists: the app removes them (folder goes to the Recycle Bin)."""
+        songs = 0
+        for rel in paths:
+            full = self.resolve_track(rel)
+            if not full:
+                continue
+            try:
+                os.remove(full)
+                with open(full + ".skip", "w", encoding="utf-8") as f:
+                    f.write("Deleted from the SpotVault phone app\n")
+                songs += 1
+            except OSError:
+                pass
+        removed = 0
+        master, playlists = self._snapshot()
+        known = {p.get("folder") for p in playlists}
+        for folder in folders:
+            if folder in known and self.on_delete_playlist:
+                try:
+                    self.on_delete_playlist(folder)
+                    removed += 1
+                except Exception:
+                    pass
+        if songs or removed:
+            self._on_event(f"Phone deleted {songs} song(s) and {removed} playlist(s)")
+            if self.on_library_changed:
+                try:
+                    self.on_library_changed()
+                except Exception:
+                    pass
+        return {"songs": songs, "playlists": removed}
 
     def resolve_track(self, rel):
         """Maps a relative path to a real file inside a known playlist folder."""

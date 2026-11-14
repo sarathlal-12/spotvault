@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -6,6 +8,7 @@ import '../library_store.dart';
 import '../pc_link.dart';
 import 'aurora.dart';
 import 'common.dart';
+import 'menus.dart';
 
 enum _Mode { library, online }
 
@@ -28,16 +31,63 @@ class _SearchScreenState extends State<SearchScreen> {
   int _searchId = 0;
   String? _previewLoading;
 
+  // Live search: results follow the text box; suggestions appear while typing.
+  Timer? _typingTimer;
+  Timer? _suggestTimer;
+  List<String> suggestions = [];
+  int _suggestId = 0;
+
   @override
   void dispose() {
+    _typingTimer?.cancel();
+    _suggestTimer?.cancel();
     ctrl.dispose();
     super.dispose();
   }
 
-  Future<void> _runOnline() async {
+  /// Called on every keystroke in "Find new songs".
+  void _typed() {
+    _typingTimer?.cancel();
+    _suggestTimer?.cancel();
+    final q = ctrl.text.trim();
+    if (q.isEmpty) {
+      _searchId++;
+      setState(() {
+        suggestions = [];
+        results = [];
+        error = null;
+        lastQuery = '';
+        searching = false;
+      });
+      return;
+    }
+    _suggestTimer = Timer(const Duration(milliseconds: 200), () async {
+      final id = ++_suggestId;
+      final list = await pcLink.suggest(q);
+      if (!mounted || id != _suggestId || ctrl.text.trim() != q) return;
+      setState(() => suggestions = list.where((x) => x.toLowerCase() != q.toLowerCase()).take(5).toList());
+    });
+    if (q.length >= 2) {
+      _typingTimer = Timer(const Duration(milliseconds: 500), () => _runOnline(typing: true));
+    }
+  }
+
+  void _pickSuggestion(String text) {
+    ctrl.text = text;
+    ctrl.selection = TextSelection.collapsed(offset: text.length);
+    setState(() => suggestions = []);
+    _runOnline();
+  }
+
+  Future<void> _runOnline({bool typing = false}) async {
+    _typingTimer?.cancel();
     final q = ctrl.text.trim();
     if (q.isEmpty) return;
-    FocusScope.of(context).unfocus();
+    if (!typing) {
+      FocusScope.of(context).unfocus();
+      setState(() => suggestions = []);
+    }
+    if (q == lastQuery && results.isNotEmpty && !typing) return;
     final id = ++_searchId;
     setState(() {
       searching = true;
@@ -70,6 +120,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     setState(() => _previewLoading = song.url);
     try {
+      store.addRecentSearch(song.toJson());
       final uri = await pcLink.previewUri(song);
       await playerService.playPreview(uri, key: song.url, title: song.title, artist: song.artist, artUrl: song.thumb);
     } catch (e) {
@@ -91,10 +142,11 @@ class _SearchScreenState extends State<SearchScreen> {
       builder: (ctx) => _PlaylistPicker(song: song),
     );
     if (pl == null) return;
+    store.addRecentSearch(song.toJson());
     final ghost = store.ghostQueue;
     _snack(ghost
         ? '"${song.title}" is in your Ghost Queue. It plays next once it reaches the phone.'
-        : 'Saving "${song.title}" to ${pl.title}…');
+        : 'Saving "${song.title}" to ${pl.name}…');
     pcLink.download(song, pl, playWhenReady: ghost);
   }
 
@@ -135,7 +187,11 @@ class _SearchScreenState extends State<SearchScreen> {
             child: TextField(
               controller: ctrl,
               onChanged: (_) {
-                if (!online) setState(() {});
+                if (online) {
+                  _typed();
+                } else {
+                  setState(() {});
+                }
               },
               onSubmitted: (_) => online ? _runOnline() : null,
               textInputAction: TextInputAction.search,
@@ -146,7 +202,10 @@ class _SearchScreenState extends State<SearchScreen> {
                     ? null
                     : IconButton(
                         icon: const Icon(Icons.close),
-                        onPressed: () => setState(ctrl.clear),
+                        onPressed: () {
+                          ctrl.clear();
+                          online ? _typed() : setState(() {});
+                        },
                       ),
                 prefixIconColor: kAccent,
                 suffixIconColor: kMuted,
@@ -190,6 +249,25 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
             ),
+          if (online && suggestions.isNotEmpty)
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  for (final sgt in suggestions)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ActionChip(
+                        avatar: Icon(Icons.north_west_rounded, size: 14, color: kMuted),
+                        label: Text(sgt),
+                        onPressed: () => _pickSuggestion(sgt),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           Expanded(child: online ? _onlineBody() : _libraryBody()),
         ],
       ),
@@ -228,19 +306,27 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _onlineBody() {
     return ListenableBuilder(
-      listenable: Listenable.merge([pcLink, playerService]),
+      listenable: Listenable.merge([pcLink, playerService, store]),
       builder: (context, _) {
         final jobs = pcLink.jobs.reversed.toList();
         return CustomScrollView(
           slivers: [
             if (jobs.isNotEmpty)
               SliverToBoxAdapter(child: _JobsPanel(jobs: jobs)),
-            if (searching)
+            // While typing, keep the last results on screen with a thin bar.
+            if (searching && results.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  child: LinearProgressIndicator(minHeight: 2, color: kAccent, backgroundColor: Colors.transparent),
+                ),
+              ),
+            if (searching && results.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator(color: kAccent)),
               )
-            else if (error != null)
+            else if (error != null && results.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Padding(
@@ -257,7 +343,21 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               )
-            else if (results.isEmpty)
+            else if (results.isEmpty && lastQuery.isEmpty && store.recentSearches.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 8, 12, 4),
+                  child: Row(children: [
+                    Expanded(child: Text('Recent searches', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: kText))),
+                    TextButton(onPressed: () => setState(store.clearRecentSearches), child: const Text('Clear')),
+                  ]),
+                ),
+              ),
+              SliverList.builder(
+                itemCount: store.recentSearches.length,
+                itemBuilder: (_, i) => _onlineTile(OnlineSong.fromJson(store.recentSearches[i])),
+              ),
+            ] else if (results.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: _Hint(
@@ -540,7 +640,7 @@ class _PlaylistPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lists = store.playlists;
+    final lists = store.sortedPlaylists;
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
@@ -588,10 +688,8 @@ class _PlaylistPicker extends StatelessWidget {
                         title: const Text('New playlist'),
                         subtitle: Text('Keep it on this phone', style: TextStyle(color: kMuted, fontSize: 12)),
                         onTap: () async {
-                          final name = await _askName(context);
-                          if (name != null && context.mounted) {
-                            Navigator.pop(context, PlaylistInfo(folder: name, title: name, trackIds: []));
-                          }
+                          final p = await createPlaylistFlow(context);
+                          if (p != null && context.mounted) Navigator.pop(context, p);
                         },
                       );
                     }
@@ -601,7 +699,7 @@ class _PlaylistPicker extends StatelessWidget {
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                     leading: ArtImage(file: store.coverFor(p), size: 48, fallback: Icons.queue_music),
-                    title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text('${p.trackIds.length} songs', style: TextStyle(color: kMuted, fontSize: 12)),
                     onTap: () => Navigator.pop(context, p),
                   );
@@ -614,33 +712,6 @@ class _PlaylistPicker extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Asks for a new playlist's name. Returns null when cancelled.
-Future<String?> _askName(BuildContext context) async {
-  final ctrl = TextEditingController();
-  final name = await showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('New playlist'),
-      content: TextField(
-        controller: ctrl,
-        autofocus: true,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(hintText: 'Playlist name'),
-        onSubmitted: (v) => Navigator.pop(ctx, v),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Create')),
-      ],
-    ),
-  );
-  ctrl.dispose();
-  final clean = (name ?? '').replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ').trim();
-  if (clean.isEmpty) return null;
-  final taken = store.playlists.where((p) => p.folder.toLowerCase() == clean.toLowerCase()).firstOrNull;
-  return taken?.folder ?? clean;
 }
 
 /// Download progress for songs the user saved from search.

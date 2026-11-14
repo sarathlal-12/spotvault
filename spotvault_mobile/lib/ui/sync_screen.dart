@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../library_store.dart';
+import '../pc_link.dart';
 import '../sync_service.dart';
 import '../update_service.dart';
 import 'aurora.dart';
 import 'update_ui.dart';
 
+/// Sync tab: one big Sync button, what's downloading right now, and
+/// everything else tucked under "More".
 class SyncScreen extends StatefulWidget {
   const SyncScreen({super.key});
 
@@ -18,6 +22,9 @@ class _SyncScreenState extends State<SyncScreen> {
   late final hostCtrl = TextEditingController(text: store.lastHost);
   late final pinCtrl = TextEditingController(text: store.pin);
   int? storageBytes;
+  bool editingPc = false;
+
+  bool get paired => store.lastHost.isNotEmpty && store.pin.isNotEmpty;
 
   @override
   void initState() {
@@ -47,16 +54,18 @@ class _SyncScreenState extends State<SyncScreen> {
 
   Future<void> _sync() async {
     FocusScope.of(context).unfocus();
-    final pin = pinCtrl.text.replaceAll(RegExp(r'\D'), '');
-    await syncService.sync(hostCtrl.text, pin);
+    final host = editingPc || !paired ? hostCtrl.text : store.lastHost;
+    final pin = (editingPc || !paired ? pinCtrl.text : store.pin).replaceAll(RegExp(r'\D'), '');
+    await syncService.sync(host, pin);
     await playerService.refreshAfterSync();
+    if (mounted && syncService.state == SyncState.done) setState(() => editingPc = false);
     _refreshStorage();
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: syncService,
+      listenable: Listenable.merge([syncService, pcLink, store]),
       builder: (context, _) {
         final s = syncService;
         return SafeArea(
@@ -66,138 +75,18 @@ class _SyncScreenState extends State<SyncScreen> {
             children: [
               Row(
                 children: [
-                  Expanded(child: Text('Sync from PC', style: displayStyle(28))),
+                  Expanded(child: Text('Sync', style: displayStyle(28))),
                   const ThemeToggle(),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                'On your PC, open SpotVault and click "Connect phone". Keep both devices on the same Wi-Fi.',
-                style: TextStyle(color: kMuted),
-              ),
-              const SizedBox(height: 16),
-
-              // ---- Found PCs
-              _Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(child: Text('PCs on this Wi-Fi', style: TextStyle(fontWeight: FontWeight.bold))),
-                        s.scanning
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : TextButton.icon(
-                                onPressed: s.busy ? null : () => s.discover().then(_autofill),
-                                icon: const Icon(Icons.wifi_find, size: 18),
-                                label: const Text('Scan'),
-                              ),
-                      ],
-                    ),
-                    if (s.found.isEmpty && !s.scanning)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text('None found. Type the address from your PC below.', style: TextStyle(color: kMuted, fontSize: 13)),
-                      ),
-                    for (final pc in s.found)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.laptop_windows, color: kAccent),
-                        title: Text(pc.name),
-                        subtitle: Text(_hostText(pc), style: TextStyle(color: kMuted)),
-                        trailing: hostCtrl.text == _hostText(pc) ? Icon(Icons.check_circle, color: kAccent) : null,
-                        onTap: () => setState(() => hostCtrl.text = _hostText(pc)),
-                      ),
-                  ],
-                ),
-              ),
+              const SizedBox(height: 14),
+              _syncCard(s),
               const SizedBox(height: 12),
-
-              // ---- Connection fields
-              _Card(
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: hostCtrl,
-                      enabled: !s.busy,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'PC address',
-                        hintText: 'e.g. 192.168.0.113',
-                        prefixIcon: Icon(Icons.lan_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: pinCtrl,
-                      enabled: !s.busy,
-                      keyboardType: TextInputType.number,
-                      maxLength: 7,
-                      decoration: const InputDecoration(
-                        labelText: 'PIN',
-                        hintText: 'Shown in the Phone Sync window',
-                        prefixIcon: Icon(Icons.pin_outlined),
-                        counterText: '',
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: s.busy
-                          ? OutlinedButton.icon(
-                              onPressed: s.cancel,
-                              icon: const Icon(Icons.stop),
-                              label: const Text('Stop'),
-                            )
-                          : GradientButton(icon: Icons.sync_rounded, label: 'Sync now', onTap: _sync),
-                    ),
-                  ],
-                ),
-              ),
+              _DownloadsCard(jobs: pcLink.jobs.reversed.toList(), syncing: s.busy ? s.active.toList() : const []),
               const SizedBox(height: 12),
-
-              // ---- Progress / result
-              if (s.state != SyncState.idle) _ProgressCard(s),
+              _statsLine(),
               const SizedBox(height: 12),
-
-              // ---- Settings & info
-              _Card(
-                child: Column(
-                  children: [
-                    ListenableBuilder(
-                      listenable: store,
-                      builder: (_, __) => SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: store.mirrorDeletes,
-                        onChanged: s.busy ? null : store.setMirrorDeletes,
-                        title: const Text('Remove songs deleted on PC'),
-                        subtitle: Text('Keeps the phone an exact copy of your PC library', style: TextStyle(color: kMuted, fontSize: 12)),
-                      ),
-                    ),
-                    const Divider(),
-                    _InfoRow('Songs on phone', '${store.tracks.length}'),
-                    _InfoRow('Playlists', '${store.playlists.length}'),
-                    _InfoRow('Storage used', storageBytes == null ? '…' : formatBytes(storageBytes!)),
-                    _InfoRow(
-                      'Last sync',
-                      store.lastSync == 0 ? 'Never' : _ago(DateTime.fromMillisecondsSinceEpoch(store.lastSync)),
-                    ),
-                    if (store.pcName.isNotEmpty) _InfoRow('PC', store.pcName),
-                    const Divider(),
-                    const _InfoRow('App version', 'v$kAppVersion'),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => runUpdateCheck(context, manual: true),
-                        icon: const Icon(Icons.system_update_alt),
-                        label: const Text('Check for updates'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _moreCard(s),
               const SizedBox(height: 180),
             ],
           ),
@@ -206,68 +95,327 @@ class _SyncScreenState extends State<SyncScreen> {
     );
   }
 
-  String _ago(DateTime t) {
-    final d = DateTime.now().difference(t);
-    if (d.inMinutes < 1) return 'Just now';
-    if (d.inHours < 1) return '${d.inMinutes} min ago';
-    if (d.inDays < 1) return '${d.inHours} h ago';
-    return '${d.inDays} days ago';
-  }
-}
-
-class _ProgressCard extends StatelessWidget {
-  final SyncService s;
-  const _ProgressCard(this.s);
-
-  @override
-  Widget build(BuildContext context) {
-    final (icon, color) = switch (s.state) {
-      SyncState.done => (Icons.check_circle, kAccent),
-      SyncState.error => (Icons.error, Colors.redAccent),
-      SyncState.cancelled => (Icons.pause_circle, Colors.orangeAccent),
-      _ => (Icons.sync, Colors.white),
-    };
+  // ---------------------------------------------------------------- main card
+  Widget _syncCard(SyncService s) {
+    final showFields = !paired || editingPc;
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: color),
-              const SizedBox(width: 10),
-              Expanded(child: Text(s.message, style: TextStyle(color: color, fontWeight: FontWeight.w600))),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: kAccent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(14)),
+                child: Icon(Icons.laptop_windows_rounded, color: kAccent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(paired ? (store.pcName.isEmpty ? 'Your PC' : store.pcName) : 'Connect your PC',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    Text(
+                      paired
+                          ? (store.lastSync == 0 ? 'Not synced yet' : 'Last sync ${_ago(DateTime.fromMillisecondsSinceEpoch(store.lastSync))}')
+                          : 'Open SpotVault on your PC and click "Connect phone". Same Wi-Fi.',
+                      style: TextStyle(color: kMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-          if (s.state == SyncState.syncing && s.filesTotal > 0) ...[
+          if (showFields) ...[
             const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(end: s.progress),
-                duration: const Duration(milliseconds: 400),
-                builder: (_, v, __) => Stack(children: [
-                  Container(height: 6, color: pal.track),
-                  FractionallySizedBox(
-                    widthFactor: v.clamp(0.0, 1.0),
-                    child: Container(height: 6, decoration: const BoxDecoration(gradient: kBrandGradient)),
-                  ),
-                ]),
+            if (s.found.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final pc in s.found)
+                    ChoiceChip(
+                      label: Text(pc.name),
+                      selected: hostCtrl.text == _hostText(pc),
+                      onSelected: (_) => setState(() => hostCtrl.text = _hostText(pc)),
+                    ),
+                ],
+              ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: hostCtrl,
+              enabled: !s.busy,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'PC address',
+                hintText: 'e.g. 192.168.0.113',
+                prefixIcon: const Icon(Icons.lan_outlined),
+                suffixIcon: s.scanning
+                    ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : IconButton(
+                        tooltip: 'Find PCs on this Wi-Fi',
+                        icon: const Icon(Icons.wifi_find),
+                        onPressed: s.busy ? null : () => s.discover().then(_autofill),
+                      ),
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              '${s.filesDone} / ${s.filesTotal} songs · ${formatBytes(s.bytesDone)} of ${formatBytes(s.bytesTotal)}',
-              style: TextStyle(color: kMuted, fontSize: 12),
-            ),
-            for (final name in s.active)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('↓ $name', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+            TextField(
+              controller: pinCtrl,
+              enabled: !s.busy,
+              keyboardType: TextInputType.number,
+              maxLength: 7,
+              decoration: const InputDecoration(
+                labelText: 'PIN',
+                hintText: 'Shown in the Connect phone window',
+                prefixIcon: Icon(Icons.pin_outlined),
+                counterText: '',
               ),
+            ),
           ],
-          if (s.state == SyncState.connecting) ...[
-            const SizedBox(height: 12),
-            LinearProgressIndicator(minHeight: 6, color: kAccent, backgroundColor: pal.track),
+          const SizedBox(height: 14),
+          if (s.state != SyncState.idle && s.state != SyncState.done) _Progress(s),
+          if (s.state == SyncState.done)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(children: [
+                const Icon(Icons.check_circle_rounded, color: kCyan, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(s.message, style: TextStyle(color: kMuted, fontSize: 13))),
+              ]),
+            ),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: s.busy
+                ? OutlinedButton.icon(onPressed: s.cancel, icon: const Icon(Icons.stop_rounded), label: const Text('Stop'))
+                : GradientButton(icon: Icons.sync_rounded, label: paired && !editingPc ? 'Sync with PC' : 'Connect and sync', onTap: _sync),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statsLine() {
+    final parts = [
+      '${store.tracks.length} songs',
+      '${store.playlists.length} playlists',
+      if (storageBytes != null) formatBytes(storageBytes!),
+    ];
+    return Text(parts.join('  ·  '), textAlign: TextAlign.center, style: TextStyle(color: kMuted, fontSize: 12));
+  }
+
+  // ---------------------------------------------------------------- More
+  Widget _moreCard(SyncService s) {
+    return _Card(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          title: const Text('More', style: TextStyle(fontWeight: FontWeight.w700)),
+          children: [
+            if (paired)
+              _MoreTile(
+                icon: Icons.swap_horiz_rounded,
+                title: 'Change PC',
+                subtitle: '${store.lastHost} · PIN ${store.pin.isEmpty ? '—' : '••••'}',
+                onTap: s.busy ? null : () => setState(() => editingPc = !editingPc),
+              ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: store.mirrorDeletes,
+              onChanged: s.busy ? null : store.setMirrorDeletes,
+              title: const Text('Remove songs deleted on PC'),
+              subtitle: Text('Songs you saved on the phone are always kept', style: TextStyle(color: kMuted, fontSize: 12)),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: !pcLink.onPhone,
+              onChanged: (v) => pcLink.setUseBridge(v),
+              title: const Text('Download new songs on my PC'),
+              subtitle: Text('Off: the phone downloads songs itself', style: TextStyle(color: kMuted, fontSize: 12)),
+            ),
+            if (store.excludedTracks.isNotEmpty || store.excludedFolders.isNotEmpty)
+              _MoreTile(
+                icon: Icons.restore_rounded,
+                title: 'Bring back removed songs',
+                subtitle: '${store.excludedTracks.length} songs, ${store.excludedFolders.length} playlists come back at the next sync',
+                onTap: () {
+                  store.restoreHidden();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('They come back at your next sync')));
+                },
+              ),
+            _MoreTile(
+              icon: Icons.receipt_long_rounded,
+              title: 'Downloader log',
+              subtitle: 'What happened with recent downloads',
+              onTap: () => _showLog(context),
+            ),
+            _MoreTile(
+              icon: Icons.system_update_alt_rounded,
+              title: 'Check for updates',
+              subtitle: 'You have v$kAppVersion',
+              onTap: () => runUpdateCheck(context, manual: true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showLog(BuildContext context) async {
+    final text = await pcLink.engineLog();
+    if (!context.mounted) return;
+    final lines = text.trim().split('\n');
+    final shown = lines.length > 300 ? lines.sublist(lines.length - 300).join('\n') : text.trim();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * 0.75,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                child: Row(children: [
+                  const Expanded(child: Text('Downloader log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                  TextButton.icon(
+                    onPressed: shown.isEmpty
+                        ? null
+                        : () {
+                            Clipboard.setData(ClipboardData(text: shown));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Log copied')));
+                          },
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    label: const Text('Copy'),
+                  ),
+                ]),
+              ),
+              Expanded(
+                child: shown.isEmpty
+                    ? Center(child: Text('Nothing yet. Save a song from Search first.', style: TextStyle(color: kMuted)))
+                    : SingleChildScrollView(
+                        reverse: true,
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        child: SelectableText(shown, style: const TextStyle(fontFamily: 'monospace', fontSize: 11, height: 1.4)),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _ago(DateTime t) {
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inHours < 1) return '${d.inMinutes} min ago';
+    if (d.inDays < 1) return '${d.inHours} h ago';
+    return d.inDays == 1 ? 'yesterday' : '${d.inDays} days ago';
+  }
+}
+
+/// Songs downloading right now: phone saves and files copying from the PC.
+class _DownloadsCard extends StatelessWidget {
+  final List<DlJob> jobs;
+  final List<String> syncing;
+  const _DownloadsCard({required this.jobs, required this.syncing});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = jobs.where((j) => !j.finished).toList();
+    final recent = jobs.where((j) => j.finished).take(3).toList();
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Expanded(child: Text('Downloads', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+            if (recent.isNotEmpty) TextButton(onPressed: pcLink.clearFinished, child: const Text('Clear')),
+          ]),
+          if (active.isEmpty && syncing.isEmpty && recent.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('Nothing downloading. Songs you save from Search show up here.', style: TextStyle(color: kMuted, fontSize: 13)),
+            ),
+          for (final name in syncing) _JobRow(title: name, message: 'Copying from PC', state: DlState.copying),
+          for (final j in active) _JobRow(title: j.song.title, message: j.message, state: j.state),
+          for (final j in recent) _JobRow(title: j.song.title, message: j.message, state: j.state),
+        ],
+      ),
+    );
+  }
+}
+
+class _JobRow extends StatelessWidget {
+  final String title;
+  final String message;
+  final DlState state;
+  const _JobRow({required this.title, required this.message, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = switch (state) {
+      DlState.saved => const Icon(Icons.check_circle_rounded, color: kCyan, size: 20),
+      DlState.failed => Icon(Icons.error_outline_rounded, color: pal.danger, size: 20),
+      _ => SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: kAccent)),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        icon,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            Text(message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: state == DlState.failed ? pal.danger : kMuted)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _Progress extends StatelessWidget {
+  final SyncService s;
+  const _Progress(this.s);
+
+  @override
+  Widget build(BuildContext context) {
+    final error = s.state == SyncState.error || s.state == SyncState.cancelled;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(s.message, style: TextStyle(color: error ? pal.danger : kText, fontWeight: FontWeight.w600, fontSize: 13)),
+          if (!error) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: s.state == SyncState.syncing && s.filesTotal > 0
+                  ? TweenAnimationBuilder<double>(
+                      tween: Tween(end: s.progress),
+                      duration: const Duration(milliseconds: 300),
+                      builder: (_, v, __) => LinearProgressIndicator(value: v.clamp(0.0, 1.0), minHeight: 6, color: kAccent, backgroundColor: pal.track),
+                    )
+                  : LinearProgressIndicator(minHeight: 6, color: kAccent, backgroundColor: pal.track),
+            ),
+            if (s.state == SyncState.syncing && s.filesTotal > 0) ...[
+              const SizedBox(height: 6),
+              Text('${s.filesDone} / ${s.filesTotal} songs · ${formatBytes(s.bytesDone)} of ${formatBytes(s.bytesTotal)}',
+                  style: TextStyle(color: kMuted, fontSize: 12)),
+            ],
           ],
         ],
       ),
@@ -275,35 +423,37 @@ class _ProgressCard extends StatelessWidget {
   }
 }
 
+class _MoreTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+  const _MoreTile({required this.icon, required this.title, required this.subtitle, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon, color: kAccent),
+        title: Text(title),
+        subtitle: Text(subtitle, style: TextStyle(color: kMuted, fontSize: 12)),
+        trailing: Icon(Icons.chevron_right_rounded, color: kMuted),
+        onTap: onTap,
+      );
+}
+
 class _Card extends StatelessWidget {
   final Widget child;
-  const _Card({required this.child});
+  final EdgeInsetsGeometry padding;
+  const _Card({required this.child, this.padding = const EdgeInsets.all(16)});
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
+        padding: padding,
         decoration: BoxDecoration(
           color: pal.dark ? pal.glass : pal.surface,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: kLine),
         ),
         child: child,
-      );
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _InfoRow(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: TextStyle(color: kMuted))),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ],
-        ),
       );
 }

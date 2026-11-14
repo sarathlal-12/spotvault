@@ -61,6 +61,24 @@ try:
 except Exception as e:  # pragma: no cover
     log("certifi missing:", e)
 
+# Phones switch between Wi-Fi and mobile data; a request with no time limit
+# can then wait forever (a stuck search or Save). ytmusicapi and our own calls
+# use requests without timeouts, so give every request one.
+NET_TIMEOUT = 20
+try:
+    import requests as _requests
+
+    _session_request = _requests.sessions.Session.request
+
+    def _request_with_timeout(self, method, url, **kwargs):
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = NET_TIMEOUT
+        return _session_request(self, method, url, **kwargs)
+
+    _requests.sessions.Session.request = _request_with_timeout
+except Exception as e:  # pragma: no cover
+    log("requests timeout patch failed:", e)
+
 # On Android, pure-Python packages are imported straight from a zip inside the
 # APK, where gettext can't open files. ytmusicapi loads its language file with
 # gettext.translation("base", ...), so read that file through importlib instead.
@@ -110,6 +128,7 @@ YDL_BASE = {
     "js_runtimes": {},
     "retries": 5,
     "fragment_retries": 5,
+    "socket_timeout": NET_TIMEOUT,
 }
 # Formats a phone can play without converting: AAC/m4a first, then mp3.
 AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio[ext=mp3]/bestaudio[acodec=mp3]"
@@ -266,6 +285,17 @@ def _run(job):
                source=sources.source_name_for_url(job["url"]))
 
 
+_ytm = None
+
+
+def _ytmusic():
+    global _ytm
+    if _ytm is None:
+        from ytmusicapi import YTMusic
+        _ytm = YTMusic()
+    return _ytm
+
+
 def _worker():
     while True:
         with _cv:
@@ -396,13 +426,24 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(parsed.query)
         route = parsed.path.rstrip("/")
+        started = time.time()
         try:
             if route == "/api/status":
                 return self._json(200, {"app": "SpotVault", "engine": "phone", "version": VERSION})
             if not self._authorized():
                 return
+            if route == "/api/_break" and os.environ.get("SV_TEST"):
+                # Tests: close the listening socket, like iOS does to a sleeping app.
+                self._json(200, {"ok": True})
+                self.server.socket.close()
+                return
             if route == "/api/search":
-                return self._search(q.get("q", [""])[0], q.get("src", [""])[0])
+                try:
+                    return self._search(q.get("q", [""])[0], q.get("src", [""])[0])
+                finally:
+                    log(f"search took {time.time() - started:.1f}s")
+            if route == "/api/suggest":
+                return self._suggest(q.get("q", [""])[0])
             if route == "/api/preview":
                 return self._preview(q.get("url", [""])[0])
             if route == "/api/job":
@@ -437,6 +478,17 @@ class Handler(BaseHTTPRequestHandler):
             self._error(404, "Not found")
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
+
+    def _suggest(self, text):
+        """Search suggestions while typing (YouTube Music's own)."""
+        text = text.strip()[:100]
+        out = []
+        if text:
+            try:
+                out = [s for s in _ytmusic().get_search_suggestions(text) if isinstance(s, str)][:8]
+            except Exception as e:
+                log("suggest failed:", type(e).__name__, str(e)[:200])
+        return self._json(200, {"suggestions": out})
 
     def _search(self, text, only=""):
         """Clean-music order like the PC's search_any (YouTube Music, SoundCloud,
@@ -536,12 +588,66 @@ class Handler(BaseHTTPRequestHandler):
             up.close()
 
 
+class Server(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+def _serve(srv):
+    try:
+        srv.serve_forever(poll_interval=0.5)
+    except Exception as e:
+        log("server loop stopped:", type(e).__name__, e)
+
+
+def _start_server(port):
+    srv = Server(("127.0.0.1", port), Handler)
+    threading.Thread(target=_serve, args=(srv,), daemon=True).start()
+    return srv
+
+
+def _healthy(port):
+    """Can we still reach our own server? (iOS closes a sleeping app's sockets.)"""
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=3) as s:
+            s.sendall(b"GET /api/status HTTP/1.0\r\n\r\n")
+            return s.recv(12).startswith(b"HTTP/1.")
+    except OSError:
+        return False
+
+
 def main():
     threading.Thread(target=_worker, daemon=True).start()
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    server.daemon_threads = True
-    log("SpotVault phone engine on port", server.server_address[1])
-    server.serve_forever()
+    srv = _start_server(PORT)
+    port = srv.server_address[1]
+    log("SpotVault phone engine on port", port)
+    # Watchdog: when the phone puts the app to sleep, iOS may take the
+    # listening socket away. Notice that and listen again on the same port,
+    # keeping downloads and jobs that are in memory.
+    misses = 0
+    while True:
+        time.sleep(1)
+        if _healthy(port):
+            misses = 0
+            continue
+        misses += 1
+        if misses < 2:
+            continue
+        log("server not answering; listening again")
+        try:
+            srv.server_close()
+        except Exception:
+            pass
+        for _ in range(30):
+            try:
+                srv = _start_server(port)
+                log("server back on port", port)
+                break
+            except OSError as e:
+                log("listen failed:", e)
+                time.sleep(1)
+        misses = 0
 
 
 # Started by the app (or a test) with SV_TOKEN set; __name__ isn't reliable on the phone.

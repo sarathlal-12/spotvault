@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../library_store.dart';
 import 'aurora.dart';
+import 'menus.dart';
 import 'now_playing_screen.dart';
 
 /// Square artwork with a music-note fallback.
@@ -65,8 +66,10 @@ class TrackTile extends StatelessWidget {
   final List<Track> list;
   final int index;
   final bool showArt;
+  /// The playlist this list shows, if any (song menu can remove from it).
+  final PlaylistInfo? playlist;
 
-  const TrackTile({super.key, required this.track, required this.list, required this.index, this.showArt = true});
+  const TrackTile({super.key, required this.track, required this.list, required this.index, this.showArt = true, this.playlist});
 
   @override
   Widget build(BuildContext context) {
@@ -110,91 +113,20 @@ class TrackTile extends StatelessWidget {
               IconButton(
                 tooltip: 'More',
                 icon: Icon(Icons.more_vert, color: kMuted),
-                onPressed: () => showTrackMenu(context, track),
+                onPressed: () => showTrackMenu(context, track, playlist: playlist),
               ),
             ],
           ),
           onTap: () => playerService.playTracks(list, start: index),
-          onLongPress: () => showTrackMenu(context, track),
+          onLongPress: () => showTrackMenu(context, track, playlist: playlist),
         );
       },
     );
   }
 }
 
-void showTrackMenu(BuildContext context, Track t) {
-  showModalBottomSheet(
-    context: context,
-    showDragHandle: true,
-    builder: (ctx) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: TrackArt(t),
-            title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: Icon(store.isLiked(t.id) ? Icons.favorite : Icons.favorite_border, color: kPink),
-            title: Text(store.isLiked(t.id) ? 'Remove from Liked Songs' : 'Add to Liked Songs'),
-            onTap: () {
-              store.toggleLike(t.id);
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.playlist_play),
-            title: const Text('Play next'),
-            onTap: () {
-              playerService.playNext(t);
-              Navigator.pop(ctx);
-              _toast(context, 'Playing next');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.queue_music),
-            title: const Text('Add to queue'),
-            onTap: () {
-              playerService.addToQueue(t);
-              Navigator.pop(ctx);
-              _toast(context, 'Added to queue');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('Details'),
-            onTap: () {
-              Navigator.pop(ctx);
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: Text(t.title),
-                  content: Text(
-                    'Artist: ${t.artist.isEmpty ? '—' : t.artist}\n'
-                    'Album: ${t.album.isEmpty ? '—' : t.album}\n'
-                    'Length: ${formatDuration(t.length)}\n'
-                    'Size: ${formatBytes(t.size)}\n'
-                    'Played: ${store.playCounts[t.id] ?? 0} times\n'
-                    'Folder: ${t.folder}',
-                  ),
-                  actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    ),
-  );
-}
+void showTrackMenu(BuildContext context, Track t, {PlaylistInfo? playlist}) => showSongMenu(context, t, playlist: playlist);
 
-void _toast(BuildContext context, String text) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(text), duration: const Duration(seconds: 1)));
-}
 
 /// Glass dock above the bottom navigation showing the current song.
 class MiniPlayer extends StatelessWidget {

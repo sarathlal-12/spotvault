@@ -26,6 +26,8 @@ class OnlineSong {
         url: (j['url'] as String?) ?? '',
         thumb: (j['thumb'] as String?) ?? '',
       );
+
+  Map<String, dynamic> toJson() => {'title': title, 'artist': artist, 'duration': duration, 'url': url, 'thumb': thumb};
 }
 
 enum DlState { connecting, downloading, copying, saved, failed }
@@ -167,12 +169,37 @@ class PcLink extends ChangeNotifier {
   /// [source] limits the phone's search to one source ('ytmusic', 'soundcloud', 'youtube').
   Future<List<OnlineSong>> search(String query, {String source = ''}) async {
     await connect();
-    final res = await http
-        .get(_uri('/api/search', {'q': query, if (source.isNotEmpty) 'src': source}), headers: _headers)
-        .timeout(const Duration(seconds: 45));
-    _checkStatus(res);
-    final list = (jsonDecode(utf8.decode(res.bodyBytes))['results'] as List).cast<Map<String, dynamic>>();
-    return [for (final j in list) OnlineSong.fromJson(j)].where((s) => s.url.isNotEmpty).toList();
+    try {
+      final res = await http
+          .get(_uri('/api/search', {'q': query, if (source.isNotEmpty) 'src': source}), headers: _headers)
+          .timeout(const Duration(seconds: 70));
+      _checkStatus(res);
+      final list = (jsonDecode(utf8.decode(res.bodyBytes))['results'] as List).cast<Map<String, dynamic>>();
+      return [for (final j in list) OnlineSong.fromJson(j)].where((s) => s.url.isNotEmpty).toList();
+    } catch (e) {
+      if (onPhone) await PhoneEngine.instance.note('search "$query" failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Search suggestions while typing. Never throws; empty when unavailable.
+  Future<List<String>> suggest(String text) async {
+    try {
+      await connect();
+      final res = await http
+          .get(_uri('/api/suggest', {'q': text}), headers: _headers)
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode != 200) return const [];
+      return List<String>.from(jsonDecode(utf8.decode(res.bodyBytes))['suggestions'] as List);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// The phone downloader's log, for the "Downloader log" screen.
+  Future<String> engineLog() {
+    PhoneEngine.instance.logPath ??= '${store.baseDir.path}/engine.log';
+    return PhoneEngine.instance.readLog();
   }
 
   /// Stream address for listening to a song before downloading it.
@@ -192,7 +219,7 @@ class PcLink extends ChangeNotifier {
   /// by a copy to the phone.
   Future<void> download(OnlineSong song, PlaylistInfo playlist, {bool playWhenReady = false}) async {
     final phone = onPhone;
-    final job = DlJob(song, playlist.folder, playlist.title, playWhenReady: playWhenReady, onPhone: phone);
+    final job = DlJob(song, playlist.folder, playlist.name, playWhenReady: playWhenReady, onPhone: phone);
     jobs.add(job);
     notifyListeners();
     try {
@@ -211,7 +238,7 @@ class PcLink extends ChangeNotifier {
       if (res.statusCode == 400) {
         final err = (jsonDecode(utf8.decode(res.bodyBytes))['error'] as String?) ?? '';
         throw PcException(err.contains('not on this PC')
-            ? '"${playlist.title}" is not on your PC. Pick a playlist that came from the PC, or switch off "Use my PC".'
+            ? '"${playlist.name}" is not on your PC. Pick a playlist that came from the PC, or switch off "Use my PC".'
             : err);
       }
       _checkStatus(res);
@@ -220,9 +247,25 @@ class PcLink extends ChangeNotifier {
       _set(job, DlState.downloading, phone ? 'Downloading…' : 'Downloading on your PC…');
       final deadline = DateTime.now().add(const Duration(minutes: 10));
       Map<String, dynamic> j;
+      var lostSince = DateTime.now();
+      var lost = false;
       while (true) {
         await Future.delayed(Duration(milliseconds: phone ? 800 : 2000));
-        final r = await http.get(_uri('/api/job', {'id': id}), headers: _headers).timeout(const Duration(seconds: 15));
+        http.Response r;
+        try {
+          r = await http.get(_uri('/api/job', {'id': id}), headers: _headers).timeout(const Duration(seconds: 15));
+        } catch (e) {
+          // The phone may have put the app to sleep for a moment; the
+          // downloader comes back on the same port and keeps the job.
+          if (!lost) {
+            lost = true;
+            lostSince = DateTime.now();
+            if (phone) await PhoneEngine.instance.note('job $id: lost contact ($e), waiting');
+          }
+          if (DateTime.now().difference(lostSince) > const Duration(seconds: 60)) rethrow;
+          continue;
+        }
+        lost = false;
         _checkStatus(r);
         j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
         if (j['state'] == 'done' || j['state'] == 'failed') break;
@@ -247,17 +290,20 @@ class PcLink extends ChangeNotifier {
         if (!arrived) throw PcException('Downloaded on the PC, but copying failed. Sync again from the Sync tab.');
         saved = store.tracks.values.where((t) => t.path == path).firstOrNull;
       }
-      _set(job, DlState.saved, j['already'] == true ? 'Already in ${playlist.title}' : 'Saved to ${playlist.title}');
+      _set(job, DlState.saved, j['already'] == true ? 'Already in ${playlist.name}' : 'Saved to ${playlist.name}');
       if (job.playWhenReady && saved != null) {
         await onReady?.call(saved);
-        _set(job, DlState.saved, 'Saved to ${playlist.title} · playing next');
+        _set(job, DlState.saved, 'Saved to ${playlist.name} · playing next');
       }
     } on PcException catch (e) {
       _set(job, DlState.failed, e.message);
     } on TimeoutException {
       _set(job, DlState.failed, phone ? 'The downloader stopped responding. Try again.' : 'Your PC stopped responding.');
     } catch (e) {
-      _set(job, DlState.failed, 'Download failed: $e');
+      _set(job, DlState.failed, phone ? 'Lost contact with the downloader. Try again.' : 'Download failed: $e');
+    }
+    if (phone && job.state == DlState.failed) {
+      await PhoneEngine.instance.note('save "${song.title}" failed: ${job.message}');
     }
   }
 
@@ -290,7 +336,7 @@ class PcLink extends ChangeNotifier {
     } else if (store.tracks[id]?.hasArt == true) {
       t.hasArt = true;
     }
-    return store.addPhoneTrack(t, folder: playlist.folder, title: playlist.title);
+    return store.addPhoneTrack(t, folder: playlist.folder, title: playlist.name);
   }
 
   /// Plain-language reason for a failed on-phone download.

@@ -4,6 +4,7 @@ import '../app_state.dart';
 import '../library_store.dart';
 import 'aurora.dart';
 import 'common.dart';
+import 'menus.dart';
 import 'track_list_screen.dart';
 
 /// Home: continue listening, quick lists and the playlist grid.
@@ -25,7 +26,7 @@ class LibraryScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([store, playerService]),
       builder: (context, _) {
-        final empty = store.tracks.isEmpty;
+        final empty = store.tracks.isEmpty && store.playlists.isEmpty;
         return SafeArea(
           bottom: false,
           child: CustomScrollView(
@@ -82,26 +83,30 @@ class LibraryScreen extends StatelessWidget {
                           _Chip(
                             icon: Icons.favorite_rounded,
                             label: 'Liked · ${store.likedTracks.length}',
-                            onTap: () => _open(context,
-                                TrackListScreen(title: 'Liked Songs', source: () => store.likedTracks, icon: Icons.favorite, allowPcOrder: false)),
+                            onTap: () => _open(
+                                context,
+                                TrackListScreen(
+                                    title: 'Liked Songs', source: () => store.likedTracks, icon: Icons.favorite, allowPcOrder: false)),
                           ),
                           _Chip(
                             icon: Icons.library_music_rounded,
                             label: 'All songs · ${store.tracks.length}',
-                            onTap: () => _open(context,
-                                TrackListScreen(title: 'All Songs', source: () => store.allTracks, icon: Icons.library_music, allowPcOrder: false)),
+                            onTap: () => _open(
+                                context,
+                                TrackListScreen(
+                                    title: 'All Songs', source: () => store.allTracks, icon: Icons.library_music, allowPcOrder: false)),
                           ),
                           _Chip(
                             icon: Icons.history_rounded,
                             label: 'Recent',
-                            onTap: () => _open(context,
-                                TrackListScreen(title: 'Recently Played', source: () => store.recentTracks, icon: Icons.history)),
+                            onTap: () => _open(
+                                context, TrackListScreen(title: 'Recently Played', source: () => store.recentTracks, icon: Icons.history)),
                           ),
                           _Chip(
                             icon: Icons.trending_up_rounded,
                             label: 'Most played',
-                            onTap: () => _open(context,
-                                TrackListScreen(title: 'Most Played', source: () => store.mostPlayed, icon: Icons.trending_up)),
+                            onTap: () => _open(
+                                context, TrackListScreen(title: 'Most Played', source: () => store.mostPlayed, icon: Icons.trending_up)),
                           ),
                         ],
                       ),
@@ -114,7 +119,11 @@ class LibraryScreen extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(child: Text('Your playlists', style: displayStyle(20))),
-                        Text('${store.playlists.length}', style: TextStyle(color: kMuted, fontWeight: FontWeight.w600)),
+                        TextButton.icon(
+                          onPressed: () => createPlaylistFlow(context),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('New'),
+                        ),
                       ],
                     ),
                   ),
@@ -128,17 +137,19 @@ class LibraryScreen extends StatelessWidget {
                       crossAxisSpacing: 14,
                       childAspectRatio: 0.78,
                     ),
-                    itemCount: store.playlists.length,
+                    itemCount: store.sortedPlaylists.length,
                     itemBuilder: (context, i) {
-                      final p = store.playlists[i];
+                      final p = store.sortedPlaylists[i];
                       return FadeSlideIn(
                         delay: Duration(milliseconds: 220 + 50 * (i < 8 ? i : 8)),
                         child: _PlaylistCard(
                           playlist: p,
+                          onMenu: () => showPlaylistMenu(context, p),
                           onOpen: () => _open(
                             context,
                             TrackListScreen(
-                              title: p.title,
+                              title: p.name,
+                              playlistFolder: p.folder,
                               cover: store.coverFor(p),
                               source: () {
                                 final cur = store.playlists.where((x) => x.folder == p.folder);
@@ -184,12 +195,19 @@ class _EmptyState extends StatelessWidget {
             Text('No music yet', style: displayStyle(22)),
             const SizedBox(height: 8),
             Text(
-              'Open SpotVault on your PC, then sync your playlists to this phone over Wi-Fi.',
+              'Find any song and save it straight to this phone, or sync your playlists from SpotVault on your PC.',
               textAlign: TextAlign.center,
               style: TextStyle(color: kMuted, height: 1.4),
             ),
             const SizedBox(height: 22),
-            GradientButton(icon: Icons.sync_rounded, label: 'Sync from PC', onTap: () => currentTab.value = 3),
+            GradientButton(icon: Icons.travel_explore_rounded, label: 'Find songs', onTap: () => currentTab.value = 1),
+            const SizedBox(height: 10),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              TextButton.icon(
+                  onPressed: () => currentTab.value = 3, icon: const Icon(Icons.sync_rounded), label: const Text('Sync from PC')),
+              TextButton.icon(
+                  onPressed: () => createPlaylistFlow(context), icon: const Icon(Icons.add_rounded), label: const Text('New playlist')),
+            ]),
           ],
         ),
       ),
@@ -237,9 +255,7 @@ class _ContinueCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         onTap: () => openNowPlaying(context),
         gradient: LinearGradient(
-          colors: pal.dark
-              ? [kViolet.withValues(alpha: 0.26), kForest.withValues(alpha: 0.22)]
-              : [Colors.white, const Color(0xFFF6E6E2)],
+          colors: pal.dark ? [kViolet.withValues(alpha: 0.26), kForest.withValues(alpha: 0.22)] : [Colors.white, const Color(0xFFF6E6E2)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -333,69 +349,87 @@ class _Chip extends StatelessWidget {
 class _PlaylistCard extends StatelessWidget {
   final PlaylistInfo playlist;
   final VoidCallback onOpen;
-  const _PlaylistCard({required this.playlist, required this.onOpen});
+  final VoidCallback onMenu;
+  const _PlaylistCard({required this.playlist, required this.onOpen, required this.onMenu});
 
   @override
   Widget build(BuildContext context) {
     final cover = store.coverFor(playlist);
     final tracks = store.tracksOf(playlist);
-    final colors = artColorsFor(playlist.title);
-    return Pressable(
-      onTap: onOpen,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
-                boxShadow: [BoxShadow(color: colors.first.withValues(alpha: 0.30), blurRadius: 22, offset: const Offset(0, 10))],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (cover != null)
-                    LayoutBuilder(builder: (_, c) => ArtImage(file: cover, size: c.maxWidth, radius: 0, fallback: Icons.queue_music))
-                  else
-                    Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          _initials(playlist.title),
-                          style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -1),
+    final colors = artColorsFor(playlist.name);
+    return GestureDetector(
+      onLongPress: onMenu,
+      child: Pressable(
+        onTap: onOpen,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  boxShadow: [BoxShadow(color: colors.first.withValues(alpha: 0.30), blurRadius: 22, offset: const Offset(0, 10))],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (cover != null)
+                      LayoutBuilder(builder: (_, c) => ArtImage(file: cover, size: c.maxWidth, radius: 0, fallback: Icons.queue_music))
+                    else
+                      Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            _initials(playlist.name),
+                            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -1),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Pressable(
+                        onTap: () {
+                          if (tracks.isNotEmpty) playerService.playTracks(tracks, shuffle: false);
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            gradient: kBrandGradient,
+                            shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
+                          ),
+                          child: Icon(Icons.play_arrow_rounded, color: Colors.white, semanticLabel: 'Play ${playlist.name}'),
                         ),
                       ),
                     ),
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: Pressable(
-                      onTap: () {
-                        if (tracks.isNotEmpty) playerService.playTracks(tracks, shuffle: false);
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: kBrandGradient,
-                          shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
-                        ),
-                        child: Icon(Icons.play_arrow_rounded, color: Colors.white, semanticLabel: 'Play ${playlist.title}'),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(playlist.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, color: kText)),
-          Text('${tracks.length} songs', style: TextStyle(fontSize: 12, color: kMuted)),
-        ],
+            const SizedBox(height: 8),
+            Row(children: [
+              if (playlist.pinned) ...[Icon(Icons.push_pin, size: 13, color: kAccent), const SizedBox(width: 4)],
+              Expanded(
+                child: Text(playlist.name,
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, color: kText)),
+              ),
+              GestureDetector(
+                onTap: onMenu,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Icon(Icons.more_horiz_rounded, size: 20, color: kMuted, semanticLabel: 'Playlist options'),
+                ),
+              ),
+            ]),
+            Text('${tracks.length} songs${playlist.phoneOnly ? ' · on phone' : ''}', style: TextStyle(fontSize: 12, color: kMuted)),
+          ],
+        ),
       ),
     );
   }
