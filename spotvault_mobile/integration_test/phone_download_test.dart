@@ -163,7 +163,10 @@ void main() {
       expect(store.localFile(shared).lengthSync(), store.localFile(song).lengthSync());
 
       await nearbyService.startJam(JamMode.speaker);
-      expect(await other.joinJam(me), isNull);
+      // "Join by address": the guest checks the address, sees the Jam, joins.
+      final byAddress = await other.hello('127.0.0.1', kNearbyPort);
+      expect(byAddress?.jam, isNotNull);
+      expect(await other.joinJam(byAddress!), isNull);
       await other.jamGuest!.add([song]);
       final host = nearbyService.jamHost!;
       for (var i = 0; i < 100 && !(playerService.player.playing && (playerService.current?.id.startsWith('jam:') ?? false)); i++) {
@@ -171,6 +174,7 @@ void main() {
       }
       say('jam: host playing ${playerService.current?.title} (${host.items.length} in queue), guest sees ${other.jamGuest!.state['current']}');
       expect(host.items.single.file, isNotNull);
+      expect(host.items.single.pushed, isTrue, reason: 'the guest sends the song itself');
       expect(playerService.current?.id, 'jam:${host.items.single.key}');
       expect(playerService.player.playing, isTrue);
       await Future.delayed(const Duration(milliseconds: 1500));

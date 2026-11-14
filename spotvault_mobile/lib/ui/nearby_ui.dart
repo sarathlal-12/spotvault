@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../library_store.dart';
@@ -199,11 +200,55 @@ class JamScreen extends StatefulWidget {
 
 class _JamScreenState extends State<JamScreen> {
   String? joining;
+  final addrCtrl = TextEditingController();
+  List<String> myAddresses = [];
 
   @override
   void initState() {
     super.initState();
     if (!nearbyService.inJam) nearbyService.discover();
+    nearbyService.myAddresses().then((a) {
+      if (mounted) setState(() => myAddresses = a);
+    });
+  }
+
+  @override
+  void dispose() {
+    addrCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _join(NearbyPhone p) async {
+    setState(() => joining = p.id);
+    final err = await nearbyService.joinJam(p);
+    if (!mounted) return;
+    setState(() => joining = null);
+    if (err != null) toast(context, err);
+  }
+
+  /// "Join by address": 192.168.1.23 or 192.168.1.23:50510.
+  Future<void> _joinByAddress() async {
+    FocusScope.of(context).unfocus();
+    final text = addrCtrl.text.trim();
+    final m = RegExp(r'^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{2,5}))?$').firstMatch(text);
+    if (m == null) {
+      toast(context, 'Type the address shown on the other phone, like 192.168.1.23');
+      return;
+    }
+    setState(() => joining = 'address');
+    final phone = await nearbyService.hello(m.group(1)!, int.tryParse(m.group(2) ?? '') ?? kNearbyPort);
+    if (!mounted) return;
+    if (phone == null) {
+      setState(() => joining = null);
+      toast(context, 'No SpotVault at $text. Check the address and that both are on the same Wi-Fi.');
+      return;
+    }
+    if (phone.jam == null) {
+      setState(() => joining = null);
+      toast(context, '${phone.name} hasn\'t started a Jam yet.');
+      return;
+    }
+    await _join(phone);
   }
 
   @override
@@ -273,19 +318,34 @@ class _JamScreenState extends State<JamScreen> {
             trailing: joining == p.id
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
                 : FilledButton(
-                    onPressed: joining != null
-                        ? null
-                        : () async {
-                            setState(() => joining = p.id);
-                            final err = await n.joinJam(p);
-                            if (!mounted) return;
-                            setState(() => joining = null);
-                            if (err != null) toast(context, err);
-                          },
+                    onPressed: joining != null ? null : () => _join(p),
                     child: const Text('Join'),
                   ),
           ),
+        const SizedBox(height: 18),
+        Text('Join by address', style: displayStyle(18)),
+        const SizedBox(height: 4),
+        Text("If the Jam doesn't show up, type the address shown on the other phone's Jam screen.",
+            style: TextStyle(color: kMuted, fontSize: 13)),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: addrCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textInputAction: TextInputAction.go,
+              onSubmitted: (_) => _joinByAddress(),
+              decoration: const InputDecoration(isDense: true, hintText: 'e.g. 192.168.1.23', prefixIcon: Icon(Icons.lan_outlined)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          joining == 'address'
+              ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2))
+              : FilledButton(onPressed: joining != null ? null : _joinByAddress, child: const Text('Join')),
+        ]),
         const SizedBox(height: 16),
+        _MyAddress(addresses: myAddresses),
+        const SizedBox(height: 8),
         _NameRow(),
       ],
     );
@@ -341,6 +401,10 @@ class _JamScreenState extends State<JamScreen> {
                   : 'With ${people.join(', ')}',
               style: TextStyle(color: kMuted, fontSize: 13),
             ),
+            if (host != null) ...[
+              const SizedBox(height: 8),
+              _MyAddress(addresses: myAddresses, compact: true),
+            ],
             if (guest?.error != null) Text(guest!.error!, style: TextStyle(color: pal.danger, fontSize: 13)),
             const SizedBox(height: 14),
             Text(cur == null ? 'Nothing playing yet' : '${cur['title']}',
@@ -426,6 +490,39 @@ class _JamScreenState extends State<JamScreen> {
     } catch (_) {
       if (context.mounted) toast(context, "Couldn't reach the Jam");
     }
+  }
+}
+
+/// "Your address: 192.168.1.23" with a copy button, for "Join by address".
+class _MyAddress extends StatelessWidget {
+  final List<String> addresses;
+  final bool compact;
+  const _MyAddress({required this.addresses, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    if (addresses.isEmpty) {
+      return Text(compact ? '' : 'Connect to Wi-Fi to see your address.', style: TextStyle(color: kMuted, fontSize: 12));
+    }
+    final a = addresses.first;
+    return Row(children: [
+      Icon(Icons.lan_outlined, size: 18, color: kMuted),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text.rich(TextSpan(children: [
+          TextSpan(text: 'Your address: ', style: TextStyle(color: kMuted, fontSize: 13)),
+          TextSpan(text: a, style: TextStyle(color: kText, fontSize: 14, fontWeight: FontWeight.w800)),
+        ])),
+      ),
+      IconButton(
+        tooltip: 'Copy address',
+        icon: const Icon(Icons.copy_rounded, size: 18),
+        onPressed: () {
+          Clipboard.setData(ClipboardData(text: a));
+          toast(context, 'Address copied');
+        },
+      ),
+    ]);
   }
 }
 

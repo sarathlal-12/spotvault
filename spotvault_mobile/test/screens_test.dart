@@ -54,6 +54,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Be the speaker'), findsOneWidget);
       expect(find.text('Everyone in sync'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Join by address'), 300);
+      expect(find.text('Join by address'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -71,6 +73,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('Malayalam Melodies of the Nineties'), findsOneWidget);
       expect(find.text('New'), findsOneWidget);
+      expect(find.byTooltip('Jam with friends'), findsOneWidget);
       expect(tester.takeException(), isNull);
       store.playlists = [];
       store.tracks.clear();

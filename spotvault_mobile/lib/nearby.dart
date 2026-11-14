@@ -97,6 +97,9 @@ class JamItem {
   final String token;
   String? file; // local copy once fetched (host)
   bool failed = false;
+  /// The phone that added it sends the file itself (works through BlueStacks
+  /// and other networks where the host can't reach that phone).
+  bool pushed = false;
   JamItem(this.key, this.song, this.addedBy, this.host, this.port, this.token);
 
   Map<String, dynamic> toJson() => {'key': key, ...song.toJson(), 'by': addedBy, 'ready': file != null, 'failed': failed};
@@ -183,6 +186,8 @@ class NearbyService extends ChangeNotifier {
           return await _onJamFile(req);
         case '/jam/leave':
           return await _onJamLeave(req);
+        case '/jam/upload':
+          return await _onJamUpload(req);
       }
       res.statusCode = 404;
       await res.close();
@@ -477,8 +482,80 @@ class NearbyService extends ChangeNotifier {
     if (h == null || !h.guests.containsKey(token)) return _json(req.response, {'error': 'Not in this Jam'}, 403);
     final host = req.connectionInfo?.remoteAddress.address ?? '';
     final songs = [for (final s in (j['songs'] as List? ?? const [])) SongInfo.fromJson(Map<String, dynamic>.from(s as Map))];
-    h.add(songs, h.guests[token]!, host, ((j['port'] as num?) ?? kNearbyPort).toInt(), '${j['serve']}', next: j['next'] == true);
+    final added = h.add(songs, h.guests[token]!, host, ((j['port'] as num?) ?? kNearbyPort).toInt(), '${j['serve']}',
+        next: j['next'] == true, pushed: j['push'] == true);
+    await _json(req.response, {'ok': true, 'keys': [for (final i in added) i.key]});
+  }
+
+  /// A guest sends a song (or its cover) it added: /jam/upload?t=&key=[&art=1][&fail=1].
+  Future<void> _onJamUpload(HttpRequest req) async {
+    final q = req.uri.queryParameters;
+    final h = jamHost;
+    if (h == null || !h.guests.containsKey(q['t'])) return _json(req.response, {'error': 'Not in this Jam'}, 403);
+    final item = h.items.where((i) => i.key == q['key'] && i.pushed).firstOrNull;
+    if (item == null) return _json(req.response, {'error': 'Unknown song'}, 404);
+    if (q['fail'] == '1') {
+      item.failed = true;
+      notifyListeners();
+      return _json(req.response, {'ok': true});
+    }
+    await h._dir.create(recursive: true);
+    final art = q['art'] == '1';
+    final dest = File('${h._dir.path}/${item.key}.${art ? 'img' : item.song.ext}');
+    final part = File('${dest.path}.part');
+    final sink = part.openWrite();
+    try {
+      await sink.addStream(req.timeout(const Duration(seconds: 30)));
+      await sink.close();
+    } catch (e) {
+      try {
+        await sink.close();
+        await part.delete();
+      } catch (_) {}
+      if (!art) item.failed = true;
+      notifyListeners();
+      return _json(req.response, {'error': 'Upload failed'}, 400);
+    }
+    await part.rename(dest.path);
+    if (art) {
+      player.extraArt['jam:${item.key}'] = dest.path;
+    } else {
+      item.file = dest.path;
+      await h._enqueue(item);
+    }
+    notifyListeners();
     await _json(req.response, {'ok': true});
+  }
+
+  /// Is a SpotVault phone at this address? (for "Join by address")
+  Future<NearbyPhone?> hello(String host, int port) async {
+    try {
+      final r = await http
+          .get(Uri(scheme: 'http', host: host, port: port, path: '/nearby/hello'))
+          .timeout(const Duration(seconds: 5));
+      if (r.statusCode != 200) return null;
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      if (j['app'] != 'SpotVault' || j['kind'] != 'phone') return null;
+      return NearbyPhone(host, port, '${j['name'] ?? host}', '${j['id']}', (j['jam'] as Map?)?.cast<String, dynamic>());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// This phone's Wi-Fi addresses, for others to type in.
+  Future<List<String>> myAddresses() async {
+    final out = <String>[];
+    try {
+      for (final nic in await NetworkInterface.list(type: InternetAddressType.IPv4)) {
+        for (final a in nic.addresses) {
+          final p = a.address.split('.');
+          if (a.isLoopback || p.length != 4) continue;
+          final f = int.tryParse(p[0]) ?? 0, s2 = int.tryParse(p[1]) ?? 0;
+          if (f == 10 || (f == 172 && s2 >= 16 && s2 <= 31) || (f == 192 && s2 == 168)) out.add(a.address);
+        }
+      }
+    } catch (_) {}
+    return out;
   }
 
   Future<void> _onJamControl(HttpRequest req) async {
@@ -588,8 +665,10 @@ class JamHost {
   }
 
   /// Adds songs (from the host's own library: host = '').
-  void add(List<SongInfo> songs, String by, String host, int port, String token, {bool next = false}) {
-    final added = [for (final s in songs) JamItem('${DateTime.now().microsecondsSinceEpoch}-${_seq++}', s, by, host, port, token)];
+  List<JamItem> add(List<SongInfo> songs, String by, String host, int port, String token, {bool next = false, bool pushed = false}) {
+    final added = [
+      for (final s in songs) JamItem('${DateTime.now().microsecondsSinceEpoch}-${_seq++}', s, by, host, port, token)..pushed = pushed
+    ];
     if (next) {
       final cur = _ps.current;
       final at = cur == null ? items.length : items.indexWhere((i) => 'jam:${i.key}' == cur.id) + 1;
@@ -599,6 +678,7 @@ class JamHost {
     }
     nearby.changed();
     _fetchLoop();
+    return added;
   }
 
   void addOwn(List<Track> tracks, {bool next = false}) {
@@ -612,7 +692,7 @@ class JamHost {
     _fetching = true;
     try {
       while (true) {
-        final next = items.where((i) => i.file == null && !i.failed).firstOrNull;
+        final next = items.where((i) => i.file == null && !i.failed && !i.pushed).firstOrNull;
         if (next == null || nearby.jamHost != this) break;
         try {
           if (next.host.isEmpty) {
@@ -855,9 +935,10 @@ class JamGuest {
     }
   }
 
+  /// Adds songs to the host's queue, then sends each file to the host.
   Future<void> add(List<Track> tracks, {bool next = false}) async {
     final serve = nearby.grant(tracks);
-    await _client
+    final r = await _client
         .post(Uri(scheme: 'http', host: hostPhone.host, port: hostPhone.port, path: '/jam/add'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
@@ -865,10 +946,44 @@ class JamGuest {
               'serve': serve,
               'port': nearby.port,
               'next': next,
+              'push': true,
               'songs': [for (final t in tracks) SongInfo.of(t, nearby.store).toJson()],
             }))
         .timeout(const Duration(seconds: 10));
+    final keys = List<String>.from((jsonDecode(r.body) as Map<String, dynamic>)['keys'] as List? ?? const []);
     await _tick();
+    _uploads = _uploads.then((_) => _send(tracks, keys));
+  }
+
+  Future<void> _uploads = Future.value();
+
+  /// Sends songs one by one, in queue order (each with its cover first).
+  Future<void> _send(List<Track> tracks, List<String> keys) async {
+    for (var i = 0; i < tracks.length && i < keys.length; i++) {
+      if (nearby.jamGuest != this) return;
+      final t = tracks[i];
+      try {
+        final art = nearby.store.artFile(t);
+        if (t.hasArt && await art.exists()) await _upload(keys[i], art, art: true);
+        await _upload(keys[i], nearby.store.localFile(t));
+      } catch (e) {
+        debugPrint('jam upload failed: $e');
+        try {
+          await _client.post(_u('/jam/upload', {'key': keys[i], 'fail': '1'})).timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+      await _tick();
+    }
+  }
+
+  Future<void> _upload(String key, File f, {bool art = false}) async {
+    final req = http.StreamedRequest('POST', _u('/jam/upload', {'key': key, if (art) 'art': '1'}))
+      ..contentLength = await f.length();
+    final sent = _client.send(req);
+    await req.sink.addStream(f.openRead());
+    await req.sink.close();
+    final res = await sent.timeout(const Duration(seconds: 60));
+    if (res.statusCode != 200) throw HttpException('upload ${res.statusCode}');
   }
 
   Future<void> control(String action, {int? index}) async {

@@ -48,6 +48,8 @@ class LibraryScreen extends StatelessWidget {
                             ],
                           ),
                         ),
+                        GlassIconButton(icon: Icons.groups_rounded, tooltip: 'Jam with friends', onPressed: () => openJam(context)),
+                        const SizedBox(width: 8),
                         GlassIconButton(icon: Icons.sync_rounded, tooltip: 'Sync from PC', onPressed: () => currentTab.value = 3),
                         const SizedBox(width: 8),
                         const ThemeToggle(),
@@ -110,7 +112,6 @@ class LibraryScreen extends StatelessWidget {
                             onTap: () => _open(
                                 context, TrackListScreen(title: 'Most Played', source: () => store.mostPlayed, icon: Icons.trending_up)),
                           ),
-                          _Chip(icon: Icons.groups_rounded, label: 'Jam', onTap: () => openJam(context)),
                         ],
                       ),
                     ),
