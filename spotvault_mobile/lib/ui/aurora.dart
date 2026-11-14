@@ -97,7 +97,8 @@ class GlassCard extends StatelessWidget {
         border: Border.all(color: kLine),
         boxShadow: pal.dark ? null : [BoxShadow(color: kViolet.withValues(alpha: 0.07), blurRadius: 24, offset: const Offset(0, 10))],
       ),
-      child: child,
+      // Material so list rows inside show their tap ripple.
+      child: Material(type: MaterialType.transparency, child: child),
     );
     if (onTap == null) return box;
     return Pressable(onTap: onTap!, child: box);

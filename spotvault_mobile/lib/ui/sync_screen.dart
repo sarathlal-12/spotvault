@@ -459,6 +459,7 @@ class _Card extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: kLine),
         ),
-        child: child,
+        // Material so list rows inside show their tap ripple.
+        child: Material(type: MaterialType.transparency, child: child),
       );
 }
