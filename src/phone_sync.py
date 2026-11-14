@@ -17,6 +17,7 @@ in the "Phone Sync" window), then pulls the library over HTTP:
 Every protected request carries the PIN in the ``X-SpotVault-Pin`` header.
 """
 
+import loudness
 import hashlib
 import json
 import os
@@ -444,6 +445,14 @@ class PhoneSyncServer:
 
     # --- lifecycle -----------------------------------------------
     def start(self):
+        # Measure song loudness in the background for the phone's even volume.
+        def _start_loudness():
+            try:
+                import sources
+                loudness.start(sources.ensure_ffmpeg())
+            except Exception:
+                pass
+        threading.Thread(target=_start_loudness, daemon=True).start()
         try:
             self._httpd = _Server(("0.0.0.0", HTTP_PORT), _Handler)
             self._httpd.sync = self
@@ -555,6 +564,8 @@ class PhoneSyncServer:
                         "size": st.st_size,
                         "mtime": int(st.st_mtime),
                         **meta,
+                        # Even volume: dB to turn this song down by (measured in the background).
+                        "gain": loudness.gain_for(entry.path, st.st_size, int(st.st_mtime)),
                     })
             img = pl.get("img_path", "")
             out.append({

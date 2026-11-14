@@ -19,6 +19,8 @@ class Track {
   final int addedAt;
   /// Downloaded on the phone itself (not on the PC), so PC syncs keep it.
   final bool phoneOnly;
+  /// Even volume: dB to turn this song down by (measured on the PC), or null.
+  final double? gain;
 
   Track({
     required this.id,
@@ -32,6 +34,7 @@ class Track {
     this.hasArt = false,
     int? addedAt,
     this.phoneOnly = false,
+    this.gain,
   }) : addedAt = addedAt ?? DateTime.now().millisecondsSinceEpoch;
 
   String get folder => path.split('/').first;
@@ -49,6 +52,7 @@ class Track {
         duration: ((j['duration'] as num?) ?? 0).toDouble(),
         hasArt: previous?.hasArt ?? false,
         addedAt: previous?.addedAt,
+        gain: (j['gain'] as num?)?.toDouble(),
       );
 
   factory Track.fromJson(Map<String, dynamic> j) => Track(
@@ -63,6 +67,7 @@ class Track {
         hasArt: j['hasArt'] ?? false,
         addedAt: j['addedAt'],
         phoneOnly: j['phone'] ?? false,
+        gain: (j['gain'] as num?)?.toDouble(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -77,6 +82,7 @@ class Track {
         'hasArt': hasArt,
         'addedAt': addedAt,
         if (phoneOnly) 'phone': true,
+        if (gain != null) 'gain': gain,
       };
 }
 
@@ -188,6 +194,11 @@ class LibraryStore extends ChangeNotifier {
   bool smartSleep = true; // fade out slowly before the sleep timer stops
   bool ghostQueue = true; // songs saved from search play next once they arrive
   bool useBridge = false; // download through the PC instead of on the phone
+  // Sound
+  int crossfadeSec = 0; // 0 = off; fade between songs
+  bool evenVolume = true; // turn loud songs down to a common level
+  String eqPreset = 'off'; // Android equalizer
+  List<double> eqCustom = []; // dB per band for the "custom" preset
   /// PC songs and playlists removed on the phone: syncs skip them.
   final Set<String> excludedTracks = {};
   final Set<String> excludedFolders = {};
@@ -250,6 +261,10 @@ class LibraryStore extends ChangeNotifier {
       smartSleep = j['smartSleep'] ?? true;
       ghostQueue = j['ghostQueue'] ?? true;
       useBridge = j['useBridge'] ?? false;
+      crossfadeSec = j['crossfadeSec'] ?? 0;
+      evenVolume = j['evenVolume'] ?? true;
+      eqPreset = j['eqPreset'] ?? 'off';
+      eqCustom = [for (final v in (j['eqCustom'] as List? ?? const [])) (v as num).toDouble()];
       excludedTracks.addAll(List<String>.from(j['excludedTracks'] ?? const []));
       excludedFolders.addAll(List<String>.from(j['excludedFolders'] ?? const []));
       pcDeletePaths.addAll(List<String>.from(j['pcDeletePaths'] ?? const []));
@@ -301,6 +316,10 @@ class LibraryStore extends ChangeNotifier {
           'smartSleep': smartSleep,
           'ghostQueue': ghostQueue,
           'useBridge': useBridge,
+          'crossfadeSec': crossfadeSec,
+          'evenVolume': evenVolume,
+          'eqPreset': eqPreset,
+          'eqCustom': eqCustom,
           'recentSearches': recentSearches,
           'excludedTracks': excludedTracks.toList(),
           'excludedFolders': excludedFolders.toList(),

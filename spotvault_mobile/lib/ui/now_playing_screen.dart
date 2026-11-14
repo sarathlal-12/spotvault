@@ -9,6 +9,8 @@ import '../library_store.dart';
 import '../player_service.dart';
 import 'aurora.dart';
 import 'common.dart';
+import 'lyrics_screen.dart';
+import 'sound_sheet.dart';
 
 class NowPlayingScreen extends StatelessWidget {
   const NowPlayingScreen({super.key});
@@ -26,118 +28,150 @@ class NowPlayingScreen extends StatelessWidget {
             body: Center(child: Text('Nothing playing', style: TextStyle(color: kMuted))),
           );
         }
+        lyricsService.prefetch(t);
         return Scaffold(
           body: AuroraBackground(
             intensity: 1.2,
             child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 22),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        GlassIconButton(
-                          icon: Icons.keyboard_arrow_down_rounded,
-                          tooltip: 'Close',
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Text('PLAYING FROM', style: TextStyle(fontSize: 10.5, letterSpacing: 1.6, fontWeight: FontWeight.w700, color: kMuted)),
-                              const SizedBox(height: 2),
-                              Text(_playlistName(t),
-                                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, color: kText)),
-                            ],
+              child: GestureDetector(
+                // Swipe up anywhere for lyrics.
+                onVerticalDragEnd: (d) {
+                  if ((d.primaryVelocity ?? 0) < -400) openLyrics(context);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          GlassIconButton(
+                            icon: Icons.keyboard_arrow_down_rounded,
+                            tooltip: 'Close',
+                            onPressed: () => Navigator.pop(context),
                           ),
-                        ),
-                        const ThemeToggle(),
-                        const SizedBox(width: 8),
-                        GlassIconButton(icon: Icons.more_horiz_rounded, tooltip: 'Song options', onPressed: () => showTrackMenu(context, t)),
-                      ],
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onHorizontalDragEnd: (d) {
-                        final v = d.primaryVelocity ?? 0;
-                        if (v < -300) playerService.next();
-                        if (v > 300) playerService.previous();
-                      },
-                      onDoubleTap: () => store.toggleLike(t.id),
-                      child: LayoutBuilder(
-                        builder: (_, c) {
-                          final maxH = MediaQuery.sizeOf(context).height * 0.38;
-                          final side = math.min(c.maxWidth - 24, maxH);
-                          return _GlowingArt(track: t, side: side, playing: p.playing);
-                        },
-                      ),
-                    ),
-                    const Spacer(),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 400),
-                            transitionBuilder: (child, a) => FadeTransition(
-                              opacity: a,
-                              child: SlideTransition(position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a), child: child),
-                            ),
+                          Expanded(
                             child: Column(
-                              key: ValueKey(t.id),
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: displayStyle(24)),
-                                const SizedBox(height: 4),
-                                Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: kMuted)),
+                                Text('PLAYING FROM',
+                                    style: TextStyle(fontSize: 10.5, letterSpacing: 1.6, fontWeight: FontWeight.w700, color: kMuted)),
+                                const SizedBox(height: 2),
+                                Text(_playlistName(t),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontWeight: FontWeight.w700, color: kText)),
                               ],
                             ),
                           ),
+                          const ThemeToggle(),
+                          const SizedBox(width: 8),
+                          GlassIconButton(
+                              icon: Icons.more_horiz_rounded, tooltip: 'Song options', onPressed: () => showTrackMenu(context, t)),
+                        ],
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onHorizontalDragEnd: (d) {
+                          final v = d.primaryVelocity ?? 0;
+                          if (v < -300) playerService.next();
+                          if (v > 300) playerService.previous();
+                        },
+                        onDoubleTap: () => store.toggleLike(t.id),
+                        child: LayoutBuilder(
+                          builder: (_, c) {
+                            final maxH = MediaQuery.sizeOf(context).height * 0.38;
+                            final side = math.min(c.maxWidth - 24, maxH);
+                            return _GlowingArt(track: t, side: side, playing: p.playing);
+                          },
                         ),
-                        _LikeButton(liked: store.isLiked(t.id), onTap: () => store.toggleLike(t.id)),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    _WaveSeek(track: t),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          tooltip: p.shuffleModeEnabled ? 'Shuffle on' : 'Shuffle off',
-                          iconSize: 24,
-                          icon: Icon(Icons.shuffle_rounded, color: p.shuffleModeEnabled ? kAccent : kMuted),
-                          onPressed: playerService.toggleShuffle,
-                        ),
-                        IconButton(
-                          tooltip: 'Previous',
-                          iconSize: 38,
-                          icon: Icon(Icons.skip_previous_rounded, color: kText),
-                          onPressed: playerService.previous,
-                        ),
-                        _PlayButton(player: p),
-                        IconButton(
-                          tooltip: 'Next',
-                          iconSize: 38,
-                          icon: Icon(Icons.skip_next_rounded, color: kText),
-                          onPressed: playerService.next,
-                        ),
-                        IconButton(
-                          tooltip: switch (p.loopMode) { LoopMode.off => 'Repeat off', LoopMode.all => 'Repeat all', LoopMode.one => 'Repeat one' },
-                          iconSize: 24,
-                          icon: Icon(
-                            p.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                            color: p.loopMode == LoopMode.off ? kMuted : kAccent,
+                      ),
+                      const Spacer(),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              transitionBuilder: (child, a) => FadeTransition(
+                                opacity: a,
+                                child: SlideTransition(
+                                    position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a), child: child),
+                              ),
+                              child: Column(
+                                key: ValueKey(t.id),
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: displayStyle(24)),
+                                  const SizedBox(height: 4),
+                                  Text(t.subtitle,
+                                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: kMuted)),
+                                ],
+                              ),
+                            ),
                           ),
-                          onPressed: playerService.cycleLoop,
+                          _LikeButton(liked: store.isLiked(t.id), onTap: () => store.toggleLike(t.id)),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      _WaveSeek(track: t),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            tooltip: p.shuffleModeEnabled ? 'Shuffle on' : 'Shuffle off',
+                            iconSize: 24,
+                            icon: Icon(Icons.shuffle_rounded, color: p.shuffleModeEnabled ? kAccent : kMuted),
+                            onPressed: playerService.toggleShuffle,
+                          ),
+                          IconButton(
+                            tooltip: 'Previous',
+                            iconSize: 38,
+                            icon: Icon(Icons.skip_previous_rounded, color: kText),
+                            onPressed: playerService.previous,
+                          ),
+                          _PlayButton(player: p),
+                          IconButton(
+                            tooltip: 'Next',
+                            iconSize: 38,
+                            icon: Icon(Icons.skip_next_rounded, color: kText),
+                            onPressed: playerService.next,
+                          ),
+                          IconButton(
+                            tooltip: switch (p.loopMode) {
+                              LoopMode.off => 'Repeat off',
+                              LoopMode.all => 'Repeat all',
+                              LoopMode.one => 'Repeat one'
+                            },
+                            iconSize: 24,
+                            icon: Icon(
+                              p.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                              color: p.loopMode == LoopMode.off ? kMuted : kAccent,
+                            ),
+                            onPressed: playerService.cycleLoop,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _ToolRow(track: t),
+                      const SizedBox(height: 6),
+                      Semantics(
+                        button: true,
+                        label: 'Show lyrics',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => openLyrics(context),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 24),
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.keyboard_arrow_up_rounded, color: kMuted, size: 20),
+                              Text('Lyrics', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kMuted)),
+                            ]),
+                          ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _ToolRow(track: t),
-                    const SizedBox(height: 12),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -236,7 +270,8 @@ class _GlowingArtState extends State<_GlowingArt> with SingleTickerProviderState
             tag: 'art',
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 450),
-              transitionBuilder: (c, a) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(a), child: c)),
+              transitionBuilder: (c, a) =>
+                  FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(a), child: c)),
               child: TrackArt(widget.track, key: ValueKey(widget.track.id), size: s, radius: 30),
             ),
           ),
@@ -331,8 +366,10 @@ class _PlayButton extends StatelessWidget {
                   ? const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
                   : AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
-                      transitionBuilder: (c, a) => RotationTransition(turns: Tween(begin: 0.75, end: 1.0).animate(a), child: ScaleTransition(scale: a, child: c)),
-                      child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, key: ValueKey(playing), size: 40, color: Colors.white),
+                      transitionBuilder: (c, a) =>
+                          RotationTransition(turns: Tween(begin: 0.75, end: 1.0).animate(a), child: ScaleTransition(scale: a, child: c)),
+                      child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          key: ValueKey(playing), size: 40, color: Colors.white),
                     ),
             ),
           ),
@@ -475,8 +512,10 @@ class _WaveSeekState extends State<_WaveSeek> with SingleTickerProviderStateMixi
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(formatDuration(shown), style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
-                  Text(formatDuration(total), style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
+                  Text(formatDuration(shown),
+                      style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
+                  Text(formatDuration(total),
+                      style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
                 ],
               ),
             ],
@@ -572,10 +611,10 @@ class _ToolRow extends StatelessWidget {
               onTap: () => _sleepSheet(context),
             ),
             _Tool(
-              icon: Icons.speed_rounded,
-              label: '${p.speed.toStringAsFixed(p.speed % 1 == 0 ? 0 : 2)}×',
-              active: p.speed != 1,
-              onTap: () => _speedSheet(context),
+              icon: Icons.tune_rounded,
+              label: p.speed != 1 ? '${p.speed.toStringAsFixed(p.speed % 1 == 0 ? 0 : 2)}×' : 'Sound',
+              active: p.speed != 1 || store.crossfadeSec > 0 || store.eqPreset != 'off',
+              onTap: () => showSoundSheet(context),
             ),
             _Tool(
               icon: Icons.queue_music_rounded,
@@ -681,33 +720,6 @@ class _ToolRow extends StatelessWidget {
     );
   }
 
-  void _speedSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text('Playback speed', style: displayStyle(18)),
-            ),
-            for (final s in [0.75, 1.0, 1.25, 1.5])
-              ListTile(
-                title: Text('$s×', style: TextStyle(color: kText)),
-                trailing: playerService.player.speed == s ? Icon(Icons.check_rounded, color: kAccent) : null,
-                onTap: () {
-                  playerService.setSpeed(s);
-                  Navigator.pop(ctx);
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _queueSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -750,9 +762,7 @@ class _Tool extends StatelessWidget {
                   height: 62,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
-                    gradient: active
-                        ? LinearGradient(colors: [kViolet.withValues(alpha: 0.36), kEmber.withValues(alpha: 0.14)])
-                        : null,
+                    gradient: active ? LinearGradient(colors: [kViolet.withValues(alpha: 0.36), kEmber.withValues(alpha: 0.14)]) : null,
                     color: active ? null : (pal.dark ? pal.glass : pal.surface),
                     border: Border.all(color: active ? kViolet.withValues(alpha: 0.6) : kLine),
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'library_store.dart';
+import 'lyrics_service.dart';
 import 'pc_link.dart';
 import 'player_service.dart';
 import 'sync_service.dart';
@@ -12,6 +13,8 @@ final PlayerService playerService = PlayerService(store);
 final PcLink pcLink = PcLink(store, syncService)
   ..afterSync = playerService.refreshAfterSync
   ..onReady = playerService.playNext;
+
+final LyricsService lyricsService = LyricsService(store);
 
 /// Lets any screen jump to a bottom-nav tab (0 Home, 1 Search, 2 Lab, 3 Sync).
 final ValueNotifier<int> currentTab = ValueNotifier<int>(0);

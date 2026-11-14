@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'app_state.dart' show lyricsService;
 import 'library_store.dart';
 import 'phone_engine.dart';
 import 'sync_service.dart';
@@ -336,7 +337,9 @@ class PcLink extends ChangeNotifier {
     } else if (store.tracks[id]?.hasArt == true) {
       t.hasArt = true;
     }
-    return store.addPhoneTrack(t, folder: playlist.folder, title: playlist.name);
+    final saved = store.addPhoneTrack(t, folder: playlist.folder, title: playlist.name);
+    lyricsService.prefetch(saved); // so lyrics work offline later
+    return saved;
   }
 
   /// Plain-language reason for a failed on-phone download.

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
@@ -13,7 +15,22 @@ enum SleepMode { off, timer, endOfTrack }
 /// Lock-screen and notification controls come from just_audio_background.
 class PlayerService extends ChangeNotifier {
   final LibraryStore store;
-  final AudioPlayer player = AudioPlayer();
+  /// Android's equalizer (iPhone has none in the audio player).
+  final AndroidEqualizer? equalizer = Platform.isAndroid ? AndroidEqualizer() : null;
+  late final AudioPlayer player = AudioPlayer(
+    audioPipeline: AudioPipeline(androidAudioEffects: [if (equalizer != null) equalizer!]),
+  );
+
+  // Volume is the product of: Smart Sleep fade, song transition fade, even volume.
+  double _sleepFactor = 1, _fadeFactor = 1, _gainFactor = 1;
+  double _lastVolume = -1;
+
+  void _applyVolume() {
+    final v = (_sleepFactor * _fadeFactor * _gainFactor).clamp(0.0, 1.0);
+    if ((v - _lastVolume).abs() < 0.01) return;
+    _lastVolume = v;
+    player.setVolume(v);
+  }
   PlayerService(this.store);
 
   SleepMode sleepMode = SleepMode.off;
@@ -72,7 +89,9 @@ class PlayerService extends ChangeNotifier {
 
     player.positionStream.listen((pos) {
       if (abActive && !previewing && pos >= loopB!) player.seek(loopA);
+      _transitionFade(pos);
     });
+    await applyEqualizer();
 
     await _restore();
   }
@@ -236,7 +255,8 @@ class PlayerService extends ChangeNotifier {
     var i = 0;
     _fadeTimer = Timer.periodic(over ~/ steps, (t) {
       i++;
-      player.setVolume((1 - i / steps).clamp(0.0, 1.0));
+      _sleepFactor = (1 - i / steps).clamp(0.0, 1.0);
+      _applyVolume();
       if (i >= steps) {
         t.cancel();
         done();
@@ -247,7 +267,78 @@ class PlayerService extends ChangeNotifier {
   void _stopFade() {
     _fadeTimer?.cancel();
     _fadeTimer = null;
-    player.setVolume(1);
+    _sleepFactor = 1;
+    _applyVolume();
+  }
+
+  // ------------------------------------------------------------ sound
+  /// Smooth transitions: fade the end of a song out and the next one in.
+  void _transitionFade(Duration pos) {
+    final fade = store.crossfadeSec;
+    var f = 1.0;
+    if (fade > 0 && !previewing && !abActive) {
+      final ms = fade * 1000;
+      final total = player.duration;
+      final hasNext = player.hasNext || player.loopMode != LoopMode.off;
+      if (total != null && hasNext) {
+        final left = (total - pos).inMilliseconds;
+        if (left < ms) f = math.max(0.0, left / ms);
+      }
+      if (pos.inMilliseconds < ms) f = math.min(f, math.max(0.15, pos.inMilliseconds / ms));
+    }
+    if ((f - _fadeFactor).abs() > 0.01 || (f == 1 && _fadeFactor != 1)) {
+      _fadeFactor = f;
+      _applyVolume();
+    }
+  }
+
+  void _applyGain() {
+    final g = store.evenVolume && !previewing ? (current?.gain ?? 0) : 0.0;
+    _gainFactor = math.pow(10, g / 20).toDouble();
+    _applyVolume();
+  }
+
+  /// Equalizer presets: dB by band centre frequency.
+  static const eqPresets = ['off', 'bass', 'vocal', 'treble', 'acoustic', 'custom'];
+
+  static double presetGain(String preset, double hz) => switch (preset) {
+        'bass' => hz < 120 ? 6 : hz < 300 ? 3.5 : hz < 1000 ? 0 : -1,
+        'vocal' => hz < 200 ? -2 : hz < 800 ? 0.5 : hz < 5000 ? 3.5 : 1,
+        'treble' => hz < 1000 ? 0 : hz < 4000 ? 2.5 : 5,
+        'acoustic' => hz < 120 ? 3 : hz < 600 ? 1 : hz < 3000 ? 1.5 : 2.5,
+        _ => 0,
+      };
+
+  /// Applies the saved equalizer setting (Android only).
+  Future<void> applyEqualizer() async {
+    final eq = equalizer;
+    if (eq == null) return;
+    try {
+      final preset = store.eqPreset;
+      await eq.setEnabled(preset != 'off');
+      if (preset == 'off') return;
+      final params = await eq.parameters;
+      for (var i = 0; i < params.bands.length; i++) {
+        final b = params.bands[i];
+        final db = preset == 'custom'
+            ? (i < store.eqCustom.length ? store.eqCustom[i] : 0.0)
+            : presetGain(preset, b.centerFrequency);
+        await b.setGain(db.clamp(params.minDecibels, params.maxDecibels));
+      }
+    } catch (e) {
+      debugPrint('equalizer: $e');
+    }
+  }
+
+  Future<void> setSound({int? crossfadeSec, bool? evenVolume, String? eqPreset}) async {
+    if (crossfadeSec != null) store.crossfadeSec = crossfadeSec;
+    if (evenVolume != null) store.evenVolume = evenVolume;
+    if (eqPreset != null) store.eqPreset = eqPreset;
+    store.changed();
+    _applyGain();
+    _transitionFade(player.position);
+    if (eqPreset != null) await applyEqualizer();
+    notifyListeners();
   }
 
   void sleepAtEndOfTrack() {
@@ -306,6 +397,9 @@ class PlayerService extends ChangeNotifier {
   // ------------------------------------------------------------ preview
   /// Plays an online song from the PC. Call [stopPreview] to get the queue back.
   Future<void> playPreview(Uri uri, {required String key, required String title, String? artist, String? artUrl}) async {
+    _fadeFactor = 1;
+    _gainFactor = 1;
+    _applyVolume();
     if (!previewing) {
       _saved = _Saved(
         ids: [for (final s in player.sequence) (s.tag as MediaItem).id],
@@ -381,6 +475,7 @@ class PlayerService extends ChangeNotifier {
   // ------------------------------------------------------------ internals
   void _onTrackChanged() {
     if (previewing) return;
+    _applyGain();
     final t = current;
     if (t?.id != _lastCountedId) clearAbLoop(notify: false);
     if (sleepMode == SleepMode.endOfTrack && _lastCountedId != null && t?.id != _lastCountedId) {
