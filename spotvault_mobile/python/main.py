@@ -61,6 +61,35 @@ try:
 except Exception as e:  # pragma: no cover
     log("certifi missing:", e)
 
+# On Android, pure-Python packages are imported straight from a zip inside the
+# APK, where gettext can't open files. ytmusicapi loads its language file with
+# gettext.translation("base", ...), so read that file through importlib instead.
+import gettext  # noqa: E402
+import io  # noqa: E402
+
+_gettext_translation = gettext.translation
+
+
+def _translation(domain, localedir=None, languages=None, *args, **kwargs):
+    try:
+        return _gettext_translation(domain, localedir, languages, *args, **kwargs)
+    except (FileNotFoundError, OSError):
+        if domain != "base":
+            raise
+        import importlib.resources
+        for lang in list(languages or []) + ["en"]:
+            try:
+                data = importlib.resources.files("ytmusicapi").joinpath(
+                    f"locales/{lang}/LC_MESSAGES/base.mo").read_bytes()
+                return gettext.GNUTranslations(io.BytesIO(data))
+            except Exception:
+                continue
+        log("ytmusicapi language file missing; using plain English")
+        return gettext.NullTranslations()
+
+
+gettext.translation = _translation
+
 # The phone's embedded Python runs this file without __file__; the app
 # passes its folder in SV_APP so `sources.py` next to it can be imported.
 _here = os.environ.get("SV_APP") or globals().get("__file__") or ""
@@ -206,7 +235,8 @@ def _run(job):
             with open(os.path.join(ART, job["id"] + ".img"), "wb") as f:
                 f.write(art)
             job["art"] = os.path.join(ART, job["id"] + ".img")
-        job["duration"] = _tag(dest, title, artist, album, art)
+        # Streamed (HLS) files are fragmented MP4, where mutagen can't read the length.
+        job["duration"] = _tag(dest, title, artist, album, art) or float(info.get("duration") or 0)
     try:
         os.rmdir(tmp)
     except OSError:
@@ -264,6 +294,33 @@ def start_download(data):
     return dict(job), None
 
 
+PREVIEWS = os.path.join(os.getcwd(), "previews")
+
+
+def _preview_file(url):
+    """Downloads a streamed-in-pieces song to a cache file for previewing."""
+    import yt_dlp
+    os.makedirs(PREVIEWS, exist_ok=True)
+    # Keep the cache small: drop previews older than an hour.
+    now = time.time()
+    for name in os.listdir(PREVIEWS):
+        p = os.path.join(PREVIEWS, name)
+        try:
+            if now - os.path.getmtime(p) > 3600:
+                os.remove(p)
+        except OSError:
+            pass
+    opts = dict(YDL_BASE, format=AUDIO_FORMAT, logger=_Quiet(),
+                outtmpl={"default": os.path.join(PREVIEWS, "%(extractor)s-%(id)s.%(ext)s")})
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        reqs = info.get("requested_downloads") or []
+        path = reqs[0].get("filepath") if reqs else ydl.prepare_filename(info)
+    if not path or not os.path.exists(path):
+        raise RuntimeError("No playable stream")
+    return path
+
+
 def stream_for(url):
     with _streams_lock:
         hit = _streams.get(url)
@@ -279,6 +336,10 @@ def stream_for(url):
     if not direct:
         raise RuntimeError("No playable stream")
     mime = {"m4a": "audio/mp4", "mp4": "audio/mp4", "mp3": "audio/mpeg"}.get(info.get("ext", ""), "audio/mp4")
+    if str(info.get("protocol", "")).startswith("m3u8"):
+        # Streamed in pieces (SoundCloud AAC): players need one seekable file,
+        # so fetch the song once and serve it from the phone.
+        direct = "file:" + _preview_file(url)
     resolved = (direct, dict(info.get("http_headers") or {}), mime)
     with _streams_lock:
         if len(_streams) > 50:
@@ -388,6 +449,41 @@ class Handler(BaseHTTPRequestHandler):
             {k: r.get(k, "") for k in ("title", "artist", "duration", "url", "thumb")} for r in results
         ]})
 
+    def _serve_local(self, path, mime):
+        """Serves a cached preview file with byte ranges (iPhone's player needs them)."""
+        size = os.path.getsize(path)
+        start, end = 0, size - 1
+        m = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
+        if m and (m.group(1) or m.group(2)):
+            if m.group(1):
+                start = int(m.group(1))
+                end = min(int(m.group(2)), size - 1) if m.group(2) else size - 1
+            else:
+                start = max(0, size - int(m.group(2)))
+            if start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        else:
+            self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(start)
+            left = end - start + 1
+            while left > 0:
+                chunk = f.read(min(CHUNK, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
+
     def _preview(self, url):
         import requests
         source, clean = sources.normalize_url(url)
@@ -398,6 +494,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             log("preview failed:", type(e).__name__, e)
             return self._error(502, f"Preview failed: {type(e).__name__}")
+        if direct.startswith("file:"):
+            return self._serve_local(direct[5:], mime)
         rng = self.headers.get("Range", "")
         up_headers = dict(headers)
         up_headers["Range"] = rng if rng.startswith("bytes=") else "bytes=0-"

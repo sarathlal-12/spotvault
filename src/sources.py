@@ -279,7 +279,12 @@ def search(source_key, query, limit=15):
         info = ydl.extract_info(f"{prefix}{limit}:{q}", download=False)
     out = []
     for e in info.get("entries") or []:
-        url = e.get("url") or e.get("webpage_url")
+        # SoundCloud's "url" is an api.soundcloud.com link that normalize_url
+        # rejects; its webpage_url is the normal soundcloud.com page.
+        if source_key == "soundcloud":
+            url = e.get("webpage_url") or e.get("url")
+        else:
+            url = e.get("url") or e.get("webpage_url")
         if not url:
             continue
         dur = e.get("duration")
