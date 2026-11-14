@@ -271,8 +271,15 @@ class SyncService extends ChangeNotifier {
         final t = Track.fromServer(raw, previous: prev);
         remoteTracks[t.id] = t;
         final f = store.localFile(t);
-        final upToDate = prev != null && prev.size == t.size && prev.mtime == t.mtime && f.existsSync() && f.lengthSync() == t.size;
-        if (!upToDate) toFetch.add(t);
+        // Windows: the songs are already in place (the PC's own folder).
+        final upToDate = Platform.isWindows
+            ? f.existsSync()
+            : prev != null && prev.size == t.size && prev.mtime == t.mtime && f.existsSync() && f.lengthSync() == t.size;
+        if (!upToDate) {
+          toFetch.add(t);
+        } else if (Platform.isWindows && prev == null) {
+          store.tracks[t.id] = t; // already on this PC: just list it
+        }
       }
     }
     filesTotal = toFetch.length;

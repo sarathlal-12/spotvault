@@ -38,7 +38,7 @@ void main() {
       store.listenArtists['Govind Vasantha'] = 3 * 3600 * 1000;
       await tester.pumpWidget(_wrap(const LabScreen(), dark));
       await tester.pump(const Duration(seconds: 2));
-      expect(find.text('Vault Lab'), findsOneWidget);
+      expect(find.text('Studio'), findsOneWidget);
       expect(find.textContaining('Govind Vasantha', findRichText: true), findsOneWidget);
       expect(find.text('Smart Sleep'), findsOneWidget);
       expect(tester.takeException(), isNull);

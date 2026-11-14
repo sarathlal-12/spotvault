@@ -5,14 +5,34 @@ import 'dart:math' as math;
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:audio_service/audio_service.dart' show MediaItem;
 
 import 'library_store.dart';
 
 enum SleepMode { off, timer, endOfTrack }
 
+/// Shuffle order where songs you queue ("Play next", "Add to queue") go right
+/// after the song playing now (and after songs you queued before), instead of
+/// a random spot.
+class QueueShuffleOrder extends DefaultShuffleOrder {
+  /// Sequence index the next inserted song should follow; set before each insert.
+  int? insertAfter;
+
+  @override
+  void insert(int index, int count) {
+    final after = insertAfter;
+    final pos = after == null ? -1 : indices.indexOf(after);
+    if (pos < 0) return super.insert(index, count);
+    for (var i = 0; i < indices.length; i++) {
+      if (indices[i] >= index) indices[i] += count;
+    }
+    indices.insertAll(pos + 1, [for (var i = 0; i < count; i++) index + i]);
+    insertAfter = null;
+  }
+}
+
 /// Music player: queue, shuffle, repeat, sleep timer, resume where you left off.
-/// Lock-screen and notification controls come from just_audio_background.
+/// Lock-screen, notification and car controls come from audio_handler.dart.
 class PlayerService extends ChangeNotifier {
   final LibraryStore store;
 
@@ -70,10 +90,12 @@ class PlayerService extends ChangeNotifier {
   _Saved? _saved;
 
   Future<void> init() async {
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
-    // Pause when headphones are unplugged / Bluetooth disconnects.
-    session.becomingNoisyEventStream.listen((_) => player.pause());
+    if (!Platform.isWindows) {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      // Pause when headphones are unplugged / Bluetooth disconnects.
+      session.becomingNoisyEventStream.listen((_) => player.pause());
+    }
 
     player.currentIndexStream.listen((_) => _onTrackChanged());
     player.sequenceStateStream.listen((_) => notifyListeners());
@@ -157,7 +179,7 @@ class PlayerService extends ChangeNotifier {
     if (index < 0) index = 0;
 
     if (shuffle != null) await player.setShuffleModeEnabled(shuffle);
-    await player.setAudioSources([for (final t in list) _source(t)], initialIndex: index);
+    await player.setAudioSources([for (final t in list) _source(t)], initialIndex: index, shuffleOrder: _newOrder());
     if (shuffle == true) {
       await player.shuffle();
       // When shuffling a whole list, start from the first shuffled song.
@@ -167,19 +189,55 @@ class PlayerService extends ChangeNotifier {
     _persist();
   }
 
+  // ------------------------------------------------------------ your queue
+  QueueShuffleOrder _order = QueueShuffleOrder();
+  QueueShuffleOrder _newOrder() => _order = QueueShuffleOrder();
+
+  /// Songs you queued that haven't played yet (ids), in play order.
+  final List<String> _queued = [];
+
+  /// The sequence index of the last song in the "queued by you" run right
+  /// after the current song (or the current song when there is none).
+  int _queueAnchor() {
+    final cur = player.currentIndex ?? 0;
+    final order = playOrder;
+    final seq = player.sequence;
+    final pos = order.indexOf(cur);
+    var anchor = cur;
+    if (pos < 0) return anchor;
+    for (final i in order.skip(pos + 1)) {
+      if (i < seq.length && _queued.contains((seq[i].tag as MediaItem).id)) {
+        anchor = i;
+      } else {
+        break;
+      }
+    }
+    return anchor;
+  }
+
+  Future<void> _insertAfter(int anchor, Track t) async {
+    _order.insertAfter = anchor;
+    await player.insertAudioSource(anchor + 1, _source(t));
+  }
+
+  /// Plays [t] right after the current song.
   Future<void> playNext(Track t) async {
     if (previewing) await stopPreview();
     if (!hasQueue) return playTracks([t]);
-    final i = (player.currentIndex ?? -1) + 1;
-    await player.insertAudioSource(i, _source(t));
+    await _insertAfter(player.currentIndex ?? 0, t);
+    _queued.insert(0, t.id);
     _persist();
+    notifyListeners();
   }
 
+  /// Plays [t] after the current song and the songs you queued before it.
   Future<void> addToQueue(Track t) async {
     if (previewing) await stopPreview();
     if (!hasQueue) return playTracks([t]);
-    await player.addAudioSource(_source(t));
+    await _insertAfter(_queueAnchor(), t);
+    _queued.add(t.id);
     _persist();
+    notifyListeners();
   }
 
   Future<void> removeAt(int index) async {
@@ -490,7 +548,7 @@ class PlayerService extends ChangeNotifier {
         final pos = idx >= 0 ? saved.position : Duration.zero;
         if (idx < 0) idx = 0;
         _lastCountedId = list[idx].id; // getting the queue back is not a new play
-        await player.setAudioSources([for (final t in list) _source(t)], initialIndex: idx, initialPosition: pos);
+        await player.setAudioSources([for (final t in list) _source(t)], initialIndex: idx, initialPosition: pos, shuffleOrder: _newOrder());
         if (saved.wasPlaying) player.play();
       }
     } catch (e) {
@@ -513,6 +571,8 @@ class PlayerService extends ChangeNotifier {
   // ------------------------------------------------------------ internals
   void _onTrackChanged() {
     if (previewing) return;
+    final playingId = current?.id;
+    if (playingId != null) _queued.remove(playingId);
     _applyGain();
     final t = current;
     if (t?.id != _lastCountedId) clearAbLoop(notify: false);
@@ -557,6 +617,7 @@ class PlayerService extends ChangeNotifier {
         [for (final t in list) _source(t)],
         initialIndex: index,
         initialPosition: Duration(milliseconds: store.resumePositionMs),
+        shuffleOrder: _newOrder(),
       );
       _lastCountedId = list[index].id; // don't count a restore as a play
     } catch (e) {
@@ -585,7 +646,7 @@ class PlayerService extends ChangeNotifier {
     var idx = cur == null ? 0 : list.indexWhere((t) => t.id == cur.id);
     final pos = idx >= 0 ? player.position : Duration.zero;
     if (idx < 0) idx = 0;
-    await player.setAudioSources([for (final t in list) _source(t)], initialIndex: idx, initialPosition: pos);
+    await player.setAudioSources([for (final t in list) _source(t)], initialIndex: idx, initialPosition: pos, shuffleOrder: _newOrder());
     if (wasPlaying) player.play();
   }
 

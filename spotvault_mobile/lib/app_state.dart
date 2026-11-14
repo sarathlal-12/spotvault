@@ -21,8 +21,11 @@ final NearbyService nearbyService = NearbyService(store, playerService);
 /// Lets services show dialogs (incoming shares, Jam join requests).
 final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
 
-/// Lets any screen jump to a bottom-nav tab (0 Home, 1 Search, 2 Lab, 3 Sync).
+/// Lets any screen jump to a bottom-nav tab (0 Home, 1 Search, 2 Studio, 3 Sync).
 final ValueNotifier<int> currentTab = ValueNotifier<int>(0);
+
+/// "Add songs from the web" on a playlist: Search saves straight into this folder.
+final ValueNotifier<String?> searchTarget = ValueNotifier<String?>(null);
 
 // ---------------------------------------------------------------------------
 // "Crimson" palette: forest-green night, charcoal panels, crimson red and
@@ -91,16 +94,67 @@ const Color kCyan = Color(0xFF9CC5B0); // sage green: second accent
 const Color kForest = Color(0xFF2F6B52); // deep green for glows
 const Color kPink = Color(0xFFF0605A); // likes and Moments
 const Color kDanger = Color(0xFFF43F5E);
-const LinearGradient kBrandGradient = LinearGradient(colors: [kViolet, kEmber]);
+/// Crimson gradient (Crimson look) or a flat crimson accent (Minimal look).
+LinearGradient get kBrandGradient =>
+    isMinimal ? const LinearGradient(colors: [Color(0xFFD63A35), Color(0xFFD63A35)]) : const LinearGradient(colors: [kViolet, kEmber]);
 
 /// Serif display type, like the brand headline. System fonts only, so the
 /// app works offline: Georgia on iPhone, the system serif on Android.
 const String kDisplayFont = 'Georgia';
 const List<String> kDisplayFallback = ['serif', 'Noto Serif', 'Times New Roman'];
 
+// ---------------------------------------------------------------------------
+// "Minimal" palette (2.0): calm grey and black, crimson only as an accent.
+// ---------------------------------------------------------------------------
+const Palette kMinimalDark = Palette(
+  dark: true,
+  bg: Color(0xFF0E0E0F),
+  surface: Color(0xFF1C1C1E),
+  card: Color(0xFF232325),
+  raised: Color(0xFF2A2A2D),
+  text: Color(0xFFF2EFE8),
+  muted: Color(0xFFA09C96),
+  accent: Color(0xFFF0605A),
+  line: Color(0x1FFFFFFF),
+  track: Color(0x26FFFFFF),
+  glass: Color(0x0FFFFFFF),
+  orbA: Color(0x00000000),
+  orbB: Color(0x00000000),
+);
+
+const Palette kMinimalLight = Palette(
+  dark: false,
+  bg: Color(0xFFECEAE6),
+  surface: Color(0xFFFFFFFF),
+  card: Color(0xFFE2DFDA),
+  raised: Color(0xFFFFFFFF),
+  text: Color(0xFF111111),
+  muted: Color(0xFF66635E),
+  accent: Color(0xFFC42F2A),
+  line: Color(0x1A000000),
+  track: Color(0xFFDCD8D2),
+  glass: Color(0xB3FFFFFF),
+  orbA: Color(0x00000000),
+  orbB: Color(0x00000000),
+);
+
 /// The theme in use. Changing it repaints the whole app (see main.dart).
 final ValueNotifier<bool> darkMode = ValueNotifier<bool>(true);
-Palette get pal => darkMode.value ? kDarkPalette : kLightPalette;
+
+/// 'crimson' (the 1.x look) or 'minimal' (2.0's calm look).
+final ValueNotifier<String> themeStyle = ValueNotifier<String>('minimal');
+bool get isMinimal => themeStyle.value != 'crimson';
+
+Palette paletteFor(bool dark, String style) => style == 'crimson'
+    ? (dark ? kDarkPalette : kLightPalette)
+    : (dark ? kMinimalDark : kMinimalLight);
+Palette get pal => paletteFor(darkMode.value, themeStyle.value);
+
+/// Morning, afternoon or evening.
+String greeting() {
+  final h = DateTime.now().hour;
+  return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
 
 // Short names used across the screens; they follow the current theme.
 Color get kAccent => pal.accent;

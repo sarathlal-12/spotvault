@@ -26,6 +26,8 @@ const APP = {
     privacy: {
       NSLocalNetworkUsageDescription:
         'SpotVault connects to the SpotVault app on your PC over Wi-Fi to copy your playlists.',
+      NSCameraUsageDescription: 'Scan a SpotVault code to join a Jam or link your PC.',
+      NSPhotoLibraryUsageDescription: 'Pick a photo to use as a playlist cover.',
     },
   },
 };

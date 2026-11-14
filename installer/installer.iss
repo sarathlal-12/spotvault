@@ -1,11 +1,13 @@
 ; Script for SpotVault Installer (Inno Setup 6/7)
-; Build the exe first:  python -m PyInstaller --noconfirm --clean SpotVault_V1.spec
+; Build first (2.0):
+;   python -m PyInstaller --noconfirm --clean SpotVaultEngine.spec      -> dist\engine\
+;   cd spotvault_mobile && flutter build windows --release              -> build\windows\x64\runner\Release\
 ; Then open this file in Inno Setup and press Compile (or run ISCC.exe on it).
 #define MyAppName "SpotVault"
-#define MyAppVersion "1.6.1"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "Sarath"
 #define MyAppURL "https://github.com/sarathlal-12/spotvault"
-#define MyAppExeName "SpotVault_V1.exe"
+#define MyAppExeName "SpotVault.exe"
 
 [Setup]
 ; Same AppId as v1.0, so this installs over the old version as an upgrade.
@@ -24,7 +26,7 @@ DisableProgramGroupPage=yes
 AllowNoIcons=yes
 OutputDir=..\Output
 OutputBaseFilename=SpotVault_Setup_v{#MyAppVersion}
-SetupIconFile=..\assets\app_icon.ico
+SetupIconFile=..\assets\app_icon_v2.ico
 UninstallDisplayIcon={app}\app_icon.ico
 UninstallDisplayName={#MyAppName}
 Compression=lzma2/max
@@ -46,9 +48,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\assets\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+; The app (Flutter) and the hidden downloader engine (PyInstaller, one folder).
+Source: "..\spotvault_mobile\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\engine\*"; DestDir: "{app}\engine"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\assets\app_icon_v2.ico"; DestDir: "{app}"; DestName: "app_icon.ico"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
+
+[InstallDelete]
+; 1.x was one window app; 2.0 is SpotVault.exe plus engine\.
+Type: files; Name: "{app}\SpotVault_V1.exe"
 
 [Icons]
 ; WorkingDir matters: the app keeps library_config.json in its working folder.
@@ -64,4 +72,4 @@ Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "{cm:Launch
 Type: files; Name: "{app}\library_config.json"
 
 [Messages]
-FinishedLabel=SpotVault is installed.%n%nTo sync music to your phone, click "Connect phone" in the app. If Windows Firewall asks, allow SpotVault on Private networks.
+FinishedLabel=SpotVault is installed.%n%nTo sync music to your phone, open Settings > Phone link in the app. If Windows Firewall asks, allow SpotVault on Private networks.

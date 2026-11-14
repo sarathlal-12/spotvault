@@ -2,8 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:audio_service/audio_service.dart' show MediaItem;
 
+import '../desktop/desktop_player.dart' show WavyCover;
 import '../app_state.dart';
 import '../library_store.dart';
 import '../player_service.dart';
@@ -235,6 +236,14 @@ class _GlowingArtState extends State<_GlowingArt> with SingleTickerProviderState
   @override
   Widget build(BuildContext context) {
     final s = widget.side;
+    if (isMinimal) {
+      // Minimal look: the cover in a soft wavy shape with a progress ring around it.
+      return SizedBox(
+        width: s + 24,
+        height: s + 24,
+        child: Hero(tag: 'art', child: WavyCover(track: widget.track, inset: 22)),
+      );
+    }
     return SizedBox(
       width: s + 24,
       height: s + 24,
@@ -594,7 +603,7 @@ class _ToolRow extends StatelessWidget {
         Row(
           children: [
             _Tool(
-              icon: Icons.add_location_alt_rounded,
+              icon: Icons.bookmark_add_outlined,
               label: 'Moment',
               active: false,
               onTap: () {
@@ -603,7 +612,7 @@ class _ToolRow extends StatelessWidget {
               },
             ),
             _Tool(
-              icon: Icons.all_inclusive_rounded,
+              icon: Icons.repeat_rounded,
               label: abLabel,
               active: ps.loopA != null,
               onTap: () {
@@ -613,7 +622,7 @@ class _ToolRow extends StatelessWidget {
               onLongPress: ps.loopA == null ? null : ps.clearAbLoop,
             ),
             _Tool(
-              icon: Icons.bedtime_rounded,
+              icon: Icons.bedtime_outlined,
               label: _sleepLabel(),
               active: ps.sleepMode != SleepMode.off,
               onTap: () => _sleepSheet(context),
@@ -762,33 +771,30 @@ class _Tool extends StatelessWidget {
           child: Pressable(
             onTap: onTap,
             onLongPress: onLongPress,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  height: 62,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: active ? LinearGradient(colors: [kViolet.withValues(alpha: 0.36), kEmber.withValues(alpha: 0.14)]) : null,
-                    color: active ? null : (pal.dark ? pal.glass : pal.surface),
-                    border: Border.all(color: active ? kViolet.withValues(alpha: 0.6) : kLine),
-                  ),
-                  child: ExcludeSemantics(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, size: 20, color: active ? kText : kMuted),
-                        const SizedBox(height: 4),
-                        Text(label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: active ? kText : kMuted)),
-                      ],
-                    ),
-                  ),
+            // Every tool is the same size and shape; "on" only changes the colours.
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+              height: 64,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: active ? kAccent.withValues(alpha: 0.14) : (pal.dark ? pal.glass : pal.surface),
+                border: Border.all(color: active ? kAccent.withValues(alpha: 0.7) : kLine),
+              ),
+              child: ExcludeSemantics(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 21, color: active ? kAccent : kText),
+                    const SizedBox(height: 5),
+                    Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: active ? kAccent : kMuted)),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -809,6 +815,12 @@ class _QueueList extends StatelessWidget {
         final p = playerService.player;
         final seq = p.sequence;
         final cur = p.currentIndex ?? 0;
+        // The queue starts at the song playing now and lists what plays next,
+        // in the order it will really play (songs already played are hidden).
+        final order = playerService.playOrder;
+        final start = order.contains(cur) ? order.indexOf(cur) : 0;
+        final shown = order.sublist(start);
+        final canDrag = !p.shuffleModeEnabled;
         return Column(
           children: [
             Padding(
@@ -816,7 +828,7 @@ class _QueueList extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(child: Text('Queue', style: displayStyle(20))),
-                  Text('${seq.length} songs', style: TextStyle(color: kMuted)),
+                  Text('${shown.length - 1} up next', style: TextStyle(color: kMuted)),
                 ],
               ),
             ),
@@ -829,14 +841,18 @@ class _QueueList extends StatelessWidget {
               child: ReorderableListView.builder(
                 scrollController: scroll,
                 buildDefaultDragHandles: false,
-                itemCount: seq.length,
-                onReorderItem: (from, to) => playerService.move(from, to),
-                itemBuilder: (_, i) {
+                itemCount: shown.length,
+                // Shuffle off: the shown list is the sequence from the current song on.
+                onReorderItem: (from, to) {
+                  if (canDrag && from > 0 && to > 0) playerService.move(start + from, start + to);
+                },
+                itemBuilder: (_, pos) {
+                  final i = shown[pos];
                   final item = seq[i].tag as MediaItem;
                   final t = store.tracks[item.id];
                   final isCur = i == cur;
                   return Dismissible(
-                    key: ValueKey('${item.id}-$i'),
+                    key: ValueKey('${item.id}-$i-$pos'),
                     direction: isCur ? DismissDirection.none : DismissDirection.endToStart,
                     background: Container(
                       color: kDanger.withValues(alpha: 0.85),
@@ -854,7 +870,9 @@ class _QueueList extends StatelessWidget {
                       subtitle: Text(item.artist ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: kMuted)),
                       trailing: isCur
                           ? EqBars(color: kAccent, height: 14, bars: 3, playing: p.playing)
-                          : ReorderableDragStartListener(index: i, child: Icon(Icons.drag_handle_rounded, color: kMuted)),
+                          : canDrag
+                              ? ReorderableDragStartListener(index: pos, child: Icon(Icons.drag_handle_rounded, color: kMuted))
+                              : null,
                       onTap: () => playerService.jumpTo(i),
                     ),
                   );

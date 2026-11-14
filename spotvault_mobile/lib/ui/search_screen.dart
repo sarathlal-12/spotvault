@@ -38,7 +38,19 @@ class _SearchScreenState extends State<SearchScreen> {
   int _suggestId = 0;
 
   @override
+  void initState() {
+    super.initState();
+    searchTarget.addListener(_onTarget);
+  }
+
+  /// A playlist's "Add songs from the web" switches to Find new songs.
+  void _onTarget() {
+    if (searchTarget.value != null && mounted) setState(() => mode = _Mode.online);
+  }
+
+  @override
   void dispose() {
+    searchTarget.removeListener(_onTarget);
     _typingTimer?.cancel();
     _suggestTimer?.cancel();
     ctrl.dispose();
@@ -135,12 +147,14 @@ class _SearchScreenState extends State<SearchScreen> {
       _snack('No playlists yet. Sync your playlists from the PC first.');
       return;
     }
-    final pl = await showModalBottomSheet<PlaylistInfo>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => _PlaylistPicker(song: song),
-    );
+    final target = searchTarget.value == null ? null : store.playlistByFolder(searchTarget.value!);
+    final pl = target ??
+        await showModalBottomSheet<PlaylistInfo>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (ctx) => _PlaylistPicker(song: song),
+        );
     if (pl == null) return;
     store.addRecentSearch(song.toJson());
     final ghost = store.ghostQueue;
@@ -171,6 +185,26 @@ class _SearchScreenState extends State<SearchScreen> {
                 const ThemeToggle(),
               ],
             ),
+          ),
+          ValueListenableBuilder<String?>(
+            valueListenable: searchTarget,
+            builder: (context, folder, _) {
+              final pl = folder == null ? null : store.playlistByFolder(folder);
+              if (pl == null) return const SizedBox();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+                  decoration: BoxDecoration(color: kAccent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
+                  child: Row(children: [
+                    Icon(Icons.playlist_add_rounded, color: kAccent, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('Saving into ${pl.name}', style: TextStyle(color: kText, fontWeight: FontWeight.w600))),
+                    IconButton(tooltip: 'Pick each time instead', onPressed: () => searchTarget.value = null, icon: const Icon(Icons.close_rounded, size: 18)),
+                  ]),
+                ),
+              );
+            },
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),

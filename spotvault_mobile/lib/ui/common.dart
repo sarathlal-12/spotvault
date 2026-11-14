@@ -255,7 +255,7 @@ class MiniPlayerBar extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
                         widthFactor: snap.data ?? 0,
-                        child: Container(height: 2.5, decoration: const BoxDecoration(gradient: kBrandGradient)),
+                        child: Container(height: 2.5, decoration: BoxDecoration(gradient: kBrandGradient)),
                       ),
                     ),
                   ),

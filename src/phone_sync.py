@@ -198,6 +198,9 @@ class _Handler(BaseHTTPRequestHandler):
             # may carry the PIN in the query string instead.
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             given = q.get("pin", [""])[0]
+        local = os.environ.get("SV_LOCAL_TOKEN", "")
+        if local and ip in ("127.0.0.1", "::1") and secrets.compare_digest(given.encode(), local.encode()):
+            return True  # the SpotVault 2.0 Windows app on this PC
         if secrets.compare_digest(given.encode(), self.sync.get_pin().encode()):
             self.sync.note_client(ip, self.headers.get("X-SpotVault-Device", "Phone"))
             return True
@@ -214,13 +217,15 @@ class _Handler(BaseHTTPRequestHandler):
             if route == "/api/status":
                 return self._send_json(200, {
                     "app": "SpotVault",
-                    "version": APP_VERSION,
+                    "version": getattr(getattr(self.sync, "engine", None), "version", None) or APP_VERSION,
                     "api": API_VERSION,
                     "name": socket.gethostname(),
                     "pin_required": True,
                 })
             if not self._authorized():
                 return
+            if route.startswith("/api/engine"):
+                return self._engine("GET", route, query, b"")
             if route == "/api/library":
                 return self._send_json(200, self.sync.build_library())
             if route == "/api/file":
@@ -249,6 +254,8 @@ class _Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(min(length, 64 * 1024)) if length > 0 else b""
             if not self._authorized():
                 return
+            if route.startswith("/api/engine"):
+                return self._engine("POST", route, {}, body)
             if route == "/api/delete":
                 try:
                     data = json.loads(body or b"{}")
@@ -270,6 +277,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._error(404, "Not found")
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
+
+    def _engine(self, method, route, query, body):
+        """SpotVault 2.0's Windows app controls the engine here, from this PC only."""
+        engine = getattr(self.sync, "engine", None)
+        if engine is None or self.client_address[0] not in ("127.0.0.1", "::1"):
+            return self._error(404, "Not found")
+        code, obj = engine.handle(method, route, query, body)
+        return self._send_json(code, obj)
 
     # --- online songs --------------------------------------------
     def _suggest(self, q):
@@ -437,6 +452,7 @@ class PhoneSyncServer:
         self._lock = threading.Lock()
         self.on_library_changed = None   # set by the app: refresh after phone downloads
         self.on_delete_playlist = None   # set by the app: remove a playlist the phone deleted
+        self.engine = None               # SpotVault 2.0: the windowless engine (engine.py)
         self._jobs = {}
         self._job_queue = []
         self._job_cv = threading.Condition()

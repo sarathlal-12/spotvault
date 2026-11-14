@@ -14,14 +14,6 @@ class LibraryScreen extends StatelessWidget {
 
   void _open(BuildContext context, Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
-  String _greeting() {
-    final h = DateTime.now().hour;
-    if (h < 5) return 'Up late';
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -42,9 +34,9 @@ class LibraryScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(_greeting(), style: TextStyle(fontSize: 13, color: kMuted)),
+                              Text(greeting(), style: TextStyle(fontSize: 13, color: kMuted)),
                               const SizedBox(height: 2),
-                              Text('Your Vault', style: displayStyle(28)),
+                              Text(store.userName.trim().isEmpty ? 'Your Vault' : store.userName.trim(), style: displayStyle(28)),
                             ],
                           ),
                         ),
@@ -301,7 +293,7 @@ class _ContinueCard extends StatelessWidget {
                             Container(height: 4, color: pal.track),
                             FractionallySizedBox(
                               widthFactor: f,
-                              child: Container(height: 4, decoration: const BoxDecoration(gradient: kBrandGradient)),
+                              child: Container(height: 4, decoration: BoxDecoration(gradient: kBrandGradient)),
                             ),
                           ],
                         ),

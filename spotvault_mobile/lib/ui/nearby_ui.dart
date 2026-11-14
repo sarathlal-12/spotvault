@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'qr.dart';
+
 import '../app_state.dart';
 import '../library_store.dart';
 import '../nearby.dart';
@@ -191,8 +193,14 @@ void openJam(BuildContext context) {
   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JamScreen()));
 }
 
+/// A Jam link or code was opened: show the Jam screen and ask to join.
+void openJamLink(BuildContext context, SpotLink link) {
+  Navigator.of(context).push(MaterialPageRoute(builder: (_) => JamScreen(autoJoin: link)));
+}
+
 class JamScreen extends StatefulWidget {
-  const JamScreen({super.key});
+  final SpotLink? autoJoin;
+  const JamScreen({super.key, this.autoJoin});
 
   @override
   State<JamScreen> createState() => _JamScreenState();
@@ -207,6 +215,10 @@ class _JamScreenState extends State<JamScreen> {
   void initState() {
     super.initState();
     if (!nearbyService.inJam) nearbyService.discover();
+    final link = widget.autoJoin;
+    if (link != null && !nearbyService.inJam) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _joinAt(link.host, link.port, link.name.isEmpty ? link.host : link.name));
+    }
     nearbyService.myAddresses().then((a) {
       if (mounted) setState(() => myAddresses = a);
     });
@@ -279,7 +291,16 @@ class _JamScreenState extends State<JamScreen> {
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
       children: [
         Text('Play together on the same Wi-Fi. No internet needed.', style: TextStyle(color: kMuted)),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
+        const _Reachable(),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), shape: const StadiumBorder()),
+          onPressed: joining != null ? null : _scan,
+          icon: const Icon(Icons.qr_code_scanner_rounded),
+          label: const Text('Scan a Jam code'),
+        ),
+        const SizedBox(height: 12),
         _ModeCard(
           icon: Icons.speaker_rounded,
           title: 'Be the speaker',
@@ -322,6 +343,21 @@ class _JamScreenState extends State<JamScreen> {
                     child: const Text('Join'),
                   ),
           ),
+        if (store.savedPhones.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text('Saved phones', style: displayStyle(18)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final sp in store.savedPhones)
+              InputChip(
+                avatar: const Icon(Icons.smartphone_rounded, size: 18),
+                label: Text('${sp['name']}'),
+                onPressed: joining != null ? null : () => _joinSaved(sp),
+                onDeleted: () => setState(() => n.forgetPhone('${sp['id']}')),
+                deleteButtonTooltipMessage: 'Forget',
+              ),
+          ]),
+        ],
         const SizedBox(height: 18),
         Text('Join by address', style: displayStyle(18)),
         const SizedBox(height: 4),
@@ -404,6 +440,18 @@ class _JamScreenState extends State<JamScreen> {
             if (host != null) ...[
               const SizedBox(height: 8),
               _MyAddress(addresses: myAddresses, compact: true),
+              if (myAddresses.isNotEmpty)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => showQrSheet(context,
+                        title: 'Join my Jam',
+                        subtitle: 'Scan with SpotVault (Jam → Scan a Jam code) on the same Wi-Fi, or send the link.',
+                        link: jamLink(myAddresses.first, n.port, n.myName)),
+                    icon: const Icon(Icons.qr_code_2_rounded),
+                    label: const Text('Show code'),
+                  ),
+                ),
             ],
             if (guest?.error != null) Text(guest!.error!, style: TextStyle(color: pal.danger, fontSize: 13)),
             const SizedBox(height: 14),
@@ -412,7 +460,14 @@ class _JamScreenState extends State<JamScreen> {
             if (cur != null)
               Text('${cur['artist']} · added by ${cur['by']}',
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: kMuted)),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+            if (cur != null)
+              _JamTimeline(
+                host: host,
+                guest: guest,
+                durationMs: (((cur['duration'] as num?) ?? 0) * 1000).round(),
+                onSeek: (ms) => control('seek', index: ms),
+              ),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               IconButton(
                   iconSize: 36, tooltip: 'Previous', icon: const Icon(Icons.skip_previous_rounded), onPressed: () => control('previous')),
@@ -429,6 +484,11 @@ class _JamScreenState extends State<JamScreen> {
             ]),
           ]),
         ),
+        if (host != null) ...[const SizedBox(height: 10), const _Reachable()],
+        if (guest != null && mode == JamMode.sync) ...[
+          const SizedBox(height: 10),
+          const _DelaySlider(),
+        ],
         const SizedBox(height: 14),
         Row(children: [
           Expanded(child: Text('Up next', style: displayStyle(18))),
@@ -477,6 +537,50 @@ class _JamScreenState extends State<JamScreen> {
     );
   }
 
+  Future<void> _scan() async {
+    final link = await scanSpotLink(context);
+    if (link == null || !mounted) return;
+    if (link.kind != 'jam') {
+      toast(context, 'That code is for linking a PC. Use it on the Sync tab.');
+      return;
+    }
+    await _joinAt(link.host, link.port, link.name.isEmpty ? link.host : link.name);
+  }
+
+  Future<void> _joinAt(String host, int port, String label) async {
+    setState(() => joining = 'address');
+    final phone = await nearbyService.hello(host, port);
+    if (!mounted) return;
+    if (phone == null) {
+      setState(() => joining = null);
+      toast(context, "Can't find $label. Is it on the same Wi-Fi with SpotVault open?");
+      return;
+    }
+    if (phone.jam == null) {
+      setState(() => joining = null);
+      toast(context, "${phone.name} hasn't started a Jam yet.");
+      return;
+    }
+    await _join(phone);
+  }
+
+  Future<void> _joinSaved(Map<String, dynamic> sp) async {
+    setState(() => joining = '${sp['id']}');
+    final phone = await nearbyService.hello('${sp['host']}', (sp['port'] as num?)?.toInt() ?? kNearbyPort);
+    if (!mounted) return;
+    if (phone == null) {
+      setState(() => joining = null);
+      toast(context, "Can't find ${sp['name']}. Is it on the same Wi-Fi with SpotVault open?");
+      return;
+    }
+    if (phone.jam == null) {
+      setState(() => joining = null);
+      toast(context, "${phone.name} hasn't started a Jam yet.");
+      return;
+    }
+    await _join(phone);
+  }
+
   Future<void> _addSongs(BuildContext context) async {
     final picked = await pickSongs(context);
     if (picked == null || picked.$1.isEmpty) return;
@@ -490,6 +594,138 @@ class _JamScreenState extends State<JamScreen> {
     } catch (_) {
       if (context.mounted) toast(context, "Couldn't reach the Jam");
     }
+  }
+}
+
+/// "Others can join you" or "Not reachable, tap to fix".
+class _Reachable extends StatelessWidget {
+  const _Reachable();
+
+  @override
+  Widget build(BuildContext context) {
+    final ok = nearbyService.reachable;
+    final c = ok ? const Color(0xFF2E9E5B) : pal.danger;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: ok ? null : () => nearbyService.ensureRunning(force: true),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(ok ? 'Others can join you' : 'Not reachable · tap to fix',
+                style: TextStyle(color: ok ? kMuted : c, fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// The Jam song's timeline. Anyone in the Jam can drag it to jump.
+class _JamTimeline extends StatefulWidget {
+  final JamHost? host;
+  final JamGuest? guest;
+  final int durationMs;
+  final ValueChanged<int> onSeek;
+  const _JamTimeline({required this.host, required this.guest, required this.durationMs, required this.onSeek});
+
+  @override
+  State<_JamTimeline> createState() => _JamTimelineState();
+}
+
+class _JamTimelineState extends State<_JamTimeline> with SingleTickerProviderStateMixin {
+  late final AnimationController _tick = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
+  double? _drag;
+
+  @override
+  void dispose() {
+    _tick.dispose();
+    super.dispose();
+  }
+
+  int _posMs() {
+    if (widget.host != null) return playerService.player.position.inMilliseconds;
+    final s = widget.guest!.state;
+    final pos = (s['position'] as num?)?.toInt() ?? 0;
+    if (s['playing'] != true) return pos;
+    final now = (s['now'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    return pos + (DateTime.now().millisecondsSinceEpoch + widget.guest!.clockOffset - now);
+  }
+
+  String _fmt(int ms) {
+    final s = (ms / 1000).floor().clamp(0, 359999);
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.durationMs > 0 ? widget.durationMs : (playerService.player.duration?.inMilliseconds ?? 0);
+    return AnimatedBuilder(
+      animation: _tick,
+      builder: (context, _) {
+        final v = _drag ?? (total == 0 ? 0.0 : (_posMs() / total).clamp(0.0, 1.0));
+        return Row(children: [
+          Text(_fmt((v * total).round()), style: TextStyle(color: kMuted, fontSize: 11)),
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 4,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                activeTrackColor: kText,
+                inactiveTrackColor: pal.track,
+                thumbColor: const Color(0xFFE0403B),
+              ),
+              child: Slider(
+                value: v.toDouble(),
+                onChanged: total == 0 ? null : (x) => setState(() => _drag = x),
+                onChangeEnd: (x) {
+                  widget.onSeek((x * total).round());
+                  setState(() => _drag = null);
+                },
+              ),
+            ),
+          ),
+          Text(_fmt(total), style: TextStyle(color: kMuted, fontSize: 11)),
+        ]);
+      },
+    );
+  }
+}
+
+/// Sync mode: make up for a Bluetooth speaker that plays late.
+class _DelaySlider extends StatefulWidget {
+  const _DelaySlider();
+
+  @override
+  State<_DelaySlider> createState() => _DelaySliderState();
+}
+
+class _DelaySliderState extends State<_DelaySlider> {
+  @override
+  Widget build(BuildContext context) {
+    final ms = store.jamDelayMs;
+    return GlassCard(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text('Speaker delay', style: TextStyle(color: kText, fontWeight: FontWeight.w700))),
+          Text(ms == 0 ? 'Off' : '$ms ms', style: TextStyle(color: kMuted)),
+        ]),
+        Text('Using a Bluetooth speaker? Slide until it sounds together with the other phones.',
+            style: TextStyle(color: kMuted, fontSize: 12)),
+        Slider(
+          value: ms.toDouble(),
+          min: 0,
+          max: 500,
+          divisions: 50,
+          label: '$ms ms',
+          onChanged: (v) => setState(() => store.jamDelayMs = v.round()),
+          onChangeEnd: (_) => store.changed(),
+        ),
+      ]),
+    );
   }
 }
 

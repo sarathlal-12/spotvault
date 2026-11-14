@@ -67,6 +67,19 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<!-- Keep playing music with the screen locked / app in background -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a SpotVault code to join a Jam or link your PC.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.spotvault.app.links</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>spotvault</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Pick a photo to use as a playlist cover.</string>
 	<key>UIBackgroundModes</key>

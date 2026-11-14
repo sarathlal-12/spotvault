@@ -193,6 +193,16 @@ class LibraryStore extends ChangeNotifier {
   bool mirrorDeletes = true;
   String skipUpdate = ''; // version the user chose to skip
   bool darkTheme = true;
+  /// 'crimson' (the 1.x look) or 'minimal' (2.0). Empty until the welcome screen.
+  String themeStyle = '';
+  /// Shown as "Good evening, <name>".
+  String userName = '';
+  /// Sort order chosen per playlist (folder -> 'pc' | 'recent' | 'title' | 'artist').
+  final Map<String, String> playlistSort = {};
+  /// Jam: phones you joined before ({name, id, host, port}), newest first.
+  List<Map<String, dynamic>> savedPhones = [];
+  /// Jam "Everyone in sync": play this many ms early to make up for a Bluetooth speaker's delay.
+  int jamDelayMs = 0;
   bool smartSleep = true; // fade out slowly before the sleep timer stops
   bool ghostQueue = true; // songs saved from search play next once they arrive
   bool useBridge = false; // download through the PC instead of on the phone
@@ -237,7 +247,7 @@ class LibraryStore extends ChangeNotifier {
     if (Platform.isAndroid) {
       ext = await getExternalStorageDirectory();
     }
-    baseDir = ext ?? await getApplicationDocumentsDirectory();
+    baseDir = ext ?? (Platform.isWindows ? await getApplicationSupportDirectory() : await getApplicationDocumentsDirectory());
     musicDir = Directory('${baseDir.path}/Music');
     artDir = Directory('${baseDir.path}/art');
     coverDir = Directory('${baseDir.path}/covers');
@@ -277,6 +287,11 @@ class LibraryStore extends ChangeNotifier {
       mirrorDeletes = j['mirrorDeletes'] ?? true;
       skipUpdate = j['skipUpdate'] ?? '';
       darkTheme = j['darkTheme'] ?? true;
+      themeStyle = j['themeStyle'] ?? '';
+      userName = j['userName'] ?? '';
+      playlistSort.addAll(Map<String, String>.from(j['playlistSort'] ?? const {}));
+      savedPhones = [for (final p in (j['savedPhones'] as List? ?? const [])) Map<String, dynamic>.from(p as Map)];
+      jamDelayMs = (j['jamDelayMs'] as num?)?.toInt() ?? 0;
       smartSleep = j['smartSleep'] ?? true;
       ghostQueue = j['ghostQueue'] ?? true;
       useBridge = j['useBridge'] ?? false;
@@ -332,6 +347,11 @@ class LibraryStore extends ChangeNotifier {
           'mirrorDeletes': mirrorDeletes,
           'skipUpdate': skipUpdate,
           'darkTheme': darkTheme,
+          'themeStyle': themeStyle,
+          'userName': userName,
+          'playlistSort': playlistSort,
+          'savedPhones': savedPhones,
+          'jamDelayMs': jamDelayMs,
           'smartSleep': smartSleep,
           'ghostQueue': ghostQueue,
           'useBridge': useBridge,
@@ -694,7 +714,8 @@ class LibraryStore extends ChangeNotifier {
   Future<void> deleteTrack(String id) async {
     final t = tracks.remove(id);
     if (t == null) return;
-    for (final f in [localFile(t), artFile(t)]) {
+    // On Windows the songs are the PC's own files: only the PC engine deletes them.
+    for (final f in [if (!Platform.isWindows) localFile(t), artFile(t)]) {
       try {
         if (await f.exists()) await f.delete();
       } catch (_) {}

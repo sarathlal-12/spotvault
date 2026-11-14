@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../library_store.dart';
 import 'aurora.dart';
+import 'car_mode.dart';
 import 'common.dart';
 
-/// Vault Lab: features other players don't have.
+/// Studio (was Vault Lab): tools for how your music plays.
 class LabScreen extends StatelessWidget {
   const LabScreen({super.key});
 
@@ -27,9 +28,9 @@ class LabScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Only in SpotVault', style: TextStyle(fontSize: 13, color: kMuted)),
+                        Text('Tools for how your music plays', style: TextStyle(fontSize: 13, color: kMuted)),
                         const SizedBox(height: 2),
-                        Text('Vault Lab', style: displayStyle(28)),
+                        Text('Studio', style: displayStyle(28)),
                       ],
                     ),
                   ),
@@ -38,6 +39,10 @@ class LabScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            const FadeSlideIn(delay: Duration(milliseconds: 30), child: CarModeCard()),
+            const SizedBox(height: 14),
+            const FadeSlideIn(delay: Duration(milliseconds: 45), child: LookCard()),
+            const SizedBox(height: 14),
             const FadeSlideIn(delay: Duration(milliseconds: 60), child: _RewindCard()),
             const SizedBox(height: 14),
             const FadeSlideIn(delay: Duration(milliseconds: 120), child: _MomentsCard()),

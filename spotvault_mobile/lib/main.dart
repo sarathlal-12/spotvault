@@ -1,9 +1,20 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'dart:io';
+
+import 'package:app_links/app_links.dart';
+import 'package:audio_service/audio_service.dart';
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+
+import 'desktop/desktop_shell.dart';
+import 'desktop/engine_client.dart';
+import 'ui/welcome_screen.dart';
+import 'ui/qr.dart';
 
 import 'app_state.dart';
+import 'audio_handler.dart';
 import 'ui/menus.dart' show shareSongs;
 import 'ui/nearby_ui.dart';
 import 'ui/aurora.dart';
@@ -16,13 +27,29 @@ import 'ui/update_ui.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.spotvault.app.playback',
-    androidNotificationChannelName: 'Music playback',
-    androidNotificationOngoing: true,
-  );
+  if (Platform.isWindows) {
+    JustAudioMediaKit.ensureInitialized(windows: true);
+  }
   await store.load();
+  if (!Platform.isWindows) {
+    // Lock screen, notification, Bluetooth and car controls (Android Auto lists your playlists).
+    await AudioService.init(
+      builder: () => SpotVaultAudioHandler(playerService, store),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.spotvault.app.playback',
+        androidNotificationChannelName: 'Music playback',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: true,
+      ),
+    );
+  }
   darkMode.value = store.darkTheme;
+  themeStyle.value = store.themeStyle.isEmpty ? 'minimal' : store.themeStyle;
+  if (Platform.isWindows) {
+    // The PC downloader runs hidden next to the app; the library is its folder.
+    engine.onLibraryChanged = engine.loadLibrary;
+    unawaited(engine.start());
+  }
   await playerService.init();
   // Phones nearby: share songs and Jam over the same Wi-Fi.
   nearbyService
@@ -84,10 +111,11 @@ class SpotVaultApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: darkMode,
-      builder: (context, dark, _) {
-        final p = dark ? kDarkPalette : kLightPalette;
+    return ListenableBuilder(
+      listenable: Listenable.merge([darkMode, themeStyle]),
+      builder: (context, _) {
+        final dark = darkMode.value;
+        final p = pal;
         SystemChrome.setSystemUIOverlayStyle(dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark);
         return MaterialApp(
           title: 'SpotVault',
@@ -95,8 +123,8 @@ class SpotVaultApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: buildTheme(p),
           themeAnimationDuration: const Duration(milliseconds: 450),
-          builder: (context, child) => ThemeRepaint(dark: dark, child: child!),
-          home: const HomeShell(),
+          builder: (context, child) => ThemeRepaint(dark: dark, look: themeStyle.value, child: child!),
+          home: const _Start(),
         );
       },
     );
@@ -107,8 +135,9 @@ class SpotVaultApp extends StatelessWidget {
 /// for rebuild (including pushed screens and open sheets).
 class ThemeRepaint extends StatefulWidget {
   final bool dark;
+  final String look;
   final Widget child;
-  const ThemeRepaint({super.key, required this.dark, required this.child});
+  const ThemeRepaint({super.key, required this.dark, this.look = '', required this.child});
 
   @override
   State<ThemeRepaint> createState() => ThemeRepaintState();
@@ -118,7 +147,7 @@ class ThemeRepaintState extends State<ThemeRepaint> {
   @override
   void didUpdateWidget(ThemeRepaint oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.dark != widget.dark) {
+    if (oldWidget.dark != widget.dark || oldWidget.look != widget.look) {
       void mark(Element e) {
         e.markNeedsBuild();
         e.visitChildren(mark);
@@ -130,6 +159,25 @@ class ThemeRepaintState extends State<ThemeRepaint> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// Welcome screen the first time (name and look), then the app.
+class _Start extends StatefulWidget {
+  const _Start();
+
+  @override
+  State<_Start> createState() => _StartState();
+}
+
+class _StartState extends State<_Start> {
+  @override
+  Widget build(BuildContext context) {
+    final Widget app = Platform.isWindows ? const DesktopShell() : const HomeShell();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450),
+      child: store.themeStyle.isEmpty ? WelcomeScreen(key: const ValueKey('welcome'), onDone: () => setState(() {})) : KeyedSubtree(key: const ValueKey('app'), child: app),
+    );
+  }
 }
 
 class HomeShell extends StatefulWidget {
@@ -147,6 +195,27 @@ class _HomeShellState extends State<HomeShell> {
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) runUpdateCheck(context, manual: false);
     });
+    // SpotVault links and QR codes opened from other apps.
+    try {
+      final links = AppLinks();
+      links.getInitialLink().then((u) => u == null ? null : _openLink(u));
+      links.uriLinkStream.listen(_openLink);
+    } catch (_) {}
+  }
+
+  void _openLink(Uri uri) {
+    final link = SpotLink.parse(uri.toString());
+    final ctx = navKey.currentContext;
+    if (link == null || ctx == null) return;
+    if (link.kind == 'jam') {
+      openJamLink(ctx, link);
+    } else {
+      store.lastHost = link.port == 50505 ? link.host : '${link.host}:${link.port}';
+      store.pin = link.pin;
+      store.changed();
+      currentTab.value = 3;
+      syncService.sync(store.lastHost, link.pin);
+    }
   }
 
   @override
@@ -188,7 +257,7 @@ class _GlassNav extends StatelessWidget {
   static const _items = [
     (Icons.home_outlined, Icons.home_rounded, 'Home'),
     (Icons.search_rounded, Icons.manage_search_rounded, 'Search'),
-    (Icons.science_outlined, Icons.science_rounded, 'Lab'),
+    (Icons.tune_outlined, Icons.tune_rounded, 'Studio'),
     (Icons.sync_rounded, Icons.sync_rounded, 'Sync'),
   ];
 

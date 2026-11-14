@@ -34,7 +34,27 @@ class TrackListScreen extends StatefulWidget {
 }
 
 class _TrackListScreenState extends State<TrackListScreen> {
-  late TrackSort sort = widget.allowPcOrder ? TrackSort.pcOrder : TrackSort.title;
+  late TrackSort sort = _savedSort() ?? (widget.allowPcOrder ? TrackSort.pcOrder : TrackSort.title);
+
+  static const _sortKeys = {TrackSort.pcOrder: 'pc', TrackSort.title: 'title', TrackSort.artist: 'artist', TrackSort.recentlyAdded: 'recent'};
+
+  /// Each playlist remembers how you sorted it.
+  TrackSort? _savedSort() {
+    final key = widget.playlistFolder == null ? null : store.playlistSort[widget.playlistFolder];
+    for (final e in _sortKeys.entries) {
+      if (e.value == key) return e.key;
+    }
+    return null;
+  }
+
+  void _setSort(TrackSort s) {
+    setState(() => sort = s);
+    final f = widget.playlistFolder;
+    if (f != null) {
+      store.playlistSort[f] = _sortKeys[s]!;
+      store.changed();
+    }
+  }
   String filter = '';
   bool reordering = false;
 
@@ -76,7 +96,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
                     PopupMenuButton<TrackSort>(
                       icon: const Icon(Icons.sort),
                       initialValue: sort,
-                      onSelected: (s) => setState(() => sort = s),
+                      onSelected: _setSort,
                       itemBuilder: (_) => [
                         if (widget.allowPcOrder)
                           PopupMenuItem(
@@ -165,6 +185,40 @@ class _TrackListScreenState extends State<TrackListScreen> {
                   ),
                 ),
               ),
+              if (!reordering && pl != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: Material(
+                      color: kSurface,
+                      borderRadius: BorderRadius.circular(18),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () {
+                          searchTarget.value = pl.folder;
+                          Navigator.of(context).popUntil((r) => r.isFirst);
+                          currentTab.value = 1;
+                        },
+                        child: Container(
+                          height: 54,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: kLine)),
+                          child: Row(children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: const BoxDecoration(color: Color(0xFFE0403B), shape: BoxShape.circle),
+                              child: const Icon(Icons.add_rounded, color: Colors.white, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text('Add songs from the web', style: TextStyle(color: kText, fontWeight: FontWeight.w600))),
+                            Icon(Icons.search_rounded, color: kMuted, size: 18),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               if (!reordering)
                 SliverToBoxAdapter(
                   child: Padding(

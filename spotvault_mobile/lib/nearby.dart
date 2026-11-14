@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart' show ProcessingState;
 
@@ -143,15 +144,75 @@ class NearbyService extends ChangeNotifier {
   String _token() => List.generate(20, (_) => _rnd.nextInt(16).toRadixString(16)).join();
 
   // ================================================================ server
+  /// True while other phones can reach this one (checked every few seconds).
+  bool reachable = false;
+  Timer? _watchdog;
+  int _misses = 0;
+  AppLifecycleListener? _life;
+
   Future<void> start() async {
+    // Phones put apps to sleep; iOS then silently closes the listening socket.
+    // Check it regularly and whenever the app comes back, and reopen it.
+    _watchdog ??= Timer.periodic(const Duration(seconds: 5), (_) => ensureRunning());
+    try {
+      _life ??= AppLifecycleListener(onResume: () => ensureRunning(force: true));
+    } catch (_) {
+      // No Flutter binding (plain unit tests): the timer still checks.
+    }
+    await _bind();
+  }
+
+  Future<void> _bind() async {
     if (_server != null) return;
     try {
-      _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-      _server!.listen(_handle, onError: (e) => debugPrint('nearby server: $e'));
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, port, shared: true);
+      _server!.listen(_handle, onError: (e) => debugPrint('nearby server: $e'), onDone: () => _server = null);
       serverError = null;
+      reachable = true;
+      _misses = 0;
     } catch (e) {
       serverError = 'Nearby sharing is unavailable: $e';
+      reachable = false;
       debugPrint(serverError);
+    }
+    notifyListeners();
+  }
+
+  bool _checking = false;
+
+  /// Connects to our own server; reopens it if it stopped answering.
+  Future<void> ensureRunning({bool force = false}) async {
+    if (_checking) return;
+    _checking = true;
+    try {
+      var ok = false;
+      if (_server != null) {
+        try {
+          final c = await Socket.connect(InternetAddress.loopbackIPv4, port, timeout: const Duration(seconds: 2));
+          c.destroy();
+          ok = true;
+        } catch (_) {}
+      }
+      if (ok) {
+        _misses = 0;
+        if (!reachable) {
+          reachable = true;
+          notifyListeners();
+        }
+        return;
+      }
+      _misses++;
+      if (force || _misses >= 2 || _server == null) {
+        debugPrint('nearby server not answering: reopening');
+        try {
+          await _server?.close(force: true);
+        } catch (_) {}
+        _server = null;
+        reachable = false;
+        await _bind();
+      }
+    } finally {
+      _checking = false;
     }
   }
 
@@ -609,11 +670,26 @@ class NearbyService extends ChangeNotifier {
       jamGuest = JamGuest(this, phone, '${j['token']}', j['mode'] == 'sync' ? JamMode.sync : JamMode.speaker, '${j['host'] ?? phone.name}');
       await jamGuest!.syncClock(firstGuess: ((j['now'] as num).toInt() - (t0 + t1) ~/ 2));
       jamGuest!.startPolling();
+      rememberPhone(phone);
       notifyListeners();
       return null;
     } catch (e) {
       return "Couldn't reach ${phone.name}. Are you both on the same Wi-Fi?";
     }
+  }
+
+  /// Saved phones: the ones you joined before, newest first (max 8).
+  void rememberPhone(NearbyPhone phone) {
+    store.savedPhones
+      ..removeWhere((p) => p['id'] == phone.id || p['host'] == phone.host)
+      ..insert(0, {'name': phone.name, 'id': phone.id, 'host': phone.host, 'port': phone.port});
+    if (store.savedPhones.length > 8) store.savedPhones = store.savedPhones.sublist(0, 8);
+    store.changed();
+  }
+
+  void forgetPhone(String id) {
+    store.savedPhones.removeWhere((p) => p['id'] == id);
+    store.changed();
   }
 
   /// Lets the Jam host fetch these songs from this phone.
@@ -787,6 +863,8 @@ class JamHost {
         await p.seekToNext();
       case 'previous':
         await _ps.previous();
+      case 'seek':
+        if (index != null) await p.seek(Duration(milliseconds: index));
       case 'jump':
         if (index != null) {
           final key = index >= 0 && index < items.length ? items[index].key : null;
@@ -824,6 +902,7 @@ class JamGuest {
   Map<String, dynamic> state = {};
   String? error;
   int _offset = 0; // host clock - my clock, in ms
+  int get clockOffset => _offset;
   Timer? _poll;
   final http.Client _client = http.Client();
   String? _playingKey;
@@ -842,7 +921,7 @@ class JamGuest {
   Future<void> syncClock({required int firstGuess}) async {
     _offset = firstGuess;
     var best = 1 << 30;
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < 12; i++) {
       try {
         final t0 = DateTime.now().millisecondsSinceEpoch;
         final r = await _client.get(_u('/jam/state')).timeout(const Duration(seconds: 3));
@@ -856,11 +935,22 @@ class JamGuest {
     }
   }
 
+  Timer? _resync;
+
   void startPolling() {
     _poll?.cancel();
-    _poll = Timer.periodic(const Duration(milliseconds: 1000), (_) => _tick());
+    // Sync mode checks twice a second so phones stay together.
+    _poll = Timer.periodic(Duration(milliseconds: mode == JamMode.sync ? 500 : 1000), (_) => _tick());
+    // Clocks drift: measure the host's clock again every half minute.
+    _resync?.cancel();
+    if (mode == JamMode.sync) _resync = Timer.periodic(const Duration(seconds: 30), (_) => syncClock(firstGuess: _offset));
     _tick();
   }
+
+  /// How long a seek takes to be heard on this phone (learned as we go).
+  int _seekLag = 120;
+  DateTime? _seekedAt;
+  int? _seekTarget;
 
   Future<void> _tick() async {
     try {
@@ -915,8 +1005,28 @@ class JamGuest {
     }
     if (hostPlaying && !p.playing) p.play();
     if (!hostPlaying && p.playing) await p.pause();
-    if (hostPlaying && (p.position - at).inMilliseconds.abs() > 350) {
-      await p.seek(at + const Duration(milliseconds: 150));
+    if (!hostPlaying) return;
+    // Bluetooth speakers play late: start that much earlier.
+    final target = at.inMilliseconds + nearby.store.jamDelayMs;
+    final drift = p.position.inMilliseconds - target; // + = we are ahead
+    // Learn how long seeks take on this phone from the last one.
+    if (_seekedAt != null && DateTime.now().difference(_seekedAt!) < const Duration(seconds: 2) && _seekTarget != null) {
+      _seekLag = (_seekLag - drift ~/ 2).clamp(0, 900);
+      _seekedAt = null;
+    }
+    final a = drift.abs();
+    if (a > 600) {
+      // Far off: jump, aiming a little ahead to cover the seek itself.
+      _seekTarget = target;
+      _seekedAt = DateTime.now();
+      if (p.speed != 1) await p.setSpeed(1);
+      await p.seek(Duration(milliseconds: target + _seekLag));
+    } else if (a > 30) {
+      // Close: speed up or slow down slightly until we line up (no audible jump).
+      final sp = drift > 0 ? (a > 200 ? 0.94 : 0.98) : (a > 200 ? 1.06 : 1.02);
+      if (p.speed != sp) await p.setSpeed(sp);
+    } else if (p.speed != 1) {
+      await p.setSpeed(1);
     }
   }
 
@@ -1005,6 +1115,8 @@ class JamGuest {
 
   Future<void> leave() async {
     _poll?.cancel();
+    _resync?.cancel();
+    if (_ps.player.speed != 1) await _ps.player.setSpeed(1);
     try {
       await _client
           .post(Uri(scheme: 'http', host: hostPhone.host, port: hostPhone.port, path: '/jam/leave'),

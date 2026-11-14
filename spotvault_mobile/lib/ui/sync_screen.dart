@@ -1,3 +1,4 @@
+import 'qr.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -145,6 +146,27 @@ class _SyncScreenState extends State<SyncScreen> {
                     ),
                 ],
               ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46), shape: const StadiumBorder()),
+              onPressed: s.busy
+                  ? null
+                  : () async {
+                      final link = await scanSpotLink(context);
+                      if (link == null || !mounted) return;
+                      if (link.kind != 'pc') {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('That is a Jam code. Open Jam to use it.')));
+                        return;
+                      }
+                      setState(() {
+                        hostCtrl.text = link.port == 50505 ? link.host : '${link.host}:${link.port}';
+                        pinCtrl.text = link.pin;
+                      });
+                      _sync();
+                    },
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              label: const Text("Scan the code on your PC"),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: hostCtrl,
