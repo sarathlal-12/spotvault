@@ -59,6 +59,12 @@ class PhoneEngine {
     _ran = true;
     port = p;
     runError = null;
+    String appDir = '';
+    try {
+      appDir = await SeriousPython.prepareApp();
+    } catch (e) {
+      debugPrint('prepareApp failed: $e');
+    }
     SeriousPython.run(
       appFileName: 'main.py',
       environmentVariables: {
@@ -68,6 +74,7 @@ class PhoneEngine {
         'SV_ART': artDir,
         'SV_LOG': logPath!,
         'SV_VERSION': kAppVersion,
+        'SV_APP': appDir,
         'PYTHONUNBUFFERED': '1',
       },
     ).catchError((Object e) {

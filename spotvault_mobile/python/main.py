@@ -61,7 +61,11 @@ try:
 except Exception as e:  # pragma: no cover
     log("certifi missing:", e)
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# The phone's embedded Python runs this file without __file__; the app
+# passes its folder in SV_APP so `sources.py` next to it can be imported.
+_here = os.environ.get("SV_APP") or globals().get("__file__") or ""
+if _here:
+    sys.path.insert(0, _here if os.path.isdir(_here) else os.path.dirname(os.path.abspath(_here)))
 try:
     import sources  # noqa: E402  (the PC app's clean-music search)
 except Exception:
@@ -416,7 +420,8 @@ def main():
     server.serve_forever()
 
 
-if __name__ == "__main__":
+# Started by the app (or a test) with SV_TOKEN set; __name__ isn't reliable on the phone.
+if __name__ == "__main__" or os.environ.get("SV_TOKEN"):
     try:
         main()
     except Exception:
