@@ -42,8 +42,8 @@
         "description": "SpotVault saves playlists from Spotify, YouTube and SoundCloud as offline music on Windows, finds any song by search, and sends it all to your Android phone or iPhone over Wi-Fi. Free, local, no account.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Windows, Android, iOS",
-        "softwareVersion": "1.4.1",
-        "downloadUrl": "https://github.com/sarathlal-12/spotvault/releases/tag/v1.4.1",
+        "softwareVersion": "1.5.0",
+        "downloadUrl": "https://github.com/sarathlal-12/spotvault/releases/tag/v1.5.0",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "author": { "@type": "Person", "name": "Sarath Lal", "url": "https://github.com/sarathlal-12" },
         "codeRepository": "https://github.com/sarathlal-12/spotvault"
@@ -56,7 +56,7 @@
           { "@type": "Question", "name": "The phone can't find my PC. What do I check?",
             "acceptedAnswer": { "@type": "Answer", "text": "Put both on the same Wi-Fi (not a guest network) and keep SpotVault open on the PC. The first time, Windows Firewall asks about network access: allow SpotVault on Private networks. You can also type the address shown in the Connect phone window." } },
           { "@type": "Question", "name": "How do I install the Android app?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Download SpotVault_v1.4.1.apk on your phone, open it, and allow installing apps from your browser or file manager when Android asks." } },
+            "acceptedAnswer": { "@type": "Answer", "text": "Download SpotVault_v1.5.0.apk on your phone, open it, and allow installing apps from your browser or file manager when Android asks." } },
           { "@type": "Question", "name": "Why isn't SpotVault on the App Store?",
             "acceptedAnswer": { "@type": "Answer", "text": "It's a free side project, so it's shared as an IPA you install yourself. Follow the iPhone guide: AltStore signs the app with your own Apple ID and keeps it renewed." } },
           { "@type": "Question", "name": "Why does the first sync take a while?",
@@ -389,7 +389,6 @@
     .icon svg { width: 24px; height: 24px; }
     .card h3 { font-family: var(--font-head); font-size: 1.22rem; font-weight: 700; margin-bottom: 8px; }
     .card p { color: var(--muted); font-size: .97rem; }
-    .tag-new { display: inline-block; margin-left: 8px; vertical-align: middle; font-family: var(--font-body); font-size: .68rem; font-weight: 700; letter-spacing: .06em; color: var(--accent-ink); background: var(--accent); padding: 2px 7px; border-radius: 99px; }
 
     /* Steps */
     .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: step; }
@@ -597,11 +596,11 @@
   <div class="hero" id="top">
     <div class="wrap">
       <div>
-        <a class="badge" href="#download"><b>NEW</b> v1.4: Crimson look on PC &amp; phone, sync report that explains every failed song</a>
+        <a class="badge" href="#download">v1.5: save songs straight to your phone, no PC needed</a>
         <h1>Your music. <em>Offline.</em> On every device.</h1>
         <p class="lead">Paste a playlist link or search for any song. SpotVault saves it on Windows with cover art and tags, and your Android phone or iPhone picks it up over Wi-Fi. No account, no cloud, no ads.</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.4.1/SpotVault_Setup_v1.4.1.exe" download>
+          <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.5.0/SpotVault_Setup_v1.5.0.exe" download>
             <svg aria-hidden="true"><use href="#i-windows"/></svg> Download for Windows
           </a>
           <a class="btn btn-outline" href="#download">
@@ -611,7 +610,7 @@
         <div class="meta">
           <span><svg aria-hidden="true"><use href="#i-free"/></svg>Free, source on GitHub</span>
           <span><svg aria-hidden="true"><use href="#i-shield"/></svg>Zero telemetry</span>
-          <span><svg aria-hidden="true"><use href="#i-download"/></svg>Version 1.4.1</span>
+          <span><svg aria-hidden="true"><use href="#i-download"/></svg>Version 1.5.0</span>
         </div>
       </div>
 
@@ -691,12 +690,12 @@
         <div class="grid-3">
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-layers"/></svg></div>
-            <h3>Any playlist link <span class="tag-new">NEW</span></h3>
+            <h3>Any playlist link</h3>
             <p>Spotify, YouTube, YouTube Music and SoundCloud playlists all work. Each one becomes its own folder of songs.</p>
           </article>
           <article class="card reveal">
             <div class="icon"><svg aria-hidden="true"><use href="#i-filter"/></svg></div>
-            <h3>Search any song <span class="tag-new">NEW</span></h3>
+            <h3>Search any song</h3>
             <p>Missing a track? Search for it, listen first, then save it straight into any playlist, from your PC or your phone.</p>
           </article>
           <article class="card reveal">
@@ -751,11 +750,11 @@
     <section id="phone" style="background:linear-gradient(180deg,var(--bg),var(--bg-deep))">
       <div class="wrap split">
         <div class="reveal">
-          <p class="eyebrow">New in v1.4</p>
+          <p class="eyebrow">Phone app</p>
           <h2>Your whole library, on your phone</h2>
-          <p class="section-lead">SpotVault Mobile copies every playlist from your PC over Wi-Fi. Now you can also search for a song on the phone, listen to it, and save it to a playlist. Your PC does the downloading and sends it straight back.</p>
+          <p class="section-lead">SpotVault Mobile copies every playlist from your PC over Wi-Fi. You can also search for any song on the phone, listen to it, and save it to a playlist. The phone downloads it by itself, so you don't need the PC for that.</p>
           <ul class="checks">
-            <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Add songs from the phone.</b> Search, tap to listen, tap Save, pick a playlist. It arrives with cover art, and Ghost Queue plays it next as soon as it lands.</span></li>
+            <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Add songs from the phone, anywhere.</b> Search, tap to listen, tap Save, pick a playlist or make a new one. It downloads on the phone with cover art, using the same clean-version filter as the PC. Prefer the PC? Switch on <b>Use my PC</b>.</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>A fresh look.</b> Glowing, animated player in dark or light mode, switched with one tap.</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Moments and A–B Loop.</b> Pin your favourite part of a song and jump back to it, or repeat one part to learn it.</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Smart Sleep and Rewind.</b> The sleep timer fades out gently, and Rewind shows how much you listened this month.</span></li>
@@ -800,7 +799,7 @@
       <div class="wrap">
         <div class="section-head center">
           <p class="eyebrow">Download</p>
-          <h2>Get SpotVault 1.4.1</h2>
+          <h2>Get SpotVault 1.5.0</h2>
           <p class="section-lead">Start with the Windows app, then add the phone app to carry your playlists with you.</p>
         </div>
         <div class="downloads">
@@ -810,11 +809,11 @@
               <div><h3>Windows</h3><span>Desktop app &amp; downloader</span></div>
             </div>
             <dl>
-              <dt>Version</dt><dd>1.4.1</dd>
+              <dt>Version</dt><dd>1.5.0</dd>
               <dt>File</dt><dd>Installer (.exe)</dd>
               <dt>Needs</dt><dd>Windows 10 or 11, 64-bit</dd>
             </dl>
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.4.1/SpotVault_Setup_v1.4.1.exe" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download for Windows</a>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.5.0/SpotVault_Setup_v1.5.0.exe" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download for Windows</a>
             <p class="note">Allow SpotVault on Private networks if Windows Firewall asks.</p>
           </article>
           <article class="dl reveal">
@@ -823,11 +822,11 @@
               <div><h3>Android</h3><span>Player, search &amp; sync</span></div>
             </div>
             <dl>
-              <dt>Version</dt><dd>1.4.1</dd>
+              <dt>Version</dt><dd>1.5.0</dd>
               <dt>File</dt><dd>App package (.apk)</dd>
               <dt>Needs</dt><dd>Android phone</dd>
             </dl>
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.4.1/SpotVault_v1.4.1.apk" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download APK</a>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.5.0/SpotVault_v1.5.0.apk" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download APK</a>
             <p class="note">Allow "install unknown apps" when Android asks.</p>
           </article>
           <article class="dl reveal">
@@ -836,15 +835,15 @@
               <div><h3>iPhone</h3><span>Player, search &amp; sync</span></div>
             </div>
             <dl>
-              <dt>Version</dt><dd>1.4.1</dd>
+              <dt>Version</dt><dd>1.5.0</dd>
               <dt>File</dt><dd>Unsigned app (.ipa)</dd>
               <dt>Needs</dt><dd>Sideloading, iOS 15+</dd>
             </dl>
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.4.1/SpotVault_v1.4.1_unsigned.ipa" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download IPA</a>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.5.0/SpotVault_v1.5.0_unsigned.ipa" download><svg aria-hidden="true"><use href="#i-download"/></svg> Download IPA</a>
             <p class="note">Not on the App Store. <a href="#iphone">How to install it</a></p>
           </article>
         </div>
-        <p class="version-line">Latest: v1.4.1 · <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">All versions &amp; release notes</a></p>
+        <p class="version-line">Latest: v1.5.0 · <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">All versions &amp; release notes</a></p>
       </div>
     </section>
 
@@ -905,7 +904,7 @@
           </details>
           <details class="reveal">
             <summary>Can I add songs from my phone?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
-            <div>Yes. Open <b>Search → Find new songs</b>, type a song, tap it to listen, then tap download and pick a playlist. Your PC downloads it and sends it back, so keep SpotVault open on the PC and both devices on the same Wi-Fi.</div>
+            <div>Yes. Open <b>Search → Find new songs</b>, type a song, tap it to listen, then tap Save and pick a playlist. The phone downloads it by itself over Wi-Fi or mobile data. If you switch on <b>Use my PC</b>, your PC downloads it instead and sends it over Wi-Fi.</div>
           </details>
           <details class="reveal">
             <summary>How do I update from an older version?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
@@ -913,7 +912,7 @@
           </details>
           <details class="reveal">
             <summary>How do I install the Android app?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
-            <div>Download <code>SpotVault_v1.4.1.apk</code> on your phone, open it, and allow installing apps from your browser or file manager when Android asks.</div>
+            <div>Download <code>SpotVault_v1.5.0.apk</code> on your phone, open it, and allow installing apps from your browser or file manager when Android asks.</div>
           </details>
           <details class="reveal">
             <summary>Why isn't SpotVault on the App Store?<svg aria-hidden="true"><use href="#i-plus"/></svg></summary>
@@ -937,12 +936,12 @@
         <div class="final reveal">
           <img src="logo.png" alt="" width="72" height="72">
           <h2>Take your music offline</h2>
-          <p class="section-lead" style="margin:0 auto">Free for Windows, Android and iPhone. Version 1.4.1.</p>
+          <p class="section-lead" style="margin:0 auto">Free for Windows, Android and iPhone. Version 1.5.0.</p>
           <div class="cta-row">
-            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.4.1/SpotVault_Setup_v1.4.1.exe" download>
+            <a class="btn btn-primary" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.5.0/SpotVault_Setup_v1.5.0.exe" download>
               <svg aria-hidden="true"><use href="#i-windows"/></svg> Download for Windows
             </a>
-            <a class="btn btn-outline" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.4.1/SpotVault_v1.4.1.apk" download>
+            <a class="btn btn-outline" href="https://github.com/sarathlal-12/spotvault/releases/download/v1.5.0/SpotVault_v1.5.0.apk" download>
               <svg aria-hidden="true"><use href="#i-android"/></svg> Android
             </a>
             <a class="btn btn-outline" href="#iphone">
@@ -962,7 +961,7 @@
         <a href="https://github.com/sarathlal-12/spotvault/releases" target="_blank" rel="noopener">All releases</a>
         <a href="https://github.com/sarathlal-12/spotvault/issues" target="_blank" rel="noopener">Report a problem</a>
       </nav>
-      <div>© 2026 SpotVault · v1.4</div>
+      <div>© 2026 SpotVault · v1.5</div>
     </div>
   </footer>
 

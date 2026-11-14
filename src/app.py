@@ -69,7 +69,7 @@ CACHE_DIR = os.path.join(os.path.expanduser("~"), ".spot_sync_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 REPORT_FILE = os.path.join(CACHE_DIR, "last_sync_report.json")
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.5.0"
 
 # -------------------------------------------------------------
 # Design tokens: "Crimson" (same look as the phone app).
