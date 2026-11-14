@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 /// This build's version. Must match `version:` in pubspec.yaml
 /// (test/version_test.dart checks that).
-const String kAppVersion = '1.4.1';
+const String kAppVersion = '1.5.0';
 
 const String kRepo = 'sarathlal-12/spotvault';
 

@@ -320,20 +320,24 @@ class SyncService extends ChangeNotifier {
     }
 
     // 5. Remove what was deleted on the PC (skipped when the sync was cancelled).
+    //    Songs downloaded on the phone itself are never removed by a PC sync.
     if (store.mirrorDeletes && !_cancel) {
-      final gone = store.tracks.keys.where((id) => !remoteTracks.containsKey(id)).toList();
+      final gone = store.tracks.keys
+          .where((id) => !remoteTracks.containsKey(id) && store.tracks[id]?.phoneOnly != true)
+          .toList();
       for (final id in gone) {
         await store.deleteTrack(id);
         removed++;
       }
-      final keepFolders = newPlaylists.map((p) => p.folder).toSet();
+      final merged = _withPhoneSongs(newPlaylists);
+      final keepFolders = merged.map((p) => p.folder).toSet();
       for (final p in store.playlists) {
         if (!keepFolders.contains(p.folder)) {
           final c = store.coverFile(p.folder);
           if (c.existsSync()) c.deleteSync();
         }
       }
-      store.playlists = newPlaylists;
+      store.playlists = merged;
     } else {
       // Keep local-only playlists, update the rest.
       final byFolder = {for (final p in store.playlists) p.folder: p};
@@ -347,8 +351,27 @@ class SyncService extends ChangeNotifier {
         }
         byFolder[p.folder] = p;
       }
-      store.playlists = byFolder.values.toList();
+      store.playlists = _withPhoneSongs(byFolder.values.toList());
     }
+  }
+
+  /// Keeps songs the phone downloaded itself in their playlists after the
+  /// PC's playlist list replaces the phone's.
+  List<PlaylistInfo> _withPhoneSongs(List<PlaylistInfo> fresh) {
+    final byFolder = {for (final p in fresh) p.folder: p};
+    for (final old in store.playlists) {
+      final phoneIds = old.trackIds.where((id) => store.tracks[id]?.phoneOnly == true).toList();
+      if (phoneIds.isEmpty) continue;
+      final target = byFolder[old.folder];
+      if (target == null) {
+        byFolder[old.folder] = PlaylistInfo(folder: old.folder, title: old.title, trackIds: phoneIds, hasCover: old.hasCover);
+      } else {
+        for (final id in phoneIds) {
+          if (!target.trackIds.contains(id)) target.trackIds.add(id);
+        }
+      }
+    }
+    return byFolder.values.toList();
   }
 
   /// Streams one song to "<file>.part", resuming if a partial copy exists.

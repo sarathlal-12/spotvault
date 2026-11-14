@@ -63,7 +63,7 @@ class LabScreen extends StatelessWidget {
                       glyph: Icons.blur_on_rounded,
                       tint: const Color(0xFF94A3B8),
                       name: 'Ghost Queue',
-                      desc: 'Songs you save from Search play next as soon as your PC sends them.',
+                      desc: 'Songs you save from Search play next as soon as they finish downloading.',
                       value: store.ghostQueue,
                       onChanged: (v) {
                         store.ghostQueue = v;
@@ -123,11 +123,7 @@ class _RewindCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Text('REWIND', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: kAccent)),
-                  const SizedBox(width: 6),
-                  const NewTag(),
-                ]),
+                Text('REWIND', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: kAccent)),
                 const SizedBox(height: 8),
                 TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0, end: month.toDouble()),
@@ -209,11 +205,7 @@ class _MomentsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(children: [
-            Text('YOUR MOMENTS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: kPink)),
-            SizedBox(width: 6),
-            NewTag(),
-          ]),
+          const Text('YOUR MOMENTS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: kPink)),
           const SizedBox(height: 6),
           if (entries.isEmpty)
             Padding(
@@ -306,16 +298,10 @@ class _FeatureRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Flexible(
-                    child: Text(name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kText)),
-                  ),
-                  const SizedBox(width: 6),
-                  const NewTag(),
-                ]),
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kText)),
                 const SizedBox(height: 2),
                 Text(desc, style: TextStyle(fontSize: 12, color: kMuted, height: 1.35)),
               ],

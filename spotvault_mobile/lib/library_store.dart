@@ -16,6 +16,8 @@ class Track {
   final double duration;
   bool hasArt;
   final int addedAt;
+  /// Downloaded on the phone itself (not on the PC), so PC syncs keep it.
+  final bool phoneOnly;
 
   Track({
     required this.id,
@@ -28,6 +30,7 @@ class Track {
     required this.duration,
     this.hasArt = false,
     int? addedAt,
+    this.phoneOnly = false,
   }) : addedAt = addedAt ?? DateTime.now().millisecondsSinceEpoch;
 
   String get folder => path.split('/').first;
@@ -58,6 +61,7 @@ class Track {
         duration: (j['duration'] ?? 0).toDouble(),
         hasArt: j['hasArt'] ?? false,
         addedAt: j['addedAt'],
+        phoneOnly: j['phone'] ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -71,6 +75,7 @@ class Track {
         'duration': duration,
         'hasArt': hasArt,
         'addedAt': addedAt,
+        if (phoneOnly) 'phone': true,
       };
 }
 
@@ -121,6 +126,7 @@ class LibraryStore extends ChangeNotifier {
   bool darkTheme = true;
   bool smartSleep = true; // fade out slowly before the sleep timer stops
   bool ghostQueue = true; // songs saved from search play next once they arrive
+  bool useBridge = false; // download through the PC instead of on the phone
 
   // Vault Lab
   /// Moments: favourite spots in a song, in milliseconds, per track id.
@@ -173,6 +179,7 @@ class LibraryStore extends ChangeNotifier {
       darkTheme = j['darkTheme'] ?? true;
       smartSleep = j['smartSleep'] ?? true;
       ghostQueue = j['ghostQueue'] ?? true;
+      useBridge = j['useBridge'] ?? false;
       final m = Map<String, dynamic>.from(j['moments'] ?? const {});
       m.forEach((k, v) => moments[k] = List<int>.from(v as List));
       listenDays.addAll(Map<String, int>.from(j['listenDays'] ?? const {}));
@@ -216,6 +223,7 @@ class LibraryStore extends ChangeNotifier {
           'darkTheme': darkTheme,
           'smartSleep': smartSleep,
           'ghostQueue': ghostQueue,
+          'useBridge': useBridge,
           'moments': moments,
           'listenDays': listenDays,
           'listenArtists': listenArtists,
@@ -239,6 +247,22 @@ class LibraryStore extends ChangeNotifier {
   void changed({bool persist = true}) {
     notifyListeners();
     if (persist) save();
+  }
+
+  /// Adds a song the phone downloaded itself to [folder] (creating the
+  /// playlist if needed). Returns the stored track.
+  Track addPhoneTrack(Track t, {required String folder, required String title}) {
+    final prev = tracks[t.id];
+    if (prev != null) t.hasArt = prev.hasArt || t.hasArt;
+    tracks[t.id] = t;
+    var p = playlists.where((p) => p.folder == folder).firstOrNull;
+    if (p == null) {
+      p = PlaylistInfo(folder: folder, title: title, trackIds: []);
+      playlists = [...playlists, p];
+    }
+    if (!p.trackIds.contains(t.id)) p.trackIds.add(t.id);
+    changed();
+    return t;
   }
 
   // ---------------------------------------------------------------- files

@@ -52,7 +52,11 @@ class _SearchScreenState extends State<SearchScreen> {
       if (!mounted || id != _searchId) return;
       setState(() {
         results = [];
-        error = e is PcException ? e.message : 'Search failed. Check that SpotVault is open on your PC.';
+        error = e is PcException
+            ? e.message
+            : pcLink.onPhone
+                ? 'Search failed. Check your internet connection.'
+                : 'Search failed. Check that SpotVault is open on your PC.';
       });
     } finally {
       if (mounted && id == _searchId) setState(() => searching = false);
@@ -76,7 +80,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _download(OnlineSong song) async {
-    if (store.playlists.isEmpty) {
+    if (store.playlists.isEmpty && !pcLink.onPhone) {
       _snack('No playlists yet. Sync your playlists from the PC first.');
       return;
     }
@@ -151,16 +155,39 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           if (online)
             Padding(
-              padding: const EdgeInsets.fromLTRB(22, 0, 22, 6),
-              child: Row(
-                children: [
-                  Container(width: 6, height: 6, decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text('Searching through your PC · clean studio versions first',
-                        style: TextStyle(fontSize: 12, color: kMuted)),
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(22, 0, 12, 2),
+              child: ListenableBuilder(
+                listenable: pcLink,
+                builder: (context, _) => Row(
+                  children: [
+                    Container(width: 6, height: 6, decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                          pcLink.onPhone
+                              ? 'Downloads on this phone · clean studio versions first'
+                              : 'Downloads on your PC · clean studio versions first',
+                          style: TextStyle(fontSize: 12, color: kMuted)),
+                    ),
+                    Text('Use my PC', style: TextStyle(fontSize: 12, color: kMuted)),
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: !pcLink.onPhone,
+                        activeThumbColor: Colors.white,
+                        activeTrackColor: kAccent,
+                        onChanged: (v) {
+                          pcLink.setUseBridge(v);
+                          setState(() {
+                            results = [];
+                            error = null;
+                            lastQuery = '';
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           Expanded(child: online ? _onlineBody() : _libraryBody()),
@@ -235,9 +262,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 hasScrollBody: false,
                 child: _Hint(
                   icon: Icons.travel_explore,
-                  text: lastQuery.isEmpty
-                      ? 'Find any song, listen to it, then save it to one of your playlists.\nYour PC does the downloading, so keep SpotVault open on it.'
-                      : 'No songs found for "$lastQuery".',
+                  text: lastQuery.isNotEmpty
+                      ? 'No songs found for "$lastQuery".'
+                      : pcLink.onPhone
+                          ? 'Find any song, listen to it, then save it to a playlist.\nIt downloads straight to this phone. No PC needed.'
+                          : 'Find any song, listen to it, then save it to one of your playlists.\nYour PC does the downloading, so keep SpotVault open on it.',
                 ),
               )
             else
@@ -544,8 +573,30 @@ class _PlaylistPicker extends StatelessWidget {
             Flexible(
               child: ListView.builder(
                 shrinkWrap: true,
-                itemCount: lists.length,
+                itemCount: lists.length + (pcLink.onPhone ? 1 : 0),
                 itemBuilder: (_, i) {
+                  if (pcLink.onPhone) {
+                    if (i == 0) {
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                        leading: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(color: kAccent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+                          child: Icon(Icons.add_rounded, color: kAccent),
+                        ),
+                        title: const Text('New playlist'),
+                        subtitle: Text('Keep it on this phone', style: TextStyle(color: kMuted, fontSize: 12)),
+                        onTap: () async {
+                          final name = await _askName(context);
+                          if (name != null && context.mounted) {
+                            Navigator.pop(context, PlaylistInfo(folder: name, title: name, trackIds: []));
+                          }
+                        },
+                      );
+                    }
+                    i -= 1;
+                  }
                   final p = lists[i];
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -563,6 +614,33 @@ class _PlaylistPicker extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Asks for a new playlist's name. Returns null when cancelled.
+Future<String?> _askName(BuildContext context) async {
+  final ctrl = TextEditingController();
+  final name = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('New playlist'),
+      content: TextField(
+        controller: ctrl,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(hintText: 'Playlist name'),
+        onSubmitted: (v) => Navigator.pop(ctx, v),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Create')),
+      ],
+    ),
+  );
+  ctrl.dispose();
+  final clean = (name ?? '').replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ').trim();
+  if (clean.isEmpty) return null;
+  final taken = store.playlists.where((p) => p.folder.toLowerCase() == clean.toLowerCase()).firstOrNull;
+  return taken?.folder ?? clean;
 }
 
 /// Download progress for songs the user saved from search.
@@ -587,11 +665,8 @@ class _JobsPanel extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Row(children: [
-                  Text(jobs.any((j) => j.playWhenReady) ? 'Ghost Queue' : 'Downloads',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: kText)),
-                  if (jobs.any((j) => j.playWhenReady)) ...[const SizedBox(width: 6), const NewTag()],
-                ]),
+                child: Text(jobs.any((j) => j.playWhenReady) ? 'Ghost Queue' : 'Downloads',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: kText)),
               ),
               if (anyDone) TextButton(onPressed: pcLink.clearFinished, child: const Text('Clear')),
             ],

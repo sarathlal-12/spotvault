@@ -549,7 +549,6 @@ class _ToolRow extends StatelessWidget {
             _Tool(
               icon: Icons.add_location_alt_rounded,
               label: 'Moment',
-              isNew: true,
               active: false,
               onTap: () {
                 final ok = store.addMoment(track.id, p.position.inMilliseconds);
@@ -559,7 +558,6 @@ class _ToolRow extends StatelessWidget {
             _Tool(
               icon: Icons.all_inclusive_rounded,
               label: abLabel,
-              isNew: true,
               active: ps.loopA != null,
               onTap: () {
                 ps.tapAbLoop();
@@ -664,7 +662,7 @@ class _ToolRow extends StatelessWidget {
                   store.smartSleep = v;
                   store.changed();
                 },
-                title: Row(children: [Text('Smart Sleep', style: TextStyle(color: kText)), const SizedBox(width: 8), const NewTag()]),
+                title: Text('Smart Sleep', style: TextStyle(color: kText)),
                 subtitle: Text('Fades the music out slowly instead of stopping suddenly', style: TextStyle(color: kMuted, fontSize: 12)),
               ),
               if (playerService.sleepMode != SleepMode.off)
@@ -729,10 +727,9 @@ class _Tool extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
-  final bool isNew;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
-  const _Tool({required this.icon, required this.label, required this.active, required this.onTap, this.isNew = false, this.onLongPress});
+  const _Tool({required this.icon, required this.label, required this.active, required this.onTap, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -773,7 +770,6 @@ class _Tool extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (isNew) const Positioned(top: -7, right: 4, child: NewTag()),
               ],
             ),
           ),

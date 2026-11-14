@@ -1,0 +1,105 @@
+# Runs the on-phone downloader end to end on a real iPhone simulator and an
+# Android emulator: search, preview, download and play a song with no PC.
+#
+# Run it: GitHub > Actions > "Device test" > Run workflow.
+name: Device test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["dev/**"]
+
+env:
+  SERIOUS_PYTHON_VERSION: "3.13"
+  SERIOUS_PYTHON_BUNDLE_ID: com.spotvault.app.spotvaultMobile
+
+jobs:
+  ios-simulator:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: spotvault_mobile
+    env:
+      SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/spotvault_mobile/build/site-packages
+      SERIOUS_PYTHON_APP: ${{ github.workspace }}/spotvault_mobile/build/python-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Package the phone downloader (Python)
+        run: |
+          cp ../src/sources.py python/
+          dart run serious_python:main package python -p iOS -r -r -r python/requirements.txt --cleanup-packages
+
+      - name: Boot an iPhone simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          for runtime in sorted(d, reverse=True):
+              if 'iOS' not in runtime:
+                  continue
+              for dev in d[runtime]:
+                  if dev['name'].startswith('iPhone'):
+                      print(dev['udid']); raise SystemExit
+          ")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl list devices booted
+
+      - name: Run the on-phone download test
+        run: flutter test integration_test/phone_download_test.dart -d "$UDID" --reporter expanded
+
+  android-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: spotvault_mobile
+    env:
+      SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/spotvault_mobile/build/site-packages
+      SERIOUS_PYTHON_APP: ${{ github.workspace }}/spotvault_mobile/build/python-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Package the phone downloader (Python)
+        run: |
+          cp ../src/sources.py python/
+          dart run serious_python:main package python -p Android -r -r -r python/requirements.txt --cleanup-packages
+
+      - name: Run the on-phone download test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          working-directory: spotvault_mobile
+          script: flutter test integration_test/phone_download_test.dart -d emulator-5554 --reporter expanded

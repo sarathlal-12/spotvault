@@ -371,18 +371,6 @@ class _FadeSlideInState extends State<FadeSlideIn> with SingleTickerProviderStat
   }
 }
 
-/// Small pink "NEW" tag for Vault Lab features.
-class NewTag extends StatelessWidget {
-  const NewTag({super.key});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-        decoration: BoxDecoration(color: kCyan, borderRadius: BorderRadius.circular(99)),
-        child: const Text('NEW', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: Color(0xFF06110C))),
-      );
-}
-
 /// Pulsing dot (used for "linked to PC").
 class PulseDot extends StatefulWidget {
   final Color color;
