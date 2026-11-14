@@ -327,7 +327,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._authorized():
                 return
             if route == "/api/search":
-                return self._search(q.get("q", [""])[0])
+                return self._search(q.get("q", [""])[0], q.get("src", [""])[0])
             if route == "/api/preview":
                 return self._preview(q.get("url", [""])[0])
             if route == "/api/job":
@@ -363,15 +363,27 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
 
-    def _search(self, text):
+    def _search(self, text, only=""):
+        """Clean-music order like the PC's search_any (YouTube Music, SoundCloud,
+        YouTube lyric videos), logging why a source was skipped. `only` limits
+        it to one source key."""
         text = text.strip()[:200]
         if not text:
             return self._json(200, {"results": []})
-        try:
-            results = sources.search_any(text, 20)
-        except Exception as e:
-            log("search failed:", type(e).__name__, e)
-            return self._error(502, f"Search failed: {type(e).__name__}")
+        keys = [only] if only in sources.CLEAN_ORDER else list(sources.CLEAN_ORDER)
+        results, last = [], None
+        for key in keys:
+            try:
+                results = sources.search(key, text, 20)
+            except Exception as e:
+                last = e
+                log(f"search {key} failed:", type(e).__name__, str(e)[:300])
+                continue
+            if results:
+                break
+            log(f"search {key}: no results")
+        if not results and last is not None:
+            return self._error(502, f"Search failed: {type(last).__name__}")
         return self._json(200, {"results": [
             {k: r.get(k, "") for k in ("title", "artist", "duration", "url", "thumb")} for r in results
         ]})

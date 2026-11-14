@@ -164,10 +164,11 @@ class PcLink extends ChangeNotifier {
     }
   }
 
-  Future<List<OnlineSong>> search(String query) async {
+  /// [source] limits the phone's search to one source ('ytmusic', 'soundcloud', 'youtube').
+  Future<List<OnlineSong>> search(String query, {String source = ''}) async {
     await connect();
     final res = await http
-        .get(_uri('/api/search', {'q': query}), headers: _headers)
+        .get(_uri('/api/search', {'q': query, if (source.isNotEmpty) 'src': source}), headers: _headers)
         .timeout(const Duration(seconds: 45));
     _checkStatus(res);
     final list = (jsonDecode(utf8.decode(res.bodyBytes))['results'] as List).cast<Map<String, dynamic>>();
