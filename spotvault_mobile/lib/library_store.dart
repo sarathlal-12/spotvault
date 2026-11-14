@@ -17,8 +17,10 @@ class Track {
   final double duration;
   bool hasArt;
   final int addedAt;
+
   /// Downloaded on the phone itself (not on the PC), so PC syncs keep it.
   final bool phoneOnly;
+
   /// Even volume: dB to turn this song down by (measured on the PC), or null.
   final double? gain;
 
@@ -194,6 +196,9 @@ class LibraryStore extends ChangeNotifier {
   bool smartSleep = true; // fade out slowly before the sleep timer stops
   bool ghostQueue = true; // songs saved from search play next once they arrive
   bool useBridge = false; // download through the PC instead of on the phone
+  // Nearby phones (share and Jam)
+  String deviceName = '';
+  String deviceId = '';
   // Sound
   int crossfadeSec = 0; // 0 = off; fade between songs
   bool evenVolume = true; // turn loud songs down to a common level
@@ -202,6 +207,7 @@ class LibraryStore extends ChangeNotifier {
   /// PC songs and playlists removed on the phone: syncs skip them.
   final Set<String> excludedTracks = {};
   final Set<String> excludedFolders = {};
+
   /// Deletions to send to the PC at the next sync (song paths, playlist folders).
   final Set<String> pcDeletePaths = {};
   final Set<String> pcDeleteFolders = {};
@@ -212,6 +218,7 @@ class LibraryStore extends ChangeNotifier {
   // Vault Lab
   /// Moments: favourite spots in a song, in milliseconds, per track id.
   final Map<String, List<int>> moments = {};
+
   /// Rewind: listening time per day ("2026-11-13" -> ms) and per artist.
   final Map<String, int> listenDays = {};
   final Map<String, int> listenArtists = {};
@@ -238,6 +245,20 @@ class LibraryStore extends ChangeNotifier {
       await d.create(recursive: true);
     }
 
+    try {
+      await _loadFile();
+    } finally {
+      // A stable id and a friendly default name for nearby sharing.
+      if (deviceId.isEmpty) {
+        deviceId = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+      }
+      if (deviceName.isEmpty) {
+        deviceName = '${Platform.isIOS ? 'iPhone' : 'Phone'} ${deviceId.substring(deviceId.length - 3).toUpperCase()}';
+      }
+    }
+  }
+
+  Future<void> _loadFile() async {
     if (!await _file.exists()) return;
     try {
       final j = jsonDecode(await _file.readAsString()) as Map<String, dynamic>;
@@ -245,9 +266,7 @@ class LibraryStore extends ChangeNotifier {
         final track = Track.fromJson(Map<String, dynamic>.from(t));
         tracks[track.id] = track;
       }
-      playlists = [
-        for (final p in (j['playlists'] as List? ?? const [])) PlaylistInfo.fromJson(Map<String, dynamic>.from(p))
-      ];
+      playlists = [for (final p in (j['playlists'] as List? ?? const [])) PlaylistInfo.fromJson(Map<String, dynamic>.from(p))];
       favorites.addAll(List<String>.from(j['favorites'] ?? const []));
       playCounts.addAll(Map<String, int>.from(j['playCounts'] ?? const {}));
       recent = List<String>.from(j['recent'] ?? const []);
@@ -261,6 +280,8 @@ class LibraryStore extends ChangeNotifier {
       smartSleep = j['smartSleep'] ?? true;
       ghostQueue = j['ghostQueue'] ?? true;
       useBridge = j['useBridge'] ?? false;
+      deviceName = j['deviceName'] ?? '';
+      deviceId = j['deviceId'] ?? '';
       crossfadeSec = j['crossfadeSec'] ?? 0;
       evenVolume = j['evenVolume'] ?? true;
       eqPreset = j['eqPreset'] ?? 'off';
@@ -269,9 +290,7 @@ class LibraryStore extends ChangeNotifier {
       excludedFolders.addAll(List<String>.from(j['excludedFolders'] ?? const []));
       pcDeletePaths.addAll(List<String>.from(j['pcDeletePaths'] ?? const []));
       pcDeleteFolders.addAll(List<String>.from(j['pcDeleteFolders'] ?? const []));
-      recentSearches = [
-        for (final r in (j['recentSearches'] as List? ?? const [])) Map<String, dynamic>.from(r as Map)
-      ];
+      recentSearches = [for (final r in (j['recentSearches'] as List? ?? const [])) Map<String, dynamic>.from(r as Map)];
       final m = Map<String, dynamic>.from(j['moments'] ?? const {});
       m.forEach((k, v) => moments[k] = List<int>.from(v as List));
       listenDays.addAll(Map<String, int>.from(j['listenDays'] ?? const {}));
@@ -316,6 +335,8 @@ class LibraryStore extends ChangeNotifier {
           'smartSleep': smartSleep,
           'ghostQueue': ghostQueue,
           'useBridge': useBridge,
+          'deviceName': deviceName,
+          'deviceId': deviceId,
           'crossfadeSec': crossfadeSec,
           'evenVolume': evenVolume,
           'eqPreset': eqPreset,
@@ -421,8 +442,7 @@ class LibraryStore extends ChangeNotifier {
   }
 
   /// A cover the user picked on the phone (kept apart from the PC's cover).
-  File customCoverFile(String folder) =>
-      File('${coverDir.path}/c_${base64Url.encode(utf8.encode(folder)).replaceAll('=', '')}.img');
+  File customCoverFile(String folder) => File('${coverDir.path}/c_${base64Url.encode(utf8.encode(folder)).replaceAll('=', '')}.img');
 
   Future<void> setCustomCover(PlaylistInfo p, List<int>? bytes) async {
     final f = customCoverFile(p.folder);
@@ -455,7 +475,10 @@ class LibraryStore extends ChangeNotifier {
   /// Deletes a playlist and the songs only it had. PC playlists stay away on
   /// later syncs; with [alsoPc] the PC removes the playlist and its folder.
   Future<void> deletePlaylist(PlaylistInfo p, {bool alsoPc = false}) async {
-    final others = {for (final o in playlists) if (o.folder != p.folder) ...o.trackIds};
+    final others = {
+      for (final o in playlists)
+        if (o.folder != p.folder) ...o.trackIds
+    };
     final only = p.trackIds.where((id) => !others.contains(id)).toList();
     playlists = playlists.where((o) => o.folder != p.folder).toList();
     if (!p.phoneOnly) {
@@ -514,8 +537,7 @@ class LibraryStore extends ChangeNotifier {
   // ---------------------------------------------------------------- files
   File localFile(Track t) => File('${musicDir.path}/${t.path}');
   File artFile(Track t) => File('${artDir.path}/${t.id}.img');
-  File coverFile(String folder) =>
-      File('${coverDir.path}/${base64Url.encode(utf8.encode(folder)).replaceAll('=', '')}.img');
+  File coverFile(String folder) => File('${coverDir.path}/${base64Url.encode(utf8.encode(folder)).replaceAll('=', '')}.img');
 
   File? artFor(Track t) => t.hasArt ? artFile(t) : null;
 
@@ -533,16 +555,28 @@ class LibraryStore extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- views
-  List<Track> tracksOf(PlaylistInfo p) => [for (final id in p.trackIds) if (tracks[id] != null) tracks[id]!];
+  List<Track> tracksOf(PlaylistInfo p) => [
+        for (final id in p.trackIds)
+          if (tracks[id] != null) tracks[id]!
+      ];
 
   List<Track> get allTracks => sortTracks(tracks.values.toList(), TrackSort.title);
 
-  List<Track> get likedTracks => [for (final id in favorites) if (tracks[id] != null) tracks[id]!];
+  List<Track> get likedTracks => [
+        for (final id in favorites)
+          if (tracks[id] != null) tracks[id]!
+      ];
 
-  List<Track> get recentTracks => [for (final id in recent) if (tracks[id] != null) tracks[id]!];
+  List<Track> get recentTracks => [
+        for (final id in recent)
+          if (tracks[id] != null) tracks[id]!
+      ];
 
   List<Track> get mostPlayed {
-    final list = [for (final id in playCounts.keys) if (tracks[id] != null) tracks[id]!];
+    final list = [
+      for (final id in playCounts.keys)
+        if (tracks[id] != null) tracks[id]!
+    ];
     list.sort((a, b) => (playCounts[b.id] ?? 0).compareTo(playCounts[a.id] ?? 0));
     return list.take(50).toList();
   }
@@ -552,9 +586,7 @@ class LibraryStore extends ChangeNotifier {
     if (needle.isEmpty) return const [];
     return allTracks
         .where((t) =>
-            t.title.toLowerCase().contains(needle) ||
-            t.artist.toLowerCase().contains(needle) ||
-            t.album.toLowerCase().contains(needle))
+            t.title.toLowerCase().contains(needle) || t.artist.toLowerCase().contains(needle) || t.album.toLowerCase().contains(needle))
         .toList();
   }
 
@@ -614,8 +646,7 @@ class LibraryStore extends ChangeNotifier {
     changed();
   }
 
-  static String dayKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  static String dayKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   /// Adds listening time for Rewind. Saved with the next save().
   void addListening(Track t, int ms) {

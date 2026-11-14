@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import 'app_state.dart';
+import 'ui/menus.dart' show shareSongs;
+import 'ui/nearby_ui.dart';
 import 'ui/aurora.dart';
 import 'ui/common.dart';
 import 'ui/lab_screen.dart';
@@ -22,6 +24,12 @@ Future<void> main() async {
   await store.load();
   darkMode.value = store.darkTheme;
   await playerService.init();
+  // Phones nearby: share songs and Jam over the same Wi-Fi.
+  nearbyService
+    ..onIncomingShare = askIncomingShare
+    ..onJoinRequest = askJoin;
+  shareSongs = shareFlow;
+  nearbyService.start();
   runApp(const SpotVaultApp());
 }
 
@@ -34,8 +42,7 @@ ThemeData buildTheme(Palette p) {
     brightness: p.dark ? Brightness.dark : Brightness.light,
     scaffoldBackgroundColor: p.bg,
     colorScheme: scheme,
-    textTheme: (p.dark ? Typography.whiteMountainView : Typography.blackMountainView)
-        .apply(bodyColor: p.text, displayColor: p.text),
+    textTheme: (p.dark ? Typography.whiteMountainView : Typography.blackMountainView).apply(bodyColor: p.text, displayColor: p.text),
     iconTheme: IconThemeData(color: p.text),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: p.dark ? p.raised : p.text,
@@ -84,6 +91,7 @@ class SpotVaultApp extends StatelessWidget {
         SystemChrome.setSystemUIOverlayStyle(dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark);
         return MaterialApp(
           title: 'SpotVault',
+          navigatorKey: navKey,
           debugShowCheckedModeBanner: false,
           theme: buildTheme(p),
           themeAnimationDuration: const Duration(milliseconds: 450),
@@ -220,8 +228,7 @@ class _GlassNav extends StatelessWidget {
                                     : null,
                                 borderRadius: BorderRadius.circular(99),
                               ),
-                              child: Icon(i == index ? _items[i].$2 : _items[i].$1,
-                                  color: i == index ? kAccent : kMuted, size: 23),
+                              child: Icon(i == index ? _items[i].$2 : _items[i].$1, color: i == index ? kAccent : kMuted, size: 23),
                             ),
                             const SizedBox(height: 3),
                             Text(_items[i].$3,

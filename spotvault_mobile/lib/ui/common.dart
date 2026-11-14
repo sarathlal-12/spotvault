@@ -66,6 +66,7 @@ class TrackTile extends StatelessWidget {
   final List<Track> list;
   final int index;
   final bool showArt;
+
   /// The playlist this list shows, if any (song menu can remove from it).
   final PlaylistInfo? playlist;
 
@@ -126,7 +127,6 @@ class TrackTile extends StatelessWidget {
 }
 
 void showTrackMenu(BuildContext context, Track t, {PlaylistInfo? playlist}) => showSongMenu(context, t, playlist: playlist);
-
 
 /// Glass dock above the bottom navigation showing the current song.
 class MiniPlayer extends StatelessWidget {

@@ -5,6 +5,7 @@ import '../library_store.dart';
 import 'aurora.dart';
 import 'common.dart';
 import 'menus.dart';
+import 'nearby_ui.dart';
 import 'track_list_screen.dart';
 
 /// Home: continue listening, quick lists and the playlist grid.
@@ -64,6 +65,7 @@ class LibraryScreen extends StatelessWidget {
                     child: FadeSlideIn(delay: const Duration(milliseconds: 60), child: _LinkPill()),
                   ),
                 ),
+                const SliverToBoxAdapter(child: NearbyStatusCard()),
                 if (playerService.current != null)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -108,6 +110,7 @@ class LibraryScreen extends StatelessWidget {
                             onTap: () => _open(
                                 context, TrackListScreen(title: 'Most Played', source: () => store.mostPlayed, icon: Icons.trending_up)),
                           ),
+                          _Chip(icon: Icons.groups_rounded, label: 'Jam', onTap: () => openJam(context)),
                         ],
                       ),
                     ),

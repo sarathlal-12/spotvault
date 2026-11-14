@@ -163,7 +163,8 @@ Future<bool> confirmDeletePlaylist(BuildContext context, PlaylistInfo p) async {
 
 // ------------------------------------------------------------------ playlists
 /// Asks for a playlist name. Returns null when cancelled.
-Future<String?> askPlaylistName(BuildContext context, {String title = 'New playlist', String initial = '', String action = 'Create'}) async {
+Future<String?> askPlaylistName(BuildContext context,
+    {String title = 'New playlist', String initial = '', String action = 'Create'}) async {
   final ctrl = TextEditingController(text: initial);
   final name = await showDialog<String>(
     context: context,

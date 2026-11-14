@@ -129,9 +129,8 @@ class PhoneEngine {
   Future<bool> _alive() async {
     if (port == 0) return false;
     try {
-      final res = await http
-          .get(Uri(scheme: 'http', host: '127.0.0.1', port: port, path: '/api/status'))
-          .timeout(const Duration(seconds: 3));
+      final res =
+          await http.get(Uri(scheme: 'http', host: '127.0.0.1', port: port, path: '/api/status')).timeout(const Duration(seconds: 3));
       return res.statusCode == 200 && jsonDecode(res.body)['engine'] == 'phone';
     } catch (_) {
       return false;
@@ -140,10 +139,8 @@ class PhoneEngine {
 
   Future<bool> _tokenWorks() async {
     try {
-      final res = await http
-          .get(Uri(scheme: 'http', host: '127.0.0.1', port: port, path: '/api/job', queryParameters: {'id': 'x'}),
-              headers: {'X-SpotVault-Pin': token})
-          .timeout(const Duration(seconds: 3));
+      final res = await http.get(Uri(scheme: 'http', host: '127.0.0.1', port: port, path: '/api/job', queryParameters: {'id': 'x'}),
+          headers: {'X-SpotVault-Pin': token}).timeout(const Duration(seconds: 3));
       return res.statusCode == 404;
     } catch (_) {
       return false;
@@ -158,8 +155,7 @@ class PhoneEngine {
     try {
       final t = DateTime.now();
       String two(int n) => n.toString().padLeft(2, '0');
-      await File(path).writeAsString('${two(t.hour)}:${two(t.minute)}:${two(t.second)} app: $line\n',
-          mode: FileMode.append, flush: true);
+      await File(path).writeAsString('${two(t.hour)}:${two(t.minute)}:${two(t.second)} app: $line\n', mode: FileMode.append, flush: true);
     } catch (_) {}
   }
 

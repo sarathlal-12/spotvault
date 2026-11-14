@@ -190,7 +190,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
                   itemCount: tracks.length,
                   onReorderItem: (from, to) {
                     final ids = tracks.map((t) => t.id).toList();
-                                        ids.insert(to, ids.removeAt(from));
+                    ids.insert(to, ids.removeAt(from));
                     store.setPlaylistOrder(pl, ids);
                   },
                   itemBuilder: (_, i) => Material(

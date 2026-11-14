@@ -10,6 +10,7 @@ import '../player_service.dart';
 import 'aurora.dart';
 import 'common.dart';
 import 'lyrics_screen.dart';
+import 'nearby_ui.dart';
 import 'sound_sheet.dart';
 
 class NowPlayingScreen extends StatelessWidget {
@@ -25,7 +26,14 @@ class NowPlayingScreen extends StatelessWidget {
         if (t == null) {
           return Scaffold(
             appBar: AppBar(),
-            body: Center(child: Text('Nothing playing', style: TextStyle(color: kMuted))),
+            body: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('Nothing playing', style: TextStyle(color: kMuted)),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                    onPressed: () => openJam(context), icon: const Icon(Icons.groups_rounded), label: const Text('Jam with friends')),
+              ]),
+            ),
           );
         }
         lyricsService.prefetch(t);
@@ -63,7 +71,7 @@ class NowPlayingScreen extends StatelessWidget {
                               ],
                             ),
                           ),
-                          const ThemeToggle(),
+                          GlassIconButton(icon: Icons.groups_rounded, tooltip: 'Jam', onPressed: () => openJam(context)),
                           const SizedBox(width: 8),
                           GlassIconButton(
                               icon: Icons.more_horiz_rounded, tooltip: 'Song options', onPressed: () => showTrackMenu(context, t)),

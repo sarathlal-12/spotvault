@@ -52,7 +52,8 @@ void showSoundSheet(BuildContext context) {
               value: store.evenVolume,
               onChanged: (v) => playerService.setSound(evenVolume: v),
               title: const Text('Even volume'),
-              subtitle: Text('Turns loud songs down so every song plays at a similar level. '
+              subtitle: Text(
+                  'Turns loud songs down so every song plays at a similar level. '
                   'Your PC measures songs it syncs.',
                   style: TextStyle(color: kMuted, fontSize: 12)),
             ),
@@ -81,7 +82,14 @@ class _Equalizer extends StatefulWidget {
 class _EqualizerState extends State<_Equalizer> {
   late final Future<AndroidEqualizerParameters> _params = widget.eq.parameters;
 
-  static const _names = {'off': 'Off', 'bass': 'Bass boost', 'vocal': 'Vocals', 'treble': 'Treble', 'acoustic': 'Acoustic', 'custom': 'Custom'};
+  static const _names = {
+    'off': 'Off',
+    'bass': 'Bass boost',
+    'vocal': 'Vocals',
+    'treble': 'Treble',
+    'acoustic': 'Acoustic',
+    'custom': 'Custom'
+  };
 
   String _hz(double hz) => hz >= 1000 ? '${(hz / 1000).toStringAsFixed(hz >= 10000 ? 0 : 1)}k' : '${hz.round()}';
 
@@ -127,7 +135,9 @@ class _EqualizerState extends State<_Equalizer> {
                                     params.bands.length,
                                     (j) => custom
                                         ? (j < store.eqCustom.length ? store.eqCustom[j] : 0.0)
-                                        : (store.eqPreset == 'off' ? 0.0 : PlayerService.presetGain(store.eqPreset, params.bands[j].centerFrequency)));
+                                        : (store.eqPreset == 'off'
+                                            ? 0.0
+                                            : PlayerService.presetGain(store.eqPreset, params.bands[j].centerFrequency)));
                                 list[i] = v;
                                 store.eqCustom = list;
                                 playerService.setSound(eqPreset: 'custom');

@@ -106,9 +106,13 @@ class _LyricsScreenState extends State<LyricsScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            Text(t.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                            Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            Text(t.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
                           ]),
                         ),
@@ -139,9 +143,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
           return const Center(child: CircularProgressIndicator(color: Colors.white));
         }
         if (snap.hasError) {
-          return _message(isOffline(snap.error!)
-              ? 'Lyrics need the internet the first time.\nOnce found, they work offline.'
-              : "Couldn't get lyrics right now.", retry: true);
+          return _message(
+              isOffline(snap.error!)
+                  ? 'Lyrics need the internet the first time.\nOnce found, they work offline.'
+                  : "Couldn't get lyrics right now.",
+              retry: true);
         }
         final l = snap.data!;
         if (l.isEmpty) return _message('No lyrics found for this song.');

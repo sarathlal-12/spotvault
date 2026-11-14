@@ -15,11 +15,21 @@ enum SleepMode { off, timer, endOfTrack }
 /// Lock-screen and notification controls come from just_audio_background.
 class PlayerService extends ChangeNotifier {
   final LibraryStore store;
+
   /// Android's equalizer (iPhone has none in the audio player).
   final AndroidEqualizer? equalizer = Platform.isAndroid ? AndroidEqualizer() : null;
   late final AudioPlayer player = AudioPlayer(
     audioPipeline: AudioPipeline(androidAudioEffects: [if (equalizer != null) equalizer!]),
   );
+
+  /// Songs that aren't in the library (Jam songs from other phones): id -> track / file / art.
+  final Map<String, Track> extraTracks = {};
+  final Map<String, String> extraFiles = {};
+  final Map<String, String> extraArt = {};
+
+  Track? trackById(String id) => store.tracks[id] ?? extraTracks[id];
+
+  String _pathOf(Track t) => extraFiles[t.id] ?? store.localFile(t).path;
 
   // Volume is the product of: Smart Sleep fade, song transition fade, even volume.
   double _sleepFactor = 1, _fadeFactor = 1, _gainFactor = 1;
@@ -31,6 +41,7 @@ class PlayerService extends ChangeNotifier {
     _lastVolume = v;
     player.setVolume(v);
   }
+
   PlayerService(this.store);
 
   SleepMode sleepMode = SleepMode.off;
@@ -99,14 +110,14 @@ class PlayerService extends ChangeNotifier {
   // ------------------------------------------------------------ state
   List<Track> get queue => [
         for (final s in player.sequence)
-          if (store.tracks[(s.tag as MediaItem).id] != null) store.tracks[(s.tag as MediaItem).id]!
+          if (trackById((s.tag as MediaItem).id) != null) trackById((s.tag as MediaItem).id)!
       ];
 
   Track? get current {
     final i = player.currentIndex;
     final seq = player.sequence;
     if (i == null || i < 0 || i >= seq.length) return null;
-    return store.tracks[(seq[i].tag as MediaItem).id];
+    return trackById((seq[i].tag as MediaItem).id);
   }
 
   /// Queue in the order it will actually play (respects shuffle).
@@ -116,9 +127,10 @@ class PlayerService extends ChangeNotifier {
 
   // ------------------------------------------------------------ building sources
   AudioSource _source(Track t) {
-    final art = store.artFor(t);
+    final extra = extraArt[t.id];
+    final art = extra != null ? File(extra) : store.artFor(t);
     return AudioSource.file(
-      store.localFile(t).path,
+      _pathOf(t),
       tag: MediaItem(
         id: t.id,
         title: t.title,
@@ -130,7 +142,10 @@ class PlayerService extends ChangeNotifier {
     );
   }
 
-  List<Track> _playable(List<Track> tracks) => tracks.where((t) => store.localFile(t).existsSync()).toList();
+  List<Track> _playable(List<Track> tracks) => tracks.where((t) => File(_pathOf(t)).existsSync()).toList();
+
+  /// Builds a playable source for [t] (used by Jam to add songs as they arrive).
+  AudioSource sourceFor(Track t) => _source(t);
 
   // ------------------------------------------------------------ actions
   Future<void> playTracks(List<Track> tracks, {int start = 0, bool? shuffle}) async {
@@ -302,10 +317,32 @@ class PlayerService extends ChangeNotifier {
   static const eqPresets = ['off', 'bass', 'vocal', 'treble', 'acoustic', 'custom'];
 
   static double presetGain(String preset, double hz) => switch (preset) {
-        'bass' => hz < 120 ? 6 : hz < 300 ? 3.5 : hz < 1000 ? 0 : -1,
-        'vocal' => hz < 200 ? -2 : hz < 800 ? 0.5 : hz < 5000 ? 3.5 : 1,
-        'treble' => hz < 1000 ? 0 : hz < 4000 ? 2.5 : 5,
-        'acoustic' => hz < 120 ? 3 : hz < 600 ? 1 : hz < 3000 ? 1.5 : 2.5,
+        'bass' => hz < 120
+            ? 6
+            : hz < 300
+                ? 3.5
+                : hz < 1000
+                    ? 0
+                    : -1,
+        'vocal' => hz < 200
+            ? -2
+            : hz < 800
+                ? 0.5
+                : hz < 5000
+                    ? 3.5
+                    : 1,
+        'treble' => hz < 1000
+            ? 0
+            : hz < 4000
+                ? 2.5
+                : 5,
+        'acoustic' => hz < 120
+            ? 3
+            : hz < 600
+                ? 1
+                : hz < 3000
+                    ? 1.5
+                    : 2.5,
         _ => 0,
       };
 
@@ -320,9 +357,7 @@ class PlayerService extends ChangeNotifier {
       final params = await eq.parameters;
       for (var i = 0; i < params.bands.length; i++) {
         final b = params.bands[i];
-        final db = preset == 'custom'
-            ? (i < store.eqCustom.length ? store.eqCustom[i] : 0.0)
-            : presetGain(preset, b.centerFrequency);
+        final db = preset == 'custom' ? (i < store.eqCustom.length ? store.eqCustom[i] : 0.0) : presetGain(preset, b.centerFrequency);
         await b.setGain(db.clamp(params.minDecibels, params.maxDecibels));
       }
     } catch (e) {
@@ -443,7 +478,10 @@ class PlayerService extends ChangeNotifier {
       await player.stop();
       if (saved == null) return;
       await player.setLoopMode(saved.loop);
-      final list = _playable([for (final id in saved.ids) if (store.tracks[id] != null) store.tracks[id]!]);
+      final list = _playable([
+        for (final id in saved.ids)
+          if (store.tracks[id] != null) store.tracks[id]!
+      ]);
       if (list.isEmpty) {
         await player.clearAudioSources();
       } else {
@@ -504,7 +542,10 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> _restore() async {
-    final list = _playable([for (final id in store.resumeQueue) if (store.tracks[id] != null) store.tracks[id]!]);
+    final list = _playable([
+      for (final id in store.resumeQueue)
+        if (store.tracks[id] != null) store.tracks[id]!
+    ]);
     if (list.isEmpty) return;
     final wanted = store.resumeIndex < store.resumeQueue.length ? store.resumeQueue[store.resumeIndex] : null;
     var index = list.indexWhere((t) => t.id == wanted);
@@ -531,7 +572,10 @@ class PlayerService extends ChangeNotifier {
     if (missing.isEmpty) return;
     final wasPlaying = player.playing;
     final cur = current;
-    final list = _playable([for (final id in ids) if (store.tracks[id] != null) store.tracks[id]!]);
+    final list = _playable([
+      for (final id in ids)
+        if (store.tracks[id] != null) store.tracks[id]!
+    ]);
     if (list.isEmpty) {
       await player.stop();
       await player.clearAudioSources();

@@ -168,7 +168,10 @@ class _RewindCard extends StatelessWidget {
                                 height: 78 * f.clamp(0.0, 1.1),
                                 decoration: BoxDecoration(
                                   borderRadius: const BorderRadius.vertical(top: Radius.circular(6), bottom: Radius.circular(3)),
-                                  gradient: i == 6 ? const LinearGradient(colors: [kEmber, kViolet], begin: Alignment.topCenter, end: Alignment.bottomCenter) : null,
+                                  gradient: i == 6
+                                      ? const LinearGradient(
+                                          colors: [kEmber, kViolet], begin: Alignment.topCenter, end: Alignment.bottomCenter)
+                                      : null,
                                   color: i == 6 ? null : kViolet.withValues(alpha: pal.dark ? 0.30 : 0.22),
                                 ),
                               ),
@@ -225,7 +228,8 @@ class _MomentsCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, color: kText)),
+                          Text(t.title,
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, color: kText)),
                           Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: kMuted)),
                         ],
                       ),

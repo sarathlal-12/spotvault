@@ -17,6 +17,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:serious_python/serious_python.dart';
 import 'package:spotvault_mobile/app_state.dart';
 import 'package:spotvault_mobile/library_store.dart';
+import 'package:spotvault_mobile/nearby.dart';
 import 'package:spotvault_mobile/pc_link.dart';
 import 'package:spotvault_mobile/phone_engine.dart';
 
@@ -97,6 +98,7 @@ void main() {
     store.artDir = Directory('${base.path}/art')..createSync(recursive: true);
     store.coverDir = Directory('${base.path}/covers')..createSync(recursive: true);
     store.useBridge = false;
+    PhoneEngine.testMode = true;
 
     try {
       // 1. Normal search (clean order: YouTube Music, SoundCloud, YouTube).
@@ -132,6 +134,52 @@ void main() {
         }
       }
       expect(done, isTrue, reason: 'a SoundCloud song must download and play on the phone');
+
+      // 4. The downloader repairs itself after losing its socket (what iPhone
+      //    does to a sleeping app), without restarting the app.
+      final e = PhoneEngine.instance;
+      await http.get(Uri.parse('http://127.0.0.1:${e.port}/api/_break?pin=${e.token}')).timeout(const Duration(seconds: 5));
+      await Future.delayed(const Duration(milliseconds: 500));
+      final again = Stopwatch()..start();
+      final after = await pcLink.search('lofi beat', source: 'soundcloud');
+      say('search after break: ${after.length} results in ${again.elapsed.inSeconds}s');
+      expect(after, isNotEmpty);
+
+      // 5. Share and Jam between two "phones" (a second one on another port).
+      final song = store.tracksOf(store.playlists.firstWhere((p) => p.folder == 'SC Test')).first;
+      final other = NearbyService(store, playerService, port: 50520, name: 'Guest phone', id: 'guest');
+      await nearbyService.start();
+      await other.start();
+      nearbyService.onIncomingShare = (_) async => true;
+      nearbyService.onJoinRequest = (_) async => true;
+      final me = NearbyPhone('127.0.0.1', kNearbyPort, 'Host phone', 'host', null);
+
+      expect(await other.share(me, [song]), isTrue);
+      for (var i = 0; i < 100 && store.playlistByFolder('Shared with me') == null; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      final shared = store.tracksOf(store.playlistByFolder('Shared with me')!).single;
+      say('share: received "${shared.title}" ${store.localFile(shared).lengthSync()} bytes');
+      expect(store.localFile(shared).lengthSync(), store.localFile(song).lengthSync());
+
+      await nearbyService.startJam(JamMode.speaker);
+      expect(await other.joinJam(me), isNull);
+      await other.jamGuest!.add([song]);
+      final host = nearbyService.jamHost!;
+      for (var i = 0; i < 100 && !(playerService.player.playing && (playerService.current?.id.startsWith('jam:') ?? false)); i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      say('jam: host playing ${playerService.current?.title} (${host.items.length} in queue), guest sees ${other.jamGuest!.state['current']}');
+      expect(host.items.single.file, isNotNull);
+      expect(playerService.current?.id, 'jam:${host.items.single.key}');
+      expect(playerService.player.playing, isTrue);
+      await Future.delayed(const Duration(milliseconds: 1500));
+      expect(other.jamGuest!.state['current'], host.items.single.key);
+      await other.jamGuest!.control('pause');
+      expect(playerService.player.playing, isFalse);
+      await other.leaveJam();
+      await nearbyService.leaveJam();
+      say('jam: guest paused the host, then both left');
     } finally {
       await dumpLog('end of test');
     }

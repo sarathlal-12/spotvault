@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'library_store.dart';
 import 'lyrics_service.dart';
+import 'nearby.dart';
 import 'pc_link.dart';
 import 'player_service.dart';
 import 'sync_service.dart';
@@ -15,6 +16,10 @@ final PcLink pcLink = PcLink(store, syncService)
   ..onReady = playerService.playNext;
 
 final LyricsService lyricsService = LyricsService(store);
+final NearbyService nearbyService = NearbyService(store, playerService);
+
+/// Lets services show dialogs (incoming shares, Jam join requests).
+final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
 
 /// Lets any screen jump to a bottom-nav tab (0 Home, 1 Search, 2 Lab, 3 Sync).
 final ValueNotifier<int> currentTab = ValueNotifier<int>(0);

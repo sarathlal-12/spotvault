@@ -38,6 +38,7 @@ class DlJob {
   final OnlineSong song;
   final String folder;
   final String playlistTitle;
+
   /// Ghost Queue: play this song next as soon as it reaches the phone.
   final bool playWhenReady;
   DlState state = DlState.connecting;
@@ -96,14 +97,11 @@ class PcLink extends ChangeNotifier {
 
   String get _hostText => _port == kHttpPort ? _host! : '$_host:$_port';
 
-  Uri _uri(String path, [Map<String, String>? q]) =>
-      Uri(scheme: 'http', host: _host, port: _port, path: path, queryParameters: q);
+  Uri _uri(String path, [Map<String, String>? q]) => Uri(scheme: 'http', host: _host, port: _port, path: path, queryParameters: q);
 
   Future<bool> _alive(String host, int port) async {
     try {
-      final res = await http
-          .get(Uri(scheme: 'http', host: host, port: port, path: '/api/status'))
-          .timeout(const Duration(seconds: 4));
+      final res = await http.get(Uri(scheme: 'http', host: host, port: port, path: '/api/status')).timeout(const Duration(seconds: 4));
       return res.statusCode == 200 && jsonDecode(res.body)['app'] == 'SpotVault';
     } catch (_) {
       return false;
@@ -187,9 +185,7 @@ class PcLink extends ChangeNotifier {
   Future<List<String>> suggest(String text) async {
     try {
       await connect();
-      final res = await http
-          .get(_uri('/api/suggest', {'q': text}), headers: _headers)
-          .timeout(const Duration(seconds: 6));
+      final res = await http.get(_uri('/api/suggest', {'q': text}), headers: _headers).timeout(const Duration(seconds: 6));
       if (res.statusCode != 200) return const [];
       return List<String>.from(jsonDecode(utf8.decode(res.bodyBytes))['suggestions'] as List);
     } catch (_) {

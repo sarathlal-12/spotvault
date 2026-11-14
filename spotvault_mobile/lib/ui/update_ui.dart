@@ -51,8 +51,7 @@ Future<void> _showUpdateDialog(BuildContext context, UpdateInfo info) async {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('You have v$kAppVersion. Your music and playlists stay on the phone.',
-                style: TextStyle(color: kMuted, fontSize: 13)),
+            Text('You have v$kAppVersion. Your music and playlists stay on the phone.', style: TextStyle(color: kMuted, fontSize: 13)),
             const SizedBox(height: 14),
             Text("WHAT'S NEW", style: TextStyle(color: kMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 6),

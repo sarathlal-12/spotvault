@@ -311,8 +311,7 @@ class _SearchScreenState extends State<SearchScreen> {
         final jobs = pcLink.jobs.reversed.toList();
         return CustomScrollView(
           slivers: [
-            if (jobs.isNotEmpty)
-              SliverToBoxAdapter(child: _JobsPanel(jobs: jobs)),
+            if (jobs.isNotEmpty) SliverToBoxAdapter(child: _JobsPanel(jobs: jobs)),
             // While typing, keep the last results on screen with a thin bar.
             if (searching && results.isNotEmpty)
               SliverToBoxAdapter(
@@ -753,7 +752,10 @@ class _JobsPanel extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(j.song.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text(j.song.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                         Text(j.message,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,

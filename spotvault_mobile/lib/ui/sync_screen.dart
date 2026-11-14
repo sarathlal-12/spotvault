@@ -119,7 +119,9 @@ class _SyncScreenState extends State<SyncScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                     Text(
                       paired
-                          ? (store.lastSync == 0 ? 'Not synced yet' : 'Last sync ${_ago(DateTime.fromMillisecondsSinceEpoch(store.lastSync))}')
+                          ? (store.lastSync == 0
+                              ? 'Not synced yet'
+                              : 'Last sync ${_ago(DateTime.fromMillisecondsSinceEpoch(store.lastSync))}')
                           : 'Open SpotVault on your PC and click "Connect phone". Same Wi-Fi.',
                       style: TextStyle(color: kMuted, fontSize: 12),
                     ),
@@ -153,7 +155,9 @@ class _SyncScreenState extends State<SyncScreen> {
                 hintText: 'e.g. 192.168.0.113',
                 prefixIcon: const Icon(Icons.lan_outlined),
                 suffixIcon: s.scanning
-                    ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
                     : IconButton(
                         tooltip: 'Find PCs on this Wi-Fi',
                         icon: const Icon(Icons.wifi_find),
@@ -407,7 +411,8 @@ class _Progress extends StatelessWidget {
                   ? TweenAnimationBuilder<double>(
                       tween: Tween(end: s.progress),
                       duration: const Duration(milliseconds: 300),
-                      builder: (_, v, __) => LinearProgressIndicator(value: v.clamp(0.0, 1.0), minHeight: 6, color: kAccent, backgroundColor: pal.track),
+                      builder: (_, v, __) =>
+                          LinearProgressIndicator(value: v.clamp(0.0, 1.0), minHeight: 6, color: kAccent, backgroundColor: pal.track),
                     )
                   : LinearProgressIndicator(minHeight: 6, color: kAccent, backgroundColor: pal.track),
             ),

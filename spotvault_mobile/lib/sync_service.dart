@@ -131,9 +131,7 @@ class SyncService extends ChangeNotifier {
       };
 
   Future<Map<String, dynamic>> _getJson(String host, int port, String path, String pin) async {
-    final res = await _client!
-        .get(_uri(host, port, path), headers: _headers(pin))
-        .timeout(const Duration(seconds: 60));
+    final res = await _client!.get(_uri(host, port, path), headers: _headers(pin)).timeout(const Duration(seconds: 60));
     if (res.statusCode == 401) throw SyncException('Wrong PIN. Check the Phone Sync window on your PC.');
     if (res.statusCode == 429) throw SyncException('Too many wrong PINs. Wait a minute and try again.');
     if (res.statusCode != 200) throw SyncException('PC answered ${res.statusCode}.');
@@ -174,8 +172,7 @@ class SyncService extends ChangeNotifier {
       } on SyncException {
         rethrow;
       } catch (_) {
-        throw SyncException(
-            "Can't reach $host:$port. Check both devices are on the same Wi-Fi and SpotVault is open on the PC.");
+        throw SyncException("Can't reach $host:$port. Check both devices are on the same Wi-Fi and SpotVault is open on the PC.");
       }
 
       await _sendPcDeletes(host, port, pin);
@@ -261,10 +258,7 @@ class SyncService extends ChangeNotifier {
         .where((pl) => !store.excludedFolders.contains(pl['folder']))
         .map((pl) => {
               ...pl,
-              'tracks': (pl['tracks'] as List)
-                  .cast<Map<String, dynamic>>()
-                  .where((t) => !store.excludedTracks.contains(t['id']))
-                  .toList(),
+              'tracks': (pl['tracks'] as List).cast<Map<String, dynamic>>().where((t) => !store.excludedTracks.contains(t['id'])).toList(),
             })
         .toList();
 
@@ -359,9 +353,7 @@ class SyncService extends ChangeNotifier {
     // 5. Remove what was deleted on the PC (skipped when the sync was cancelled).
     //    Songs downloaded on the phone itself are never removed by a PC sync.
     if (store.mirrorDeletes && !_cancel) {
-      final gone = store.tracks.keys
-          .where((id) => !remoteTracks.containsKey(id) && store.tracks[id]?.phoneOnly != true)
-          .toList();
+      final gone = store.tracks.keys.where((id) => !remoteTracks.containsKey(id) && store.tracks[id]?.phoneOnly != true).toList();
       for (final id in gone) {
         await store.deleteTrack(id);
         removed++;
@@ -461,9 +453,7 @@ class SyncService extends ChangeNotifier {
 
   Future<bool> _fetchSmall(String host, int port, String pin, String path, Map<String, String> q, File out) async {
     try {
-      final res = await _client!
-          .get(_uri(host, port, path, q), headers: _headers(pin))
-          .timeout(const Duration(seconds: 20));
+      final res = await _client!.get(_uri(host, port, path, q), headers: _headers(pin)).timeout(const Duration(seconds: 20));
       if (res.statusCode != 200 || res.bodyBytes.isEmpty) return false;
       await out.parent.create(recursive: true);
       await out.writeAsBytes(res.bodyBytes, flush: true);

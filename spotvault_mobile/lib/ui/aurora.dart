@@ -260,8 +260,8 @@ class _EqBarsState extends State<EqBars> with SingleTickerProviderStateMixin {
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 1.5),
                   width: 3,
-                  height: widget.height *
-                      (widget.playing ? 0.3 + 0.7 * (0.5 + 0.5 * math.sin(_c.value * 2 * math.pi + i * 1.7)).abs() : 0.3),
+                  height:
+                      widget.height * (widget.playing ? 0.3 + 0.7 * (0.5 + 0.5 * math.sin(_c.value * 2 * math.pi + i * 1.7)).abs() : 0.3),
                   decoration: BoxDecoration(color: widget.color, borderRadius: BorderRadius.circular(2)),
                 ),
             ],
