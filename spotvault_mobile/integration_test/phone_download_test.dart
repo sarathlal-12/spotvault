@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:serious_python/serious_python.dart';
 import 'package:spotvault_mobile/app_state.dart';
 import 'package:spotvault_mobile/library_store.dart';
 import 'package:spotvault_mobile/pc_link.dart';
@@ -27,7 +28,17 @@ void main() {
 
     Future<void> dumpLog(String why) async {
       // ignore: avoid_print
-      print('--- $why. Engine log:\n${await PhoneEngine.instance.readLog()}');
+      print('--- $why. runError=${PhoneEngine.instance.runError} logPath=${PhoneEngine.instance.logPath}');
+      try {
+        final app = await SeriousPython.prepareApp();
+        // ignore: avoid_print
+        print('app dir $app: ${Directory(app).listSync().map((e) => e.path.split('/').last).toList()}');
+      } catch (e) {
+        // ignore: avoid_print
+        print('prepareApp failed: $e');
+      }
+      // ignore: avoid_print
+      print('Engine log:\n${await PhoneEngine.instance.readLog()}');
     }
 
     final sw = Stopwatch()..start();

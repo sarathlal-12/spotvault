@@ -51,6 +51,8 @@ def log(*parts):
             pass
 
 
+log("python", sys.version.split()[0], "on", sys.platform, "cwd", os.getcwd())
+
 # Mobile Python has no system CA store; point SSL at certifi's bundle.
 try:
     import certifi
@@ -60,7 +62,11 @@ except Exception as e:  # pragma: no cover
     log("certifi missing:", e)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import sources  # noqa: E402  (the PC app's clean-music search)
+try:
+    import sources  # noqa: E402  (the PC app's clean-music search)
+except Exception:
+    log("import failed:", traceback.format_exc())
+    raise
 
 # yt-dlp options shared by preview and download. No JS runtime or FFmpeg on a phone.
 YDL_BASE = {

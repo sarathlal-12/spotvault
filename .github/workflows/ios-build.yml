@@ -19,6 +19,10 @@ on:
 permissions:
   contents: write
 
+env:
+  SERIOUS_PYTHON_VERSION: "3.13"
+  SERIOUS_PYTHON_BUNDLE_ID: com.spotvault.app.spotvaultMobile
+
 jobs:
   ios:
     runs-on: macos-latest
@@ -26,6 +30,9 @@ jobs:
     defaults:
       run:
         working-directory: spotvault_mobile
+    env:
+      SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/spotvault_mobile/build/site-packages
+      SERIOUS_PYTHON_APP: ${{ github.workspace }}/spotvault_mobile/build/python-app
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +43,12 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      # The on-phone downloader: Python + yt-dlp + the PC's clean-music filter.
+      - name: Package the phone downloader (Python)
+        run: |
+          cp ../src/sources.py python/
+          dart run serious_python:main package python -p iOS -r -r -r python/requirements.txt --cleanup-packages
 
       - name: Build iOS app (unsigned)
         run: flutter build ios --release --no-codesign

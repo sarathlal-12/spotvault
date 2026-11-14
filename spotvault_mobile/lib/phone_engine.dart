@@ -24,6 +24,8 @@ class PhoneEngine {
   Future<void>? _starting;
   bool _ran = false;
   String? logPath;
+  /// Why Python itself failed to start, if it did.
+  String? runError;
 
   bool get ready => port != 0 && _starting == null;
 
@@ -56,6 +58,7 @@ class PhoneEngine {
     } catch (_) {}
     _ran = true;
     port = p;
+    runError = null;
     SeriousPython.run(
       appFileName: 'main.py',
       environmentVariables: {
@@ -67,14 +70,18 @@ class PhoneEngine {
         'SV_VERSION': kAppVersion,
         'PYTHONUNBUFFERED': '1',
       },
-    );
+    ).catchError((Object e) {
+      runError = '$e';
+      debugPrint('Python could not start: $e');
+      return null;
+    });
     // First launch on Android unpacks Python, which takes a while.
     final deadline = DateTime.now().add(const Duration(seconds: 90));
     while (DateTime.now().isBefore(deadline)) {
       if (await _alive()) return;
       await Future.delayed(const Duration(milliseconds: 400));
     }
-    debugPrint('Phone engine did not start. Log:\n${await readLog()}');
+    debugPrint('Phone engine did not start. runError=$runError. Log:\n${await readLog()}');
     throw EngineException("The downloader didn't start. Close SpotVault and open it again.");
   }
 
