@@ -54,7 +54,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Be the speaker'), findsOneWidget);
       expect(find.text('Everyone in sync'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Join by address'), 300);
+      await tester.scrollUntilVisible(find.text('Join by address'), 300, scrollable: find.byType(Scrollable).first);
       expect(find.text('Join by address'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
