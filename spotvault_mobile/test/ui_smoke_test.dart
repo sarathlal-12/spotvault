@@ -19,6 +19,8 @@ void main() {
 
     testWidgets('Home (empty library) draws in $name theme', (tester) async {
       darkMode.value = dark;
+      themeStyle.value = 'crimson'; // the classic Home
+      addTearDown(() => themeStyle.value = 'minimal');
       tester.view.physicalSize = const Size(390 * 3, 844 * 3);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);

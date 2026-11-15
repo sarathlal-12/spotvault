@@ -82,7 +82,7 @@ void main() {
     expect(find.text('Song number 1'), findsOneWidget);
     expect(find.text('Song number 2'), findsOneWidget);
     expect(find.textContaining('12 songs'), findsOneWidget);
-    expect(find.byTooltip('Shuffle'), findsOneWidget);
+    expect(find.byTooltip(isMinimal ? 'Shuffle play' : 'Shuffle'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

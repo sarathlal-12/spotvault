@@ -1,3 +1,4 @@
+import 'minimal_home.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
@@ -16,6 +17,8 @@ class LibraryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The Minimal look has its own Home (2.0 design); Crimson keeps the classic one.
+    if (isMinimal) return const MinimalHome();
     return ListenableBuilder(
       listenable: Listenable.merge([store, playerService]),
       builder: (context, _) {

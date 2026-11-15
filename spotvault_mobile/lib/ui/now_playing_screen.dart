@@ -38,6 +38,8 @@ class NowPlayingScreen extends StatelessWidget {
           );
         }
         lyricsService.prefetch(t);
+        // The Minimal look has its own player (2.0 design); Crimson keeps the classic one.
+        if (isMinimal) return _MinimalPlayer(track: t, playlistName: _playlistName(t));
         return Scaffold(
           body: AuroraBackground(
             intensity: 1.2,
@@ -195,6 +197,294 @@ class NowPlayingScreen extends StatelessWidget {
       if (p.folder == t.folder) return p.name;
     }
     return t.folder;
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Minimal player (2.0 design): round outline buttons, the time above a wavy
+// cover with a progress ring, a big title, a black play button, the tools and
+// a lyrics card peeking from the bottom.
+// ---------------------------------------------------------------------------
+class _MinimalPlayer extends StatelessWidget {
+  final Track track;
+  final String playlistName;
+  const _MinimalPlayer({required this.track, required this.playlistName});
+
+  String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pal;
+    final t = track;
+    final player = playerService.player;
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: SafeArea(
+        bottom: false,
+        child: GestureDetector(
+          onVerticalDragEnd: (d) {
+            if ((d.primaryVelocity ?? 0) < -400) openLyrics(context);
+            if ((d.primaryVelocity ?? 0) > 500) Navigator.pop(context);
+          },
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: Row(children: [
+                _OutlineIcon(icon: Icons.keyboard_arrow_down_rounded, label: 'Close', onTap: () => Navigator.pop(context)),
+                Expanded(
+                  child: Column(children: [
+                    Text('Now playing', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.text)),
+                    Text(playlistName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: p.muted)),
+                  ]),
+                ),
+                _OutlineIcon(
+                  icon: store.isLiked(t.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  color: store.isLiked(t.id) ? const Color(0xFFE0403B) : null,
+                  label: store.isLiked(t.id) ? 'Remove from Liked Songs' : 'Add to Liked Songs',
+                  onTap: () => store.toggleLike(t.id),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            StreamBuilder<Duration>(
+              stream: player.positionStream,
+              builder: (context, s) => Text.rich(
+                TextSpan(children: [
+                  TextSpan(text: _fmt(s.data ?? Duration.zero), style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
+                  TextSpan(text: '  |  ${_fmt(player.duration ?? t.length)}', style: TextStyle(color: p.muted)),
+                ]),
+                style: const TextStyle(fontSize: 14, fontFeatures: [FontFeature.tabularFigures()]),
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: LayoutBuilder(builder: (context, c) {
+                  final side = math.min(c.maxWidth - 40, c.maxHeight - 8).clamp(180.0, 380.0);
+                  return GestureDetector(
+                    onHorizontalDragEnd: (d) {
+                      final v = d.primaryVelocity ?? 0;
+                      if (v < -300) playerService.next();
+                      if (v > 300) playerService.previous();
+                    },
+                    onDoubleTap: () => store.toggleLike(t.id),
+                    child: SizedBox(
+                      width: side,
+                      height: side,
+                      child: Hero(
+                        tag: 'art',
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 450),
+                          transitionBuilder: (c, a) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: c)),
+                          child: WavyCover(key: ValueKey(t.id), track: t, inset: 18),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 350),
+                child: Column(key: ValueKey(t.id), children: [
+                  Text(t.title.toUpperCase(),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 0.6, height: 1.15, color: p.text)),
+                  const SizedBox(height: 5),
+                  Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, color: p.muted)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: _SlimSeek(player: player)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                IconButton(
+                  tooltip: switch (player.loopMode) { LoopMode.off => 'Repeat off', LoopMode.all => 'Repeat all', LoopMode.one => 'Repeat one' },
+                  icon: Icon(player.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                      color: player.loopMode == LoopMode.off ? p.text : const Color(0xFFE0403B)),
+                  onPressed: playerService.cycleLoop,
+                ),
+                IconButton(tooltip: 'Previous', iconSize: 30, icon: Icon(Icons.skip_previous_rounded, color: p.text), onPressed: playerService.previous),
+                StreamBuilder<PlayerState>(
+                  stream: player.playerStateStream,
+                  builder: (context, s) {
+                    final playing = s.data?.playing ?? false;
+                    return Semantics(
+                      button: true,
+                      label: playing ? 'Pause' : 'Play',
+                      child: Pressable(
+                        onTap: playerService.togglePlay,
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(color: p.text, shape: BoxShape.circle),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                            child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, key: ValueKey(playing), color: p.bg, size: 32),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                IconButton(tooltip: 'Next', iconSize: 30, icon: Icon(Icons.skip_next_rounded, color: p.text), onPressed: playerService.next),
+                IconButton(
+                  tooltip: player.shuffleModeEnabled ? 'Shuffle on' : 'Shuffle off',
+                  icon: Icon(Icons.shuffle_rounded, color: player.shuffleModeEnabled ? const Color(0xFFE0403B) : p.text),
+                  onPressed: playerService.toggleShuffle,
+                ),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _ToolRow(track: t)),
+            const SizedBox(height: 12),
+            _LyricsPeek(track: t),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _OutlineIcon extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  const _OutlineIcon({required this.icon, required this.label, required this.onTap, this.color});
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: label,
+        child: Semantics(
+          button: true,
+          label: label,
+          child: Pressable(
+            onTap: onTap,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: pal.line)),
+              child: Icon(icon, size: 20, color: color ?? pal.text),
+            ),
+          ),
+        ),
+      );
+}
+
+/// A thin timeline under the title (the ring around the cover shows it too).
+class _SlimSeek extends StatefulWidget {
+  final AudioPlayer player;
+  const _SlimSeek({required this.player});
+
+  @override
+  State<_SlimSeek> createState() => _SlimSeekState();
+}
+
+class _SlimSeekState extends State<_SlimSeek> {
+  double? _drag;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pal;
+    return StreamBuilder<Duration>(
+      stream: widget.player.positionStream,
+      builder: (context, s) {
+        final total = widget.player.duration?.inMilliseconds ?? 0;
+        final v = _drag ?? (total == 0 ? 0.0 : ((s.data?.inMilliseconds ?? 0) / total).clamp(0.0, 1.0));
+        return SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 3,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            activeTrackColor: p.text,
+            inactiveTrackColor: p.track,
+            thumbColor: const Color(0xFFE0403B),
+          ),
+          child: Slider(
+            value: v.toDouble(),
+            onChanged: total == 0 ? null : (x) => setState(() => _drag = x),
+            onChangeEnd: (x) async {
+              await widget.player.seek(Duration(milliseconds: (x * total).round()));
+              if (mounted) setState(() => _drag = null);
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The lyrics card that peeks from the bottom; tap or swipe up for full lyrics.
+class _LyricsPeek extends StatelessWidget {
+  final Track track;
+  const _LyricsPeek({required this.track});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pal;
+    return Semantics(
+      button: true,
+      label: 'Show lyrics',
+      child: GestureDetector(
+        onTap: () => openLyrics(context),
+        child: Container(
+          width: double.infinity,
+          height: 104 + MediaQuery.paddingOf(context).bottom,
+          padding: EdgeInsets.fromLTRB(22, 14, 14, MediaQuery.paddingOf(context).bottom),
+          decoration: BoxDecoration(
+            color: p.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: p.dark ? 0.3 : 0.06), blurRadius: 24, offset: const Offset(0, -6))],
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text('Lyrics', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: p.text))),
+              Icon(Icons.open_in_full_rounded, size: 16, color: p.muted),
+              const SizedBox(width: 6),
+            ]),
+            const SizedBox(height: 6),
+            FutureBuilder(
+              future: lyricsService.cached(track),
+              builder: (context, snap) {
+                final l = snap.data;
+                if (l == null || l.isEmpty) {
+                  return Text('Tap to see the lyrics', style: TextStyle(color: p.muted, fontSize: 14));
+                }
+                if (!l.synced) {
+                  return Text(l.plain.split('\n').where((x) => x.trim().isNotEmpty).take(2).join(' '),
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 14, height: 1.4));
+                }
+                return StreamBuilder<Duration>(
+                  stream: playerService.player.positionStream,
+                  builder: (context, s) {
+                    final i = l.indexAt(s.data ?? Duration.zero);
+                    final now = i >= 0 ? l.lines[i].text : '';
+                    final next = i + 1 < l.lines.length ? l.lines[i + 1].text : '';
+                    return Text.rich(
+                      TextSpan(children: [
+                        TextSpan(text: now.isEmpty ? '♪  ' : '$now  ', style: TextStyle(color: p.text, fontWeight: FontWeight.w700)),
+                        TextSpan(text: next, style: TextStyle(color: p.muted)),
+                      ]),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15, height: 1.4),
+                    );
+                  },
+                );
+              },
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 }
 

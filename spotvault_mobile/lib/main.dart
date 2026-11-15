@@ -290,21 +290,22 @@ class _GlassNav extends StatelessWidget {
                             AnimatedContainer(
                               duration: const Duration(milliseconds: 350),
                               curve: Curves.easeOutBack,
-                              padding: EdgeInsets.symmetric(horizontal: i == index ? 18 : 10, vertical: 4),
+                              padding: EdgeInsets.symmetric(horizontal: i == index && !isMinimal ? 18 : 10, vertical: 4),
                               decoration: BoxDecoration(
-                                gradient: i == index
+                                // Minimal: no pill, the active tab is just darker.
+                                gradient: i == index && !isMinimal
                                     ? LinearGradient(colors: [kViolet.withValues(alpha: 0.32), kEmber.withValues(alpha: 0.14)])
                                     : null,
                                 borderRadius: BorderRadius.circular(99),
                               ),
-                              child: Icon(i == index ? _items[i].$2 : _items[i].$1, color: i == index ? kAccent : kMuted, size: 23),
+                              child: Icon(i == index ? _items[i].$2 : _items[i].$1, color: i == index ? (isMinimal ? kText : kAccent) : kMuted, size: 23),
                             ),
                             const SizedBox(height: 3),
                             Text(_items[i].$3,
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
-                                  color: i == index ? kAccent : kMuted,
+                                  color: i == index ? (isMinimal ? kText : kAccent) : kMuted,
                                 )),
                           ],
                         ),

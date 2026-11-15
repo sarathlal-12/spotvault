@@ -1,10 +1,10 @@
-; Script for SpotVault Installer (Inno Setup 6/7)
+﻿; Script for SpotVault Installer (Inno Setup 6/7)
 ; Build first (2.0):
 ;   python -m PyInstaller --noconfirm --clean SpotVaultEngine.spec      -> dist\engine\
 ;   cd spotvault_mobile && flutter build windows --release              -> build\windows\x64\runner\Release\
 ; Then open this file in Inno Setup and press Compile (or run ISCC.exe on it).
 #define MyAppName "SpotVault"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "2.0.1"
 #define MyAppPublisher "Sarath"
 #define MyAppURL "https://github.com/sarathlal-12/spotvault"
 #define MyAppExeName "SpotVault.exe"

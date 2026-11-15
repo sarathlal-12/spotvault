@@ -36,7 +36,12 @@ class TrackListScreen extends StatefulWidget {
 class _TrackListScreenState extends State<TrackListScreen> {
   late TrackSort sort = _savedSort() ?? (widget.allowPcOrder ? TrackSort.pcOrder : TrackSort.title);
 
-  static const _sortKeys = {TrackSort.pcOrder: 'pc', TrackSort.title: 'title', TrackSort.artist: 'artist', TrackSort.recentlyAdded: 'recent'};
+  static const _sortKeys = {
+    TrackSort.pcOrder: 'pc',
+    TrackSort.title: 'title',
+    TrackSort.artist: 'artist',
+    TrackSort.recentlyAdded: 'recent'
+  };
 
   /// Each playlist remembers how you sorted it.
   TrackSort? _savedSort() {
@@ -55,10 +60,99 @@ class _TrackListScreenState extends State<TrackListScreen> {
       store.changed();
     }
   }
+
   String filter = '';
   bool reordering = false;
 
   PlaylistInfo? get playlist => widget.playlistFolder == null ? null : store.playlistByFolder(widget.playlistFolder!);
+
+  /// Minimal look (2.0 design): round buttons, the cover beside the title, Play and Shuffle.
+  Widget _minimalHeader(BuildContext context, PlaylistInfo? pl, String title, File? cover, List<Track> tracks, Duration total) {
+    Widget round(IconData icon, String label, VoidCallback onTap) => Tooltip(
+          message: label,
+          child: Semantics(
+            button: true,
+            label: label,
+            child: Pressable(
+              onTap: onTap,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: kLine)),
+                child: Icon(icon, size: 20, color: kText),
+              ),
+            ),
+          ),
+        );
+    return SliverToBoxAdapter(
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              round(Icons.arrow_back_rounded, 'Back', () => Navigator.maybePop(context)),
+              const Spacer(),
+              if (reordering)
+                TextButton(onPressed: () => setState(() => reordering = false), child: const Text('Done'))
+              else if (pl != null)
+                round(
+                    Icons.more_horiz_rounded,
+                    'Playlist options',
+                    () => showPlaylistMenu(context, pl,
+                        onReorder: () => setState(() {
+                              reordering = true;
+                              sort = TrackSort.pcOrder;
+                              filter = '';
+                            }))),
+            ]),
+            const SizedBox(height: 18),
+            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(26),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: pal.dark ? 0.4 : 0.16), blurRadius: 30, offset: const Offset(0, 14))
+                  ],
+                ),
+                child: ArtImage(file: cover, size: 132, radius: 26, fallback: widget.icon),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(reordering ? 'Drag to reorder' : title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.5, height: 1.1, color: kText)),
+                  const SizedBox(height: 4),
+                  Text('${tracks.length} songs · ${formatDuration(total)}', style: TextStyle(color: kMuted, fontSize: 13)),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: kText,
+                        foregroundColor: kBg,
+                        shape: const StadiumBorder(),
+                        minimumSize: const Size(0, 44),
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                      ),
+                      onPressed: tracks.isEmpty ? null : () => playerService.playTracks(tracks, shuffle: false),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                      label: const Text('Play', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    round(Icons.shuffle_rounded, 'Shuffle play', () {
+                      if (tracks.isNotEmpty) playerService.playTracks(tracks, start: -1, shuffle: true);
+                    }),
+                  ]),
+                ]),
+              ),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,108 +177,112 @@ class _TrackListScreenState extends State<TrackListScreen> {
           }
           final total = tracks.fold(Duration.zero, (s, t) => s + t.length);
 
+          final minimal = isMinimal;
           return CustomScrollView(
             slivers: [
-              SliverAppBar(
-                pinned: true,
-                expandedHeight: 300,
-                backgroundColor: kBg,
-                actions: [
-                  if (reordering)
-                    TextButton(onPressed: () => setState(() => reordering = false), child: const Text('Done'))
-                  else ...[
-                    PopupMenuButton<TrackSort>(
-                      icon: const Icon(Icons.sort),
-                      initialValue: sort,
-                      onSelected: _setSort,
-                      itemBuilder: (_) => [
-                        if (widget.allowPcOrder)
-                          PopupMenuItem(
-                              value: TrackSort.pcOrder,
-                              child: Text(pl != null && (pl.customOrder || pl.phoneOnly) ? 'Playlist order' : 'PC order')),
-                        const PopupMenuItem(value: TrackSort.title, child: Text('Title')),
-                        const PopupMenuItem(value: TrackSort.artist, child: Text('Artist')),
-                        const PopupMenuItem(value: TrackSort.recentlyAdded, child: Text('Recently added')),
+              if (minimal) _minimalHeader(context, pl, title, cover, tracks, total),
+              if (!minimal)
+                SliverAppBar(
+                  pinned: true,
+                  expandedHeight: 300,
+                  backgroundColor: kBg,
+                  actions: [
+                    if (reordering)
+                      TextButton(onPressed: () => setState(() => reordering = false), child: const Text('Done'))
+                    else ...[
+                      PopupMenuButton<TrackSort>(
+                        icon: const Icon(Icons.sort),
+                        initialValue: sort,
+                        onSelected: _setSort,
+                        itemBuilder: (_) => [
+                          if (widget.allowPcOrder)
+                            PopupMenuItem(
+                                value: TrackSort.pcOrder,
+                                child: Text(pl != null && (pl.customOrder || pl.phoneOnly) ? 'Playlist order' : 'PC order')),
+                          const PopupMenuItem(value: TrackSort.title, child: Text('Title')),
+                          const PopupMenuItem(value: TrackSort.artist, child: Text('Artist')),
+                          const PopupMenuItem(value: TrackSort.recentlyAdded, child: Text('Recently added')),
+                        ],
+                      ),
+                      if (pl != null)
+                        IconButton(
+                          tooltip: 'Playlist options',
+                          icon: const Icon(Icons.more_vert),
+                          onPressed: () => showPlaylistMenu(context, pl,
+                              onReorder: () => setState(() {
+                                    reordering = true;
+                                    sort = TrackSort.pcOrder;
+                                    filter = '';
+                                  })),
+                        ),
+                    ],
+                  ],
+                  flexibleSpace: FlexibleSpaceBar(
+                    titlePadding: const EdgeInsetsDirectional.only(start: 56, bottom: 14, end: 56),
+                    title: Text(reordering ? 'Drag to reorder' : title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    background: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [kViolet.withValues(alpha: pal.dark ? 0.45 : 0.25), kBg],
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.only(top: 40, bottom: 50),
+                      child: AspectRatio(
+                        aspectRatio: 1,
+                        child: LayoutBuilder(
+                          builder: (_, c) => Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(26),
+                              boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.45), blurRadius: 40, offset: const Offset(0, 16))],
+                            ),
+                            child: ArtImage(file: cover, size: c.maxWidth, radius: 26, fallback: widget.icon),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (!minimal)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${tracks.length} songs · ${formatDuration(total)}',
+                            style: TextStyle(color: kMuted, fontSize: 13),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Shuffle',
+                          iconSize: 28,
+                          icon: Icon(Icons.shuffle, color: kAccent),
+                          onPressed: tracks.isEmpty ? null : () => playerService.playTracks(tracks, start: -1, shuffle: true),
+                        ),
+                        const SizedBox(width: 4),
+                        Pressable(
+                          onTap: () {
+                            if (tracks.isNotEmpty) playerService.playTracks(tracks, shuffle: false);
+                          },
+                          child: Container(
+                            width: 58,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              gradient: kBrandGradient,
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.5), blurRadius: 22, offset: const Offset(0, 8))],
+                            ),
+                            child: const Icon(Icons.play_arrow_rounded, size: 34, color: Colors.white, semanticLabel: 'Play all'),
+                          ),
+                        ),
                       ],
                     ),
-                    if (pl != null)
-                      IconButton(
-                        tooltip: 'Playlist options',
-                        icon: const Icon(Icons.more_vert),
-                        onPressed: () => showPlaylistMenu(context, pl,
-                            onReorder: () => setState(() {
-                                  reordering = true;
-                                  sort = TrackSort.pcOrder;
-                                  filter = '';
-                                })),
-                      ),
-                  ],
-                ],
-                flexibleSpace: FlexibleSpaceBar(
-                  titlePadding: const EdgeInsetsDirectional.only(start: 56, bottom: 14, end: 56),
-                  title: Text(reordering ? 'Drag to reorder' : title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  background: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [kViolet.withValues(alpha: pal.dark ? 0.45 : 0.25), kBg],
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.only(top: 40, bottom: 50),
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: LayoutBuilder(
-                        builder: (_, c) => Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(26),
-                            boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.45), blurRadius: 40, offset: const Offset(0, 16))],
-                          ),
-                          child: ArtImage(file: cover, size: c.maxWidth, radius: 26, fallback: widget.icon),
-                        ),
-                      ),
-                    ),
                   ),
                 ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${tracks.length} songs · ${formatDuration(total)}',
-                          style: TextStyle(color: kMuted, fontSize: 13),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Shuffle',
-                        iconSize: 28,
-                        icon: Icon(Icons.shuffle, color: kAccent),
-                        onPressed: tracks.isEmpty ? null : () => playerService.playTracks(tracks, start: -1, shuffle: true),
-                      ),
-                      const SizedBox(width: 4),
-                      Pressable(
-                        onTap: () {
-                          if (tracks.isNotEmpty) playerService.playTracks(tracks, shuffle: false);
-                        },
-                        child: Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            gradient: kBrandGradient,
-                            shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.5), blurRadius: 22, offset: const Offset(0, 8))],
-                          ),
-                          child: const Icon(Icons.play_arrow_rounded, size: 34, color: Colors.white, semanticLabel: 'Play all'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
               if (!reordering && pl != null)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -216,6 +314,37 @@ class _TrackListScreenState extends State<TrackListScreen> {
                           ]),
                         ),
                       ),
+                    ),
+                  ),
+                ),
+              if (minimal && !reordering)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: [
+                        Text('Sort', style: TextStyle(color: kMuted, fontSize: 12)),
+                        const SizedBox(width: 8),
+                        for (final (s, label) in [
+                          if (widget.allowPcOrder) (TrackSort.pcOrder, 'My order'),
+                          (TrackSort.recentlyAdded, 'Recently added'),
+                          (TrackSort.title, 'A–Z'),
+                          (TrackSort.artist, 'Artist'),
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(label),
+                              selected: sort == s,
+                              showCheckmark: false,
+                              onSelected: (_) => _setSort(s),
+                              selectedColor: kText,
+                              labelStyle: TextStyle(color: sort == s ? kBg : kText, fontWeight: FontWeight.w600, fontSize: 12),
+                              shape: StadiumBorder(side: BorderSide(color: sort == s ? kText : kLine)),
+                            ),
+                          ),
+                      ]),
                     ),
                   ),
                 ),

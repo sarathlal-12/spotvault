@@ -59,9 +59,12 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Home with pinned and phone playlists draws ($name)', (tester) async {
+    for (final look in ['crimson', 'minimal'])
+    testWidgets('Home with pinned and phone playlists draws ($name, $look)', (tester) async {
       _phone(tester);
       darkMode.value = dark;
+      themeStyle.value = look;
+      addTearDown(() => themeStyle.value = 'minimal');
       store.tracks
         ..clear()
         ..['a'] = Track(id: 'a', path: 'Mine/a.m4a', title: 'A song with a rather long title', artist: 'Someone', album: '', size: 1, mtime: 0, duration: 120, phoneOnly: true);
@@ -73,7 +76,11 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('Malayalam Melodies of the Nineties'), findsOneWidget);
       expect(find.text('New'), findsOneWidget);
-      expect(find.byTooltip('Jam with friends'), findsOneWidget);
+      if (look == 'crimson') {
+        expect(find.byTooltip('Jam with friends'), findsOneWidget);
+      } else {
+        expect(find.text('Start a Jam'), findsOneWidget);
+      }
       expect(tester.takeException(), isNull);
       store.playlists = [];
       store.tracks.clear();

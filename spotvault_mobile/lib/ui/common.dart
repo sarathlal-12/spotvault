@@ -24,7 +24,10 @@ class ArtImage extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [kViolet.withValues(alpha: 0.75), kForest.withValues(alpha: 0.85)],
+          // Minimal look: calm greys; Crimson: the brand gradient.
+          colors: isMinimal
+              ? (pal.dark ? const [Color(0xFF2A2A2D), Color(0xFF55524E)] : const [Color(0xFFB9B5AE), Color(0xFF8E8B86)])
+              : [kViolet.withValues(alpha: 0.75), kForest.withValues(alpha: 0.85)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
