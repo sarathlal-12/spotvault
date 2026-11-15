@@ -53,7 +53,9 @@ class P2pLink(private val context: Context, messenger: BinaryMessenger) :
         events = null
     }
 
-    private fun emit(map: Map<String, Any?>) = main.post { events?.success(map) }
+    private fun emit(map: Map<String, Any?>) {
+        main.post { events?.success(map) }
+    }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
