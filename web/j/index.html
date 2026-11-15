@@ -37,7 +37,9 @@
       var kind = location.pathname.indexOf('/pc') === 0 ? 'pc' : 'j';
       var ip = /^\d{1,3}(\.\d{1,3}){3}$/;
       var h = q.get('h') || '', p = q.get('p') || '';
-      var ok = ip.test(h) && /^\d{2,5}$/.test(p);
+      var code = (q.get('c') || '').toUpperCase();
+      var net = kind === 'j' && /^[A-Z0-9]{6}$/.test(code); // Jam over the internet
+      var ok = net || (ip.test(h) && /^\d{2,5}$/.test(p));
       var title = document.getElementById('title'), text = document.getElementById('text'), open = document.getElementById('open');
       if (kind === 'pc') {
         title.textContent = 'Link your phone to your PC';
@@ -45,13 +47,14 @@
       } else if (q.get('n')) {
         title.textContent = 'Join ' + q.get('n').slice(0, 40) + "'s Jam";
       }
+      if (net) text.textContent = 'Open this with SpotVault on your phone. Works from anywhere: your friend lets you in.';
       document.title = title.textContent + ' · SpotVault';
       if (!ok) {
         open.style.display = 'none';
         document.getElementById('hint').textContent = 'This link looks incomplete. Ask for a new one, or scan the code in the app.';
         return;
       }
-      var params = new URLSearchParams({ h: h, p: p });
+      var params = net ? new URLSearchParams({ c: code }) : new URLSearchParams({ h: h, p: p });
       if (kind === 'j' && q.get('n')) params.set('n', q.get('n').slice(0, 40));
       if (kind === 'pc' && /^\d{6}$/.test(q.get('k') || '')) params.set('k', q.get('k'));
       var app = 'spotvault://' + kind + '?' + params.toString();

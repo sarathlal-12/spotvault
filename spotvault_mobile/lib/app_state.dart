@@ -4,6 +4,7 @@ import 'bt_share.dart';
 import 'library_store.dart';
 import 'lyrics_service.dart';
 import 'nearby.dart';
+import 'net_jam.dart';
 import 'pc_link.dart';
 import 'player_service.dart';
 import 'sync_service.dart';
@@ -19,6 +20,7 @@ final PcLink pcLink = PcLink(store, syncService)
 final LyricsService lyricsService = LyricsService(store);
 final NearbyService nearbyService = NearbyService(store, playerService);
 final BtShareService btShare = BtShareService(store, nearbyService);
+final NetJamService netJam = NetJamService(store, playerService, pcLink, nearbyService);
 
 /// Lets services show dialogs (incoming shares, Jam join requests).
 final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();

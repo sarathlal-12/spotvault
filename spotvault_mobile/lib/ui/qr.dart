@@ -15,12 +15,16 @@ const String kLinkBase = 'https://spotvault-web.vercel.app';
 String jamLink(String host, int port, String name) =>
     Uri.parse('$kLinkBase/j').replace(queryParameters: {'h': host, 'p': '$port', 'n': name}).toString();
 
+/// Jam over the internet: https://spotvault-web.vercel.app/j?c=K7Q2MX&n=Saad
+String netJamLink(String code, String name) =>
+    Uri.parse('$kLinkBase/j').replace(queryParameters: {'c': code, 'n': name}).toString();
+
 String pcLinkFor(String host, int port, String pin) =>
     Uri.parse('$kLinkBase/pc').replace(queryParameters: {'h': host, 'p': '$port', 'k': pin}).toString();
 
 /// What a scanned code or opened link asks for.
 class SpotLink {
-  final String kind; // 'jam' or 'pc'
+  final String kind; // 'jam', 'netjam' or 'pc'
   final String host;
   final int port;
   final String name;
@@ -34,6 +38,8 @@ class SpotLink {
     if (!okHost) return null;
     // spotvault://j?.. has "j" as the host; https://.../j?.. has it as the path.
     final what = (u.scheme == 'spotvault' ? u.host : u.pathSegments.firstOrNull) ?? '';
+    final code = (u.queryParameters['c'] ?? '').toUpperCase();
+    if (what == 'j' && RegExp(r'^[A-Z0-9]{6}$').hasMatch(code)) return SpotLink('netjam', code, 0, name: u.queryParameters['n'] ?? '');
     final h = u.queryParameters['h'] ?? '';
     final p = int.tryParse(u.queryParameters['p'] ?? '');
     if (!RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(h) || p == null) return null;

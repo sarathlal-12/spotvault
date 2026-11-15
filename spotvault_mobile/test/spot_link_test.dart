@@ -10,5 +10,9 @@ void main() {
     expect(SpotLink.parse('spotvault://j?h=192.168.0.2&p=50510')!.kind, 'jam');
     expect(SpotLink.parse('https://evil.example/j?h=1.2.3.4&p=1'), isNull);
     expect(SpotLink.parse('spotvault://j?h=not-an-ip&p=1'), isNull);
+    final n = SpotLink.parse(netJamLink('K7Q2MX', 'Saad'))!;
+    expect([n.kind, n.host, n.name], ['netjam', 'K7Q2MX', 'Saad']);
+    expect(SpotLink.parse('spotvault://j?c=k7q2mx')!.kind, 'netjam');
+    expect(SpotLink.parse('spotvault://j?c=TOOLONG1'), isNull);
   });
 }

@@ -10,6 +10,7 @@ import '../nearby.dart';
 import 'aurora.dart';
 import 'common.dart';
 import 'menus.dart';
+import 'net_jam_ui.dart';
 
 // ============================================================ share
 /// "Share to a nearby phone": pick a phone, they tap Accept.
@@ -473,6 +474,16 @@ class _JamScreenState extends State<JamScreen> {
           onTap: () => n.startJam(JamMode.sync),
         ),
         const SizedBox(height: 10),
+        if (netJam.active)
+          FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), shape: const StadiumBorder()),
+            onPressed: () => openNetJam(context),
+            icon: const Icon(Icons.public_rounded),
+            label: const Text('Back to your internet Jam'),
+          )
+        else
+          const NetJamCard(),
+        const SizedBox(height: 10),
         const BtReceiveCard(),
         const SizedBox(height: 22),
         Row(children: [
@@ -700,6 +711,10 @@ class _JamScreenState extends State<JamScreen> {
   Future<void> _scan() async {
     final link = await scanSpotLink(context);
     if (link == null || !mounted) return;
+    if (link.kind == 'netjam') {
+      await joinNetJam(context, link.host);
+      return;
+    }
     if (link.kind != 'jam') {
       toast(context, 'That code is for linking a PC. Use it on the Sync tab.');
       return;

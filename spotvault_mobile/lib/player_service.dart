@@ -86,6 +86,10 @@ class PlayerService extends ChangeNotifier {
 
   // Preview of an online song. The user's queue is set aside and put back after.
   bool previewing = false;
+
+  /// Internet Jam: keep the "preview" (the Jam song) when it ends instead of
+  /// putting your own queue back; the Jam loads the next song.
+  bool holdPreview = false;
   String? previewKey;
   _Saved? _saved;
 
@@ -101,7 +105,7 @@ class PlayerService extends ChangeNotifier {
     player.sequenceStateStream.listen((_) => notifyListeners());
     player.playerStateStream.listen((s) {
       notifyListeners();
-      if (previewing && s.processingState == ProcessingState.completed) {
+      if (previewing && !holdPreview && s.processingState == ProcessingState.completed) {
         stopPreview();
         return;
       }

@@ -17,6 +17,7 @@ import 'app_state.dart';
 import 'audio_handler.dart';
 import 'ui/menus.dart' show shareSongs;
 import 'ui/nearby_ui.dart';
+import 'ui/net_jam_ui.dart';
 import 'ui/aurora.dart';
 import 'ui/common.dart';
 import 'ui/lab_screen.dart';
@@ -209,6 +210,8 @@ class _HomeShellState extends State<HomeShell> {
     if (link == null || ctx == null) return;
     if (link.kind == 'jam') {
       openJamLink(ctx, link);
+    } else if (link.kind == 'netjam') {
+      joinNetJam(ctx, link.host);
     } else {
       store.lastHost = link.port == 50505 ? link.host : '${link.host}:${link.port}';
       store.pin = link.pin;
