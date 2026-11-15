@@ -52,7 +52,7 @@ from phone_sync import PhoneSyncServer, generate_pin, get_lan_ips, HTTP_PORT  # 
 import sources  # noqa: E402
 import updater  # noqa: E402
 
-APP_VERSION = "2.0.1"
+APP_VERSION = "2.1.0"
 CONFIG_FILE = "library_config.json"
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".spot_sync_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
