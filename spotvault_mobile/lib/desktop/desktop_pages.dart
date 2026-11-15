@@ -1241,6 +1241,25 @@ class _SettingsPageState extends State<SettingsPage> {
                 },
               ),
             ]),
+            const SizedBox(height: 14),
+            Row(children: [
+              SizedBox(width: 90, child: Text('Glass', style: TextStyle(color: p.text))),
+              Text('Clear', style: _muted(12)),
+              Expanded(
+                child: ValueListenableBuilder<double>(
+                  valueListenable: glassSolid,
+                  builder: (context, v, _) => Slider(
+                    value: v,
+                    onChanged: (x) => glassSolid.value = x,
+                    onChangeEnd: (x) async {
+                      store.glassSolid = x;
+                      await store.save();
+                    },
+                  ),
+                ),
+              ),
+              Text('Solid', style: _muted(12)),
+            ]),
           ]),
           _Section('Music folder', [
             Row(children: [

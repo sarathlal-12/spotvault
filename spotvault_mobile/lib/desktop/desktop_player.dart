@@ -58,7 +58,7 @@ class DesktopPlayer extends StatelessWidget {
                             const SizedBox(width: 460, child: SmoothTimeline()),
                             const SizedBox(height: 6),
                             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: pl.shuffleModeEnabled ? p.accent : p.text)),
+                              IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
                               const SizedBox(width: 10),
                               IconButton(onPressed: playerService.previous, tooltip: 'Previous', iconSize: 30, icon: const Icon(Icons.skip_previous_rounded)),
                               const SizedBox(width: 14),

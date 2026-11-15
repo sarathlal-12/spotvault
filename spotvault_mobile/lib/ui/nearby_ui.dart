@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'qr.dart';
 
 import '../app_state.dart';
+import '../bt_share.dart';
 import '../library_store.dart';
 import '../nearby.dart';
 import 'aurora.dart';
@@ -39,6 +40,30 @@ class _ShareSheet extends StatefulWidget {
 class _ShareSheetState extends State<_ShareSheet> {
   String? sendingTo;
 
+  /// Bluetooth instead of Wi-Fi.
+  bool bt = false;
+  String? btProblem;
+
+  @override
+  void dispose() {
+    if (sendingTo == null) btShare.stopScan();
+    super.dispose();
+  }
+
+  Future<void> _useBt(bool on) async {
+    setState(() {
+      bt = on;
+      btProblem = null;
+    });
+    if (on) {
+      final p = await btShare.scan();
+      if (mounted) setState(() => btProblem = p);
+    } else {
+      await btShare.stopScan();
+      nearbyService.discover();
+    }
+  }
+
   Future<void> _send(NearbyPhone p) async {
     setState(() => sendingTo = p.id);
     String msg;
@@ -53,6 +78,33 @@ class _ShareSheetState extends State<_ShareSheet> {
     if (widget.outer.mounted) toast(widget.outer, msg);
   }
 
+  Future<void> _sendBt(BtPeer p) async {
+    if (!p.fast) {
+      final go = await showDialog<String>(
+        context: context,
+        builder: (c) => AlertDialog(
+          icon: Icon(Icons.hourglass_bottom_rounded, color: kAccent, size: 34),
+          title: const Text('This will be slow'),
+          content: const Text('Bluetooth between an iPhone and an Android phone moves about one song every 1 to 3 minutes. '
+              'Keep both phones close with SpotVault open until it finishes.\n\n'
+              "Wi-Fi, or one phone's hotspot, is much faster."),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, 'wifi'), child: const Text('Use Wi-Fi')),
+            FilledButton(onPressed: () => Navigator.pop(c, 'go'), child: const Text('Send anyway')),
+          ],
+        ),
+      );
+      if (go == 'wifi') return _useBt(false);
+      if (go != 'go') return;
+    }
+    if (!mounted) return;
+    setState(() => sendingTo = p.id);
+    final err = await btShare.send(p, widget.tracks, playlistName: widget.playlist?.name);
+    final msg = err ?? '${p.name} got ${_what()}';
+    if (mounted) Navigator.pop(context);
+    if (widget.outer.mounted) toast(widget.outer, msg);
+  }
+
   String _what() => widget.playlist != null
       ? '"${widget.playlist!.name}"'
       : widget.tracks.length == 1
@@ -63,9 +115,8 @@ class _ShareSheetState extends State<_ShareSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: ListenableBuilder(
-        listenable: nearbyService,
+        listenable: Listenable.merge([nearbyService, btShare]),
         builder: (context, _) {
-          final phones = nearbyService.phones;
           return Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             child: Column(
@@ -73,28 +124,19 @@ class _ShareSheetState extends State<_ShareSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Send ${_what()}', style: displayStyle(20), maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text('Phones with SpotVault open on the same Wi-Fi show up here.', style: TextStyle(color: kMuted, fontSize: 13)),
                 const SizedBox(height: 12),
-                if (nearbyService.scanning && phones.isEmpty)
-                  const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
-                else if (phones.isEmpty)
-                  _NoPhones(onRetry: nearbyService.discover)
-                else
-                  for (final p in phones)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                          backgroundColor: kAccent.withValues(alpha: 0.15), child: Icon(Icons.smartphone_rounded, color: kAccent)),
-                      title: Text(p.name),
-                      subtitle: Text(sendingTo == p.id ? 'Waiting for them to accept…' : 'Tap to send',
-                          style: TextStyle(color: kMuted, fontSize: 12)),
-                      trailing: sendingTo == p.id
-                          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Icon(Icons.send_rounded, color: kAccent),
-                      onTap: sendingTo == null ? () => _send(p) : null,
-                    ),
-                if (phones.isNotEmpty && nearbyService.scanning) const LinearProgressIndicator(minHeight: 2),
+                if (btShare.supported)
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, icon: Icon(Icons.wifi_rounded), label: Text('Wi-Fi')),
+                      ButtonSegment(value: true, icon: Icon(Icons.bluetooth_rounded), label: Text('Bluetooth')),
+                    ],
+                    selected: {bt},
+                    showSelectedIcon: false,
+                    onSelectionChanged: sendingTo != null ? null : (v) => _useBt(v.first),
+                  ),
+                const SizedBox(height: 10),
+                if (bt) ..._btList() else ..._wifiList(),
                 const SizedBox(height: 8),
                 _NameRow(),
               ],
@@ -102,6 +144,122 @@ class _ShareSheetState extends State<_ShareSheet> {
           );
         },
       ),
+    );
+  }
+
+  List<Widget> _wifiList() {
+    final phones = nearbyService.phones;
+    return [
+      Text('Phones with SpotVault open on the same Wi-Fi show up here.', style: TextStyle(color: kMuted, fontSize: 13)),
+      const SizedBox(height: 6),
+      if (nearbyService.scanning && phones.isEmpty)
+        const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+      else if (phones.isEmpty)
+        _NoPhones(onRetry: nearbyService.discover)
+      else
+        for (final p in phones)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(backgroundColor: kAccent.withValues(alpha: 0.15), child: Icon(Icons.smartphone_rounded, color: kAccent)),
+            title: Text(p.name),
+            subtitle: Text(sendingTo == p.id ? 'Waiting for them to accept…' : 'Tap to send', style: TextStyle(color: kMuted, fontSize: 12)),
+            trailing: sendingTo == p.id
+                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(Icons.send_rounded, color: kAccent),
+            onTap: sendingTo == null ? () => _send(p) : null,
+          ),
+      if (phones.isNotEmpty && nearbyService.scanning) const LinearProgressIndicator(minHeight: 2),
+    ];
+  }
+
+  List<Widget> _btList() {
+    final peers = btShare.peers;
+    return [
+      Text('On the other phone, open Jam and turn on Receive by Bluetooth.', style: TextStyle(color: kMuted, fontSize: 13)),
+      const SizedBox(height: 6),
+      if (btProblem != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(children: [
+            Icon(Icons.bluetooth_disabled_rounded, color: kMuted),
+            const SizedBox(width: 10),
+            Expanded(child: Text(btProblem!, style: TextStyle(color: kMuted))),
+            TextButton(onPressed: () => _useBt(true), child: const Text('Try again')),
+          ]),
+        )
+      else if (peers.isEmpty && btShare.scanning)
+        const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+      else if (peers.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(children: [
+            Icon(Icons.bluetooth_searching_rounded, color: kMuted, size: 36),
+            const SizedBox(height: 8),
+            Text('No phones found. Keep the other phone close, with Receive by Bluetooth on.',
+                textAlign: TextAlign.center, style: TextStyle(color: kMuted)),
+            TextButton(onPressed: () => _useBt(true), child: const Text('Look again')),
+          ]),
+        )
+      else
+        for (final p in peers)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: kAccent.withValues(alpha: 0.15),
+              child: Icon(p.fast ? Icons.bolt_rounded : Icons.bluetooth_rounded, color: kAccent),
+            ),
+            title: Text(p.name),
+            subtitle: Text(
+              sendingTo == p.id ? (btShare.sendStatus ?? 'Connecting…') : (p.fast ? 'Fast' : 'Slow: iPhone to Android'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: kMuted, fontSize: 12),
+            ),
+            trailing: sendingTo == p.id
+                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(Icons.send_rounded, color: kAccent),
+            onTap: sendingTo == null ? () => _sendBt(p) : null,
+          ),
+      if (peers.isNotEmpty && btShare.scanning && sendingTo == null) const LinearProgressIndicator(minHeight: 2),
+    ];
+  }
+}
+
+/// Jam screen: makes this phone visible to Bluetooth senders for a few minutes.
+class BtReceiveCard extends StatelessWidget {
+  const BtReceiveCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!btShare.supported) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: btShare,
+      builder: (context, _) {
+        final on = btShare.visible;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          decoration: BoxDecoration(color: pal.surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: kLine)),
+          child: Row(children: [
+            Icon(on ? Icons.bluetooth_searching_rounded : Icons.bluetooth_rounded, color: on ? kAccent : kMuted),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(on ? 'Ready to receive' : 'Receive by Bluetooth', style: TextStyle(fontWeight: FontWeight.w600, color: kText)),
+                Text(on ? 'Others see you as ${store.deviceName}. Keep SpotVault open.' : 'Get songs from a phone nearby, no Wi-Fi needed.',
+                    style: TextStyle(color: kMuted, fontSize: 12)),
+              ]),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (on) return btShare.stopReceiving();
+                final p = await btShare.startReceiving();
+                if (p != null && context.mounted) toast(context, p);
+              },
+              child: Text(on ? 'Stop' : 'Turn on'),
+            ),
+          ]),
+        );
+      },
     );
   }
 }
@@ -314,6 +472,8 @@ class _JamScreenState extends State<JamScreen> {
           text: 'Every phone plays the same song at the same moment, each on its own speaker or earphones.',
           onTap: () => n.startJam(JamMode.sync),
         ),
+        const SizedBox(height: 10),
+        const BtReceiveCard(),
         const SizedBox(height: 22),
         Row(children: [
           Expanded(child: Text('Join a Jam nearby', style: displayStyle(18))),

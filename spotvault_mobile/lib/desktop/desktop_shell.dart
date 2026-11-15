@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -6,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 import '../app_state.dart';
 import '../library_store.dart';
 import '../ui/common.dart' show ArtImage, TrackArt;
+import '../ui/wave_progress.dart';
 import '../ui/welcome_screen.dart' show SpotVaultMark;
 import 'desktop_pages.dart';
 import 'desktop_player.dart';
@@ -28,30 +30,43 @@ String fmtTime(Duration d) {
   return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
 }
 
+/// How solid the glass is, 0 (see-through) to 1 (solid); Settings → Look.
+final ValueNotifier<double> glassSolid = ValueNotifier(store.glassSolid);
+
 /// Frosted glass panel over the blurred cover.
 class Glass extends StatelessWidget {
   final Widget child;
   final double radius;
   final EdgeInsetsGeometry? padding;
   final double opacity;
-  const Glass({super.key, required this.child, this.radius = 28, this.padding, this.opacity = 1});
+
+  /// Frosts whatever scrolls behind it (used by the player bar, which floats
+  /// over the pages). Other panels sit on the already-soft cover backdrop.
+  final bool frosted;
+  const Glass({super.key, required this.child, this.radius = 28, this.padding, this.opacity = 1, this.frosted = false});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<double>(valueListenable: glassSolid, builder: (context, solid, _) => _panel(solid));
+
+  Widget _panel(double solid) {
     final p = pal;
+    // The slider's default (0.35) gives the original look; 0 is clearer, 1 is solid.
+    double a(double base) => solid >= 0.35 ? base + (1 - base) * (solid - 0.35) / 0.65 : base * (0.45 + 0.55 * solid / 0.35);
+
+    final panel = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: p.dark
+            ? Color.lerp(p.bg, Colors.white, 0.06)!.withValues(alpha: (a(frosted ? 0.93 : 0.82) * opacity).clamp(0.0, 1.0))
+            : Colors.white.withValues(alpha: (a(frosted ? 0.86 : 0.62) * opacity).clamp(0.0, 1.0)),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: p.dark ? Colors.white.withValues(alpha: 0.11) : Colors.white.withValues(alpha: 0.7)),
+      ),
+      child: child,
+    );
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      // No BackdropFilter: the background is already soft (see _CoverBackdrop),
-      // and blur filters can paint black on some Windows graphics drivers.
-      child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: p.dark ? Color.lerp(p.bg, Colors.white, 0.06)!.withValues(alpha: 0.82 * opacity) : Colors.white.withValues(alpha: 0.62 * opacity),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: p.dark ? Colors.white.withValues(alpha: 0.11) : Colors.white.withValues(alpha: 0.7)),
-          ),
-          child: child,
-        ),
+      child: frosted ? BackdropFilter(filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24), child: panel) : panel,
     );
   }
 }
@@ -245,10 +260,12 @@ class _Sidebar extends StatelessWidget {
               child: Row(children: [
                 const SpotVaultMark(size: 30),
                 const SizedBox(width: 10),
-                Text.rich(TextSpan(children: [
-                  TextSpan(text: 'Spot', style: TextStyle(color: p.text)),
-                  TextSpan(text: 'Vault', style: TextStyle(color: p.muted)),
-                ]), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.3)),
+                Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: 'Spot', style: TextStyle(color: p.text)),
+                      TextSpan(text: 'Vault', style: TextStyle(color: p.muted)),
+                    ]),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.3)),
               ]),
             ),
             const _NavItem(Icons.home_outlined, 'Home', DPage.home),
@@ -290,7 +307,8 @@ class _Sidebar extends StatelessWidget {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 13, fontWeight: FontWeight.w500)),
+                                Text(pl.name,
+                                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 13, fontWeight: FontWeight.w500)),
                                 Text('${pl.trackIds.length} songs', style: TextStyle(color: p.muted, fontSize: 11)),
                               ]),
                             ),
@@ -314,9 +332,15 @@ class _NavItem extends StatelessWidget {
   const _NavItem(this.icon, this.label, this.page, {this.badge});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<DPage>(
+        // Listens itself: the items are const, so the sidebar rebuilding
+        // doesn't rebuild them.
+        valueListenable: dPage,
+        builder: (context, cur, _) => _build(cur == page),
+      );
+
+  Widget _build(bool on) {
     final p = pal;
-    final on = dPage.value == page;
     return _HoverTile(
       selected: on,
       onTap: () => dPage.value = page,
@@ -421,7 +445,8 @@ class _NowPanel extends StatelessWidget {
                     Row(children: [
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 16, fontWeight: FontWeight.w600)),
+                          Text(t.title,
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 16, fontWeight: FontWeight.w600)),
                           Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 13)),
                         ]),
                       ),
@@ -449,7 +474,8 @@ class _NowPanel extends StatelessWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 13, fontWeight: FontWeight.w500)),
+                              Text(n.title,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 13, fontWeight: FontWeight.w500)),
                               Text(n.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 12)),
                             ]),
                           ),
@@ -475,6 +501,7 @@ class _PlayerBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Glass(
           radius: 22,
+          frosted: true,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           child: ListenableBuilder(
             listenable: playerService,
@@ -495,7 +522,8 @@ class _PlayerBar extends StatelessWidget {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                                Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w600, fontSize: 14)),
+                                Text(t.title,
+                                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w600, fontSize: 14)),
                                 Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 12)),
                               ]),
                             ),
@@ -508,7 +536,7 @@ class _PlayerBar extends StatelessWidget {
                       IconButton(
                         tooltip: 'Shuffle',
                         onPressed: playerService.toggleShuffle,
-                        icon: Icon(Icons.shuffle_rounded, size: 19, color: pl.shuffleModeEnabled ? p.accent : p.text),
+                        icon: Icon(Icons.shuffle_rounded, size: 19, color: playerService.shuffleOn ? p.accent : p.text),
                       ),
                       IconButton(tooltip: 'Previous', onPressed: playerService.previous, icon: const Icon(Icons.skip_previous_rounded)),
                       const SizedBox(width: 4),
@@ -629,26 +657,40 @@ class _SmoothTimelineState extends State<SmoothTimeline> with SingleTickerProvid
         final ms = total.inMilliseconds;
         final v = _drag ?? (ms == 0 ? 0.0 : (pos.inMilliseconds / ms).clamp(0.0, 1.0));
         return Row(children: [
-          SizedBox(width: 40, child: Text(fmtTime(Duration(milliseconds: (v * ms).round())), textAlign: TextAlign.right, style: TextStyle(color: p.muted, fontSize: 11, fontFeatures: const [FontFeature.tabularFigures()]))),
+          SizedBox(
+              width: 40,
+              child: Text(fmtTime(Duration(milliseconds: (v * ms).round())),
+                  textAlign: TextAlign.right, style: TextStyle(color: p.muted, fontSize: 11, fontFeatures: const [FontFeature.tabularFigures()]))),
           Expanded(
-            child: SliderTheme(
-              data: SliderThemeData(
-                trackHeight: widget.compact ? 4 : 5,
-                thumbShape: RoundSliderThumbShape(enabledThumbRadius: widget.compact ? 6 : 7),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                activeTrackColor: p.text,
-                inactiveTrackColor: p.track,
-                thumbColor: kEmber,
+            child: Stack(children: [
+              Positioned.fill(
+                left: 12,
+                right: 12,
+                child: WaveTint(
+                  track: playerService.current,
+                  builder: (context, color) => WaveProgress(
+                      value: v.toDouble(), playing: pl.playing, color: color, baseline: 0.5, waveHeight: widget.compact ? 11 : 16, showLine: false),
+                ),
               ),
-              child: Slider(
-                value: v.toDouble(),
-                onChanged: ms == 0 ? null : (x) => setState(() => _drag = x),
-                onChangeEnd: (x) async {
-                  await pl.seek(Duration(milliseconds: (x * ms).round()));
-                  setState(() => _drag = null);
-                },
+              SliderTheme(
+                data: SliderThemeData(
+                  trackHeight: widget.compact ? 4 : 5,
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: widget.compact ? 6 : 7),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                  activeTrackColor: p.text,
+                  inactiveTrackColor: p.track,
+                  thumbColor: kEmber,
+                ),
+                child: Slider(
+                  value: v.toDouble(),
+                  onChanged: ms == 0 ? null : (x) => setState(() => _drag = x),
+                  onChangeEnd: (x) async {
+                    await pl.seek(Duration(milliseconds: (x * ms).round()));
+                    setState(() => _drag = null);
+                  },
+                ),
               ),
-            ),
+            ]),
           ),
           SizedBox(width: 40, child: Text(fmtTime(total), style: TextStyle(color: p.muted, fontSize: 11, fontFeatures: const [FontFeature.tabularFigures()]))),
         ]);

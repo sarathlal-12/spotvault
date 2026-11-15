@@ -223,7 +223,7 @@ class _CarModeScreenState extends State<CarModeScreen> {
                       Expanded(
                         child: Row(children: [
                           Expanded(
-                            child: _big(playerService.player.shuffleModeEnabled ? Icons.shuffle_on_rounded : Icons.shuffle_rounded, 'Shuffle', playerService.toggleShuffle, size: 40),
+                            child: _big(playerService.shuffleOn ? Icons.shuffle_on_rounded : Icons.shuffle_rounded, 'Shuffle', playerService.toggleShuffle, size: 40),
                           ),
                           const SizedBox(width: 12),
                           Expanded(child: _big(Icons.favorite_rounded, 'Like', () { if (t != null) store.toggleLike(t.id); }, size: 40)),

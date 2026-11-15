@@ -7,6 +7,7 @@ import '../library_store.dart';
 import 'aurora.dart';
 import 'menus.dart';
 import 'now_playing_screen.dart';
+import 'wave_progress.dart';
 
 /// Square artwork with a music-note fallback.
 class ArtImage extends StatelessWidget {
@@ -248,18 +249,17 @@ class MiniPlayerBar extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Progress line with the moving wave above the played part.
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: StreamBuilder<double>(
-                    stream: progress,
-                    builder: (context, snap) => Align(
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: snap.data ?? 0,
-                        child: Container(height: 2.5, decoration: BoxDecoration(gradient: kBrandGradient)),
-                      ),
+                  height: 18,
+                  child: WaveTint(
+                    track: t,
+                    builder: (context, color) => StreamBuilder<double>(
+                      stream: progress,
+                      builder: (context, snap) => WaveProgress(value: snap.data ?? 0, playing: playing, color: color, waveHeight: 16),
                     ),
                   ),
                 ),

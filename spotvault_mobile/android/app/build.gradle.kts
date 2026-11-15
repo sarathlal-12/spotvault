@@ -74,3 +74,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Bluetooth sharing between Android phones (P2pLink.kt).
+    implementation("com.google.android.gms:play-services-nearby:19.3.0")
+}

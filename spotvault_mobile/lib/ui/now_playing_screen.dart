@@ -10,6 +10,7 @@ import '../library_store.dart';
 import '../player_service.dart';
 import 'aurora.dart';
 import 'common.dart';
+import 'wave_progress.dart';
 import 'lyrics_screen.dart';
 import 'nearby_ui.dart';
 import 'sound_sheet.dart';
@@ -31,8 +32,7 @@ class NowPlayingScreen extends StatelessWidget {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text('Nothing playing', style: TextStyle(color: kMuted)),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                    onPressed: () => openJam(context), icon: const Icon(Icons.groups_rounded), label: const Text('Jam with friends')),
+                OutlinedButton.icon(onPressed: () => openJam(context), icon: const Icon(Icons.groups_rounded), label: const Text('Jam with friends')),
               ]),
             ),
           );
@@ -64,20 +64,16 @@ class NowPlayingScreen extends StatelessWidget {
                           Expanded(
                             child: Column(
                               children: [
-                                Text('PLAYING FROM',
-                                    style: TextStyle(fontSize: 10.5, letterSpacing: 1.6, fontWeight: FontWeight.w700, color: kMuted)),
+                                Text('PLAYING FROM', style: TextStyle(fontSize: 10.5, letterSpacing: 1.6, fontWeight: FontWeight.w700, color: kMuted)),
                                 const SizedBox(height: 2),
                                 Text(_playlistName(t),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontWeight: FontWeight.w700, color: kText)),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, color: kText)),
                               ],
                             ),
                           ),
                           GlassIconButton(icon: Icons.groups_rounded, tooltip: 'Jam', onPressed: () => openJam(context)),
                           const SizedBox(width: 8),
-                          GlassIconButton(
-                              icon: Icons.more_horiz_rounded, tooltip: 'Song options', onPressed: () => showTrackMenu(context, t)),
+                          GlassIconButton(icon: Icons.more_horiz_rounded, tooltip: 'Song options', onPressed: () => showTrackMenu(context, t)),
                         ],
                       ),
                       const Spacer(),
@@ -105,8 +101,7 @@ class NowPlayingScreen extends StatelessWidget {
                               duration: const Duration(milliseconds: 400),
                               transitionBuilder: (child, a) => FadeTransition(
                                 opacity: a,
-                                child: SlideTransition(
-                                    position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a), child: child),
+                                child: SlideTransition(position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a), child: child),
                               ),
                               child: Column(
                                 key: ValueKey(t.id),
@@ -114,8 +109,7 @@ class NowPlayingScreen extends StatelessWidget {
                                 children: [
                                   Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: displayStyle(24)),
                                   const SizedBox(height: 4),
-                                  Text(t.subtitle,
-                                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: kMuted)),
+                                  Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: kMuted)),
                                 ],
                               ),
                             ),
@@ -130,9 +124,9 @@ class NowPlayingScreen extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           IconButton(
-                            tooltip: p.shuffleModeEnabled ? 'Shuffle on' : 'Shuffle off',
+                            tooltip: playerService.shuffleOn ? 'Shuffle on' : 'Shuffle off',
                             iconSize: 24,
-                            icon: Icon(Icons.shuffle_rounded, color: p.shuffleModeEnabled ? kAccent : kMuted),
+                            icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? kAccent : kMuted),
                             onPressed: playerService.toggleShuffle,
                           ),
                           IconButton(
@@ -149,11 +143,7 @@ class NowPlayingScreen extends StatelessWidget {
                             onPressed: playerService.next,
                           ),
                           IconButton(
-                            tooltip: switch (p.loopMode) {
-                              LoopMode.off => 'Repeat off',
-                              LoopMode.all => 'Repeat all',
-                              LoopMode.one => 'Repeat one'
-                            },
+                            tooltip: switch (p.loopMode) { LoopMode.off => 'Repeat off', LoopMode.all => 'Repeat all', LoopMode.one => 'Repeat one' },
                             iconSize: 24,
                             icon: Icon(
                               p.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
@@ -199,7 +189,6 @@ class NowPlayingScreen extends StatelessWidget {
     return t.folder;
   }
 }
-
 
 // ---------------------------------------------------------------------------
 // Minimal player (2.0 design): round outline buttons, the time above a wavy
@@ -275,7 +264,8 @@ class _MinimalPlayer extends StatelessWidget {
                         tag: 'art',
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 450),
-                          transitionBuilder: (c, a) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: c)),
+                          transitionBuilder: (c, a) =>
+                              FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: c)),
                           child: WavyCover(key: ValueKey(t.id), track: t, inset: 18),
                         ),
                       ),
@@ -336,8 +326,8 @@ class _MinimalPlayer extends StatelessWidget {
                 ),
                 IconButton(tooltip: 'Next', iconSize: 30, icon: Icon(Icons.skip_next_rounded, color: p.text), onPressed: playerService.next),
                 IconButton(
-                  tooltip: player.shuffleModeEnabled ? 'Shuffle on' : 'Shuffle off',
-                  icon: Icon(Icons.shuffle_rounded, color: player.shuffleModeEnabled ? const Color(0xFFE0403B) : p.text),
+                  tooltip: playerService.shuffleOn ? 'Shuffle on' : 'Shuffle off',
+                  icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? const Color(0xFFE0403B) : p.text),
                   onPressed: playerService.toggleShuffle,
                 ),
               ]),
@@ -399,25 +389,40 @@ class _SlimSeekState extends State<_SlimSeek> {
       builder: (context, s) {
         final total = widget.player.duration?.inMilliseconds ?? 0;
         final v = _drag ?? (total == 0 ? 0.0 : ((s.data?.inMilliseconds ?? 0) / total).clamp(0.0, 1.0));
-        return SliderTheme(
-          data: SliderThemeData(
-            trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: p.text,
-            inactiveTrackColor: p.track,
-            thumbColor: const Color(0xFFE0403B),
+        return Stack(children: [
+          // The moving wave above the played part (the slider draws the line).
+          Positioned.fill(
+            left: 14,
+            right: 14,
+            child: WaveTint(
+              track: playerService.current,
+              builder: (context, color) => WaveProgress(value: v, playing: widget.player.playing, color: color, baseline: 0.5, waveHeight: 18, showLine: false),
+            ),
           ),
-          child: Slider(
-            value: v.toDouble(),
-            onChanged: total == 0 ? null : (x) => setState(() => _drag = x),
-            onChangeEnd: (x) async {
-              await widget.player.seek(Duration(milliseconds: (x * total).round()));
-              if (mounted) setState(() => _drag = null);
-            },
-          ),
-        );
+          _slider(p, v, total),
+        ]);
       },
+    );
+  }
+
+  Widget _slider(Palette p, double v, int total) {
+    return SliderTheme(
+      data: SliderThemeData(
+        trackHeight: 3,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+        activeTrackColor: p.text,
+        inactiveTrackColor: p.track,
+        thumbColor: const Color(0xFFE0403B),
+      ),
+      child: Slider(
+        value: v.toDouble(),
+        onChanged: total == 0 ? null : (x) => setState(() => _drag = x),
+        onChangeEnd: (x) async {
+          await widget.player.seek(Duration(milliseconds: (x * total).round()));
+          if (mounted) setState(() => _drag = null);
+        },
+      ),
     );
   }
 }
@@ -577,8 +582,7 @@ class _GlowingArtState extends State<_GlowingArt> with SingleTickerProviderState
             tag: 'art',
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 450),
-              transitionBuilder: (c, a) =>
-                  FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(a), child: c)),
+              transitionBuilder: (c, a) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(a), child: c)),
               child: TrackArt(widget.track, key: ValueKey(widget.track.id), size: s, radius: 30),
             ),
           ),
@@ -675,8 +679,7 @@ class _PlayButton extends StatelessWidget {
                       duration: const Duration(milliseconds: 250),
                       transitionBuilder: (c, a) =>
                           RotationTransition(turns: Tween(begin: 0.75, end: 1.0).animate(a), child: ScaleTransition(scale: a, child: c)),
-                      child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                          key: ValueKey(playing), size: 40, color: Colors.white),
+                      child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, key: ValueKey(playing), size: 40, color: Colors.white),
                     ),
             ),
           ),
@@ -819,10 +822,8 @@ class _WaveSeekState extends State<_WaveSeek> with SingleTickerProviderStateMixi
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(formatDuration(shown),
-                      style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
-                  Text(formatDuration(total),
-                      style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
+                  Text(formatDuration(shown), style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
+                  Text(formatDuration(total), style: TextStyle(color: kMuted, fontSize: 12, fontFeatures: const [FontFeature.tabularFigures()])),
                 ],
               ),
             ],
@@ -854,8 +855,7 @@ class _WavePainter extends CustomPainter {
     final step = size.width / n;
     final barW = step * 0.55;
     final played = Paint()
-      ..shader = LinearGradient(colors: [playedTop, playedBottom], begin: Alignment.topCenter, end: Alignment.bottomCenter)
-          .createShader(Offset.zero & size);
+      ..shader = LinearGradient(colors: [playedTop, playedBottom], begin: Alignment.topCenter, end: Alignment.bottomCenter).createShader(Offset.zero & size);
     final idle = Paint()..color = rest;
     final cy = size.height / 2;
     for (var i = 0; i < n; i++) {
@@ -1110,7 +1110,7 @@ class _QueueList extends StatelessWidget {
         final order = playerService.playOrder;
         final start = order.contains(cur) ? order.indexOf(cur) : 0;
         final shown = order.sublist(start);
-        final canDrag = !p.shuffleModeEnabled;
+        final canDrag = !playerService.shuffleOn;
         return Column(
           children: [
             Padding(
@@ -1122,7 +1122,7 @@ class _QueueList extends StatelessWidget {
                 ],
               ),
             ),
-            if (p.shuffleModeEnabled)
+            if (playerService.shuffleOn)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text('Shuffle is on: songs play in random order', style: TextStyle(color: kMuted, fontSize: 12)),
@@ -1154,9 +1154,7 @@ class _QueueList extends StatelessWidget {
                     child: ListTile(
                       leading: t == null ? Icon(Icons.music_note, color: kMuted) : TrackArt(t, size: 42),
                       title: Text(item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: isCur ? kAccent : kText, fontWeight: FontWeight.w600)),
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isCur ? kAccent : kText, fontWeight: FontWeight.w600)),
                       subtitle: Text(item.artist ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: kMuted)),
                       trailing: isCur
                           ? EqBars(color: kAccent, height: 14, bars: 3, playing: p.playing)

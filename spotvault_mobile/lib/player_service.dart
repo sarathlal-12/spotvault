@@ -142,8 +142,18 @@ class PlayerService extends ChangeNotifier {
     return trackById((seq[i].tag as MediaItem).id);
   }
 
+  // Windows: the mpv backend shuffles its own playlist and ignores ours, so
+  // there the list itself is put in shuffled order and mpv never shuffles.
+  static final bool _listShuffle = Platform.isWindows;
+  bool _shuffleOn = false;
+  List<String> _unshuffled = const [];
+
+  /// Whether shuffle is on (use this, not player.shuffleModeEnabled).
+  bool get shuffleOn => _listShuffle ? _shuffleOn : player.shuffleModeEnabled;
+
   /// Queue in the order it will actually play (respects shuffle).
-  List<int> get playOrder => player.shuffleModeEnabled ? player.shuffleIndices : List.generate(player.sequence.length, (i) => i);
+  List<int> get playOrder =>
+      (!_listShuffle && player.shuffleModeEnabled) ? player.shuffleIndices : List.generate(player.sequence.length, (i) => i);
 
   bool get hasQueue => player.sequence.isNotEmpty;
 
@@ -173,10 +183,26 @@ class PlayerService extends ChangeNotifier {
   Future<void> playTracks(List<Track> tracks, {int start = 0, bool? shuffle}) async {
     await _dropPreview();
     final startTrack = (start >= 0 && start < tracks.length) ? tracks[start] : null;
-    final list = _playable(tracks);
+    var list = _playable(tracks);
     if (list.isEmpty) return;
     var index = startTrack == null ? 0 : list.indexWhere((t) => t.id == startTrack.id);
     if (index < 0) index = 0;
+
+    if (_listShuffle) {
+      _shuffleOn = shuffle ?? _shuffleOn;
+      _unshuffled = [for (final t in list) t.id];
+      if (_shuffleOn) {
+        final first = startTrack == null ? null : list[index];
+        final rest = list.where((t) => t.id != first?.id).toList()..shuffle();
+        list = [if (first != null) first, ...rest];
+        index = 0;
+      }
+      await player.setAudioSources([for (final t in list) _source(t)], initialIndex: index, shuffleOrder: _newOrder());
+      player.play();
+      _persist();
+      notifyListeners();
+      return;
+    }
 
     if (shuffle != null) await player.setShuffleModeEnabled(shuffle);
     await player.setAudioSources([for (final t in list) _source(t)], initialIndex: index, shuffleOrder: _newOrder());
@@ -269,9 +295,49 @@ class PlayerService extends ChangeNotifier {
   Future<void> next() => player.seekToNext();
 
   Future<void> toggleShuffle() async {
+    if (_listShuffle) return _reorder(!_shuffleOn);
     final on = !player.shuffleModeEnabled;
     if (on) await player.shuffle();
     await player.setShuffleModeEnabled(on);
+    _persist();
+    notifyListeners();
+  }
+
+  /// Windows shuffle: rebuilds the list in shuffled (or original) order and
+  /// keeps the current song playing where it is.
+  Future<void> _reorder(bool on) async {
+    final seq = queue;
+    final cur = current;
+    _shuffleOn = on;
+    if (cur == null || seq.length < 2) {
+      if (on) _unshuffled = [for (final t in seq) t.id];
+      _persist();
+      notifyListeners();
+      return;
+    }
+    List<Track> next;
+    if (on) {
+      _unshuffled = [for (final t in seq) t.id];
+      next = [cur, ...seq.where((t) => t.id != cur.id).toList()..shuffle()];
+    } else {
+      final inSeq = {for (final t in seq) t.id};
+      final known = _unshuffled.toSet();
+      final orig = [
+        for (final id in _unshuffled)
+          if (inSeq.contains(id) && trackById(id) != null) trackById(id)!
+      ];
+      // Songs added since shuffle went on (your queue) stay right after this one.
+      final extra = seq.where((t) => !known.contains(t.id) && t.id != cur.id).toList();
+      final i = orig.indexWhere((t) => t.id == cur.id);
+      next = i < 0
+          ? [cur, ...extra, ...orig]
+          : [...orig.take(i + 1), ...extra, ...orig.skip(i + 1)];
+    }
+    final pos = player.position;
+    final playing = player.playing;
+    await player.setAudioSources([for (final t in next) _source(t)],
+        initialIndex: next.indexWhere((t) => t.id == cur.id), initialPosition: pos, shuffleOrder: _newOrder());
+    if (playing) player.play();
     _persist();
     notifyListeners();
   }
@@ -596,7 +662,7 @@ class PlayerService extends ChangeNotifier {
     store.resumeQueue = [for (final s in seq) (s.tag as MediaItem).id];
     store.resumeIndex = player.currentIndex ?? 0;
     store.resumePositionMs = player.position.inMilliseconds;
-    store.resumeShuffle = player.shuffleModeEnabled;
+    store.resumeShuffle = shuffleOn;
     store.resumeLoop = player.loopMode.index;
     store.save();
   }
@@ -612,7 +678,13 @@ class PlayerService extends ChangeNotifier {
     if (index < 0) index = 0;
     try {
       await player.setLoopMode(LoopMode.values[store.resumeLoop.clamp(0, 2)]);
-      await player.setShuffleModeEnabled(store.resumeShuffle);
+      if (_listShuffle) {
+        // The saved list is already in play order.
+        _shuffleOn = store.resumeShuffle;
+        _unshuffled = [for (final t in list) t.id];
+      } else {
+        await player.setShuffleModeEnabled(store.resumeShuffle);
+      }
       await player.setAudioSources(
         [for (final t in list) _source(t)],
         initialIndex: index,

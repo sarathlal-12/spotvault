@@ -4,8 +4,10 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
+  ble_peripheral
   file_selector_windows
   media_kit_libs_windows_audio
+  permission_handler_windows
   serious_python_windows
   url_launcher_windows
 )

@@ -405,6 +405,65 @@ class NearbyService extends ChangeNotifier {
     if (ok) unawaited(_receive(offer));
   }
 
+  /// The playlist folder a share goes into.
+  String sharedFolder(IncomingShare offer) {
+    final base = offer.playlistName != null ? '${offer.playlistName} (from ${offer.fromName})' : 'Shared with me';
+    return base.replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ').trim();
+  }
+
+  /// Saves a song that arrived as a file (Bluetooth sharing). [audio] and
+  /// [art] are temporary files and are moved or deleted. False if it failed.
+  Future<bool> importShared(SongInfo s, String folder, File audio, File? art) async {
+    try {
+      final name = _safe(s.artist.isEmpty ? s.title : '${s.artist} - ${s.title}');
+      final path = '$folder/$name.${s.ext}';
+      final id = 'sh_${base64Url.encode(utf8.encode(path)).replaceAll('=', '')}';
+      final dest = File('${store.musicDir.path}/$path');
+      await dest.parent.create(recursive: true);
+      if (await dest.exists()) {
+        await audio.delete();
+      } else {
+        try {
+          await audio.rename(dest.path);
+        } on FileSystemException {
+          // Different volume: copy instead.
+          await audio.copy(dest.path);
+          await audio.delete();
+        }
+      }
+      final t = Track(
+        id: id,
+        path: path,
+        title: s.title,
+        artist: s.artist,
+        album: s.album,
+        size: await dest.length(),
+        mtime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        duration: s.duration,
+        phoneOnly: true,
+      );
+      if (art != null) {
+        try {
+          final a = store.artFile(t);
+          await a.parent.create(recursive: true);
+          await art.copy(a.path);
+          t.hasArt = true;
+        } catch (_) {}
+        try {
+          await art.delete();
+        } catch (_) {}
+      }
+      store.addPhoneTrack(t, folder: folder, title: folder);
+      return true;
+    } catch (e) {
+      debugPrint('share import failed for ${s.title}: $e');
+      try {
+        await audio.delete();
+      } catch (_) {}
+      return false;
+    }
+  }
+
   Future<void> _receive(IncomingShare offer) async {
     final folderBase = offer.playlistName != null ? '${offer.playlistName} (from ${offer.fromName})' : 'Shared with me';
     final folder = folderBase.replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ').trim();

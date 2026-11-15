@@ -92,6 +92,14 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- Bluetooth sharing between phones -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>SpotVault uses Bluetooth to send songs to phones nearby and receive songs from them.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_spotvault-p2p._tcp</string>
+		<string>_spotvault-p2p._udp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>SpotVault connects to the SpotVault app on your PC over Wi-Fi to copy your playlists.</string>
 	<!-- Synced music is visible in the Files app -->
