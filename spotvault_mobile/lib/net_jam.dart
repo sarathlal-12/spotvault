@@ -15,7 +15,7 @@ import 'player_service.dart';
 
 /// The relay that carries Internet Jam messages (jam-relay/ in this repo,
 /// deployed to Cloudflare). Only small messages go through it, never audio.
-const String kJamRelay = 'https://spotvault-jam.REPLACE.workers.dev';
+const String kJamRelay = 'https://spotvault-jam.spotvault.workers.dev';
 
 /// The relay in use (tests point it at a local one).
 String jamRelay = kJamRelay;
