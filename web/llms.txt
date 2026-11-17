@@ -2,7 +2,7 @@
 
 > Free app that keeps your music offline. The Windows app saves playlists from Spotify, YouTube, YouTube Music and SoundCloud as audio files with cover art, one folder per playlist, and can search for any single song and save it into a playlist. The Android and iPhone app copies those playlists from the PC over Wi-Fi, plays them with no signal, and can add new songs by search (the PC downloads them and sends them back).
 
-- Website: https://spotvault-web.vercel.app/
+- Website: https://sarath-apps.vercel.app/spotvault/
 - Source code: https://github.com/sarathlal-12/spotvault
 - Downloads (v2.0.1): https://github.com/sarathlal-12/spotvault/releases/tag/v2.0.1
 - Price: free. No account needed; everything runs locally.
@@ -23,3 +23,13 @@
 - Both devices must be on the same Wi-Fi, and Windows Firewall must allow SpotVault on Private networks.
 - The Windows app has everything built in (including the audio converter); nothing else to install.
 - Not on the Google Play Store or Apple App Store; it is distributed through GitHub releases.
+
+# AirBridge
+
+> Free Windows app that plays your phone's audio through the PC's speakers or headphones. iPhone sends audio over AirPlay (Wi-Fi); Android (and iPhone) over Bluetooth, with the PC acting as a Bluetooth speaker. Runs in the system tray; the iPhone's volume buttons control it.
+
+- Website: https://sarath-apps.vercel.app/airbridge/
+- Source code: https://github.com/sarathlal-12/airbridge
+- Downloads (v1.0.0): https://github.com/sarathlal-12/airbridge/releases/tag/v1.0.0
+- Price: free. No account; audio stays on the home network.
+- Platforms: Windows 10 (2004) and 11, 64-bit. Nothing to install on the phone.
