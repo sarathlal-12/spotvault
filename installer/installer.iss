@@ -49,8 +49,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; The app (Flutter) and the hidden downloader engine (PyInstaller, one folder).
-Source: "..\spotvault_mobile\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\dist\engine\*"; DestDir: "{app}\engine"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\spotvault_mobile\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Excludes: "library_config.json,*.log"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\engine\*"; DestDir: "{app}\engine"; Excludes: "library_config.json,*.log"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\app_icon_v2.ico"; DestDir: "{app}"; DestName: "app_icon.ico"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
