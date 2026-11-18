@@ -128,6 +128,26 @@ class EngineClient extends ChangeNotifier {
     }
   }
 
+  /// The songs of a playlist link, for Play online. Throws on failure.
+  Future<List<Map<String, dynamic>>> tracks(String url) async {
+    final r = await http.get(_u('/api/tracks', {'url': url}), headers: _h).timeout(const Duration(seconds: 60));
+    final j = jsonDecode(r.body) as Map<String, dynamic>;
+    if (r.statusCode != 200) throw Exception('${j['error'] ?? "Couldn't read that playlist"}');
+    return [for (final t in (j['tracks'] as List? ?? const [])) (t as Map).cast<String, dynamic>()];
+  }
+
+  /// A stream of one online song: its link, or (Spotify) the best match for its name.
+  Uri streamFor(Map<String, dynamic> t) {
+    final url = '${t['url'] ?? ''}';
+    return _u('/api/preview', {
+      if (url.isNotEmpty) 'url': url else 'q': '${t['title']} ${t['artist'] ?? ''}'.trim(),
+      'pin': token,
+    });
+  }
+
+  /// Song list import: {playlist: ["Title - Artist", ...]}; each song is found and downloaded.
+  Future<String?> importLists(Map<String, List<String>> lists) => _post('/import', {'lists': lists});
+
   Future<String?> syncAll() => _post('/sync', {});
   Future<String?> syncFolders(List<String> folders) => _post('/sync', {'folders': folders});
   Future<String?> stop() => _post('/stop', {});

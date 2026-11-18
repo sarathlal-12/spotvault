@@ -59,6 +59,12 @@ class LookCard extends StatelessWidget {
     await store.save();
   }
 
+  Future<void> _player(String look) async {
+    store.playerLook = look;
+    store.changed();
+    await store.save();
+  }
+
   Future<void> _rename(BuildContext context) async {
     final ctrl = TextEditingController(text: store.userName);
     final v = await showDialog<String>(
@@ -100,6 +106,16 @@ class LookCard extends StatelessWidget {
           chip('Dark', darkMode.value, () => setDarkMode(true)),
           chip('Light', !darkMode.value, () => setDarkMode(false)),
         ]),
+        const SizedBox(height: 12),
+        Text('Player', style: TextStyle(color: p.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        ListenableBuilder(
+          listenable: store,
+          builder: (context, _) => Wrap(spacing: 8, runSpacing: 8, children: [
+            chip('Classic', store.playerLook != 'focus', () => _player('classic')),
+            chip('Focus', store.playerLook == 'focus', () => _player('focus')),
+          ]),
+        ),
       ]),
     );
   }

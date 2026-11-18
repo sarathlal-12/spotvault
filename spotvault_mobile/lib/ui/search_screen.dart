@@ -453,7 +453,7 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    return AnimatedContainer(
+    final tile = AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       padding: const EdgeInsets.all(8),
@@ -511,6 +511,66 @@ class _SearchScreenState extends State<SearchScreen> {
           saveButton,
         ],
       ),
+    );
+    // While a song is previewing, a slider under it moves through the song.
+    if (!isPreview) return tile;
+    return Column(mainAxisSize: MainAxisSize.min, children: [tile, const _PreviewSeek()]);
+  }
+}
+
+/// Seek bar for the online song being previewed: drag to move through it.
+class _PreviewSeek extends StatefulWidget {
+  const _PreviewSeek();
+
+  @override
+  State<_PreviewSeek> createState() => _PreviewSeekState();
+}
+
+class _PreviewSeekState extends State<_PreviewSeek> {
+  double? _drag; // seconds, while the thumb is held
+
+  String _t(double secs) {
+    final s = secs.round();
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pl = playerService.player;
+    return StreamBuilder<Duration>(
+      stream: pl.positionStream,
+      builder: (context, snap) {
+        final total = (pl.duration ?? Duration.zero).inMilliseconds / 1000;
+        final pos = _drag ?? ((snap.data ?? pl.position).inMilliseconds / 1000).clamp(0.0, total > 0 ? total : 0.0);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+          child: Row(children: [
+            SizedBox(width: 38, child: Text(_t(pos), style: TextStyle(color: kMuted, fontSize: 11))),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                  activeTrackColor: kAccent,
+                  thumbColor: kAccent,
+                  inactiveTrackColor: kLine,
+                ),
+                child: Slider(
+                  value: total > 0 ? pos : 0,
+                  max: total > 0 ? total : 1,
+                  onChanged: total > 0 ? (v) => setState(() => _drag = v) : null,
+                  onChangeEnd: (v) async {
+                    await pl.seek(Duration(milliseconds: (v * 1000).round()));
+                    if (mounted) setState(() => _drag = null);
+                  },
+                ),
+              ),
+            ),
+            SizedBox(width: 38, child: Text(total > 0 ? _t(total) : '--:--', textAlign: TextAlign.right, style: TextStyle(color: kMuted, fontSize: 11))),
+          ]),
+        );
+      },
     );
   }
 }

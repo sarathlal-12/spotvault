@@ -39,6 +39,7 @@ class NowPlayingScreen extends StatelessWidget {
         }
         lyricsService.prefetch(t);
         // The Minimal look has its own player (2.0 design); Crimson keeps the classic one.
+        if (store.playerLook == 'focus') return _MinimalPlayer(track: t, playlistName: _playlistName(t), focus: true);
         if (isMinimal) return _MinimalPlayer(track: t, playlistName: _playlistName(t));
         return Scaffold(
           body: AuroraBackground(
@@ -198,7 +199,10 @@ class NowPlayingScreen extends StatelessWidget {
 class _MinimalPlayer extends StatelessWidget {
   final Track track;
   final String playlistName;
-  const _MinimalPlayer({required this.track, required this.playlistName});
+
+  /// Focus style: the ring around the cover is the only timeline, no tool row.
+  final bool focus;
+  const _MinimalPlayer({required this.track, required this.playlistName, this.focus = false});
 
   String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
 
@@ -289,8 +293,8 @@ class _MinimalPlayer extends StatelessWidget {
                 ]),
               ),
             ),
-            const SizedBox(height: 6),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: _SlimSeek(player: player)),
+            SizedBox(height: focus ? 18 : 6),
+            if (!focus) Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: _SlimSeek(player: player)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 22),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -333,8 +337,8 @@ class _MinimalPlayer extends StatelessWidget {
               ]),
             ),
             const SizedBox(height: 10),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _ToolRow(track: t)),
-            const SizedBox(height: 12),
+            if (!focus) Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _ToolRow(track: t)),
+            SizedBox(height: focus ? 18 : 12),
             _LyricsPeek(track: t),
           ]),
         ),

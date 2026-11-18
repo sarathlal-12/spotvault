@@ -198,6 +198,9 @@ class LibraryStore extends ChangeNotifier {
 
   /// Windows: how solid the glass panels are, 0 (see-through) to 1 (solid).
   double glassSolid = 0.35;
+
+  /// Player style: 'classic' or 'focus' (wavy cover, the ring as the timeline, lyrics card).
+  String playerLook = 'classic';
   /// Shown as "Good evening, <name>".
   String userName = '';
   /// Sort order chosen per playlist (folder -> 'pc' | 'recent' | 'title' | 'artist').
@@ -292,6 +295,7 @@ class LibraryStore extends ChangeNotifier {
       darkTheme = j['darkTheme'] ?? true;
       themeStyle = j['themeStyle'] ?? '';
       glassSolid = ((j['glassSolid'] ?? 0.35) as num).toDouble().clamp(0.0, 1.0);
+      playerLook = j['playerLook'] == 'focus' ? 'focus' : 'classic';
       userName = j['userName'] ?? '';
       playlistSort.addAll(Map<String, String>.from(j['playlistSort'] ?? const {}));
       savedPhones = [for (final p in (j['savedPhones'] as List? ?? const [])) Map<String, dynamic>.from(p as Map)];
@@ -353,6 +357,7 @@ class LibraryStore extends ChangeNotifier {
           'darkTheme': darkTheme,
           'themeStyle': themeStyle,
           'glassSolid': glassSolid,
+          'playerLook': playerLook,
           'userName': userName,
           'playlistSort': playlistSort,
           'savedPhones': savedPhones,

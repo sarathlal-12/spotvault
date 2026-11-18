@@ -105,7 +105,7 @@ class PlayerService extends ChangeNotifier {
     player.sequenceStateStream.listen((_) => notifyListeners());
     player.playerStateStream.listen((s) {
       notifyListeners();
-      if (previewing && !holdPreview && s.processingState == ProcessingState.completed) {
+      if (previewing && !holdPreview && !onlineList && s.processingState == ProcessingState.completed) {
         stopPreview();
         return;
       }
@@ -139,7 +139,12 @@ class PlayerService extends ChangeNotifier {
           if (trackById((s.tag as MediaItem).id) != null) trackById((s.tag as MediaItem).id)!
       ];
 
+  /// Tests and screen renders: pretend this song is playing.
+  @visibleForTesting
+  Track? debugCurrent;
+
   Track? get current {
+    if (debugCurrent != null) return debugCurrent;
     final i = player.currentIndex;
     final seq = player.sequence;
     if (i == null || i < 0 || i >= seq.length) return null;
@@ -299,6 +304,7 @@ class PlayerService extends ChangeNotifier {
   Future<void> next() => player.seekToNext();
 
   Future<void> toggleShuffle() async {
+    if (onlineList) return; // an online playlist plays in its own order
     if (_listShuffle) return _reorder(!_shuffleOn);
     final on = !player.shuffleModeEnabled;
     if (on) await player.shuffle();
@@ -594,10 +600,53 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
+  /// Windows "Play online": a whole playlist streamed song after song.
+  bool onlineList = false;
+
+  /// Plays [songs] from the internet in order, starting at [start]. Each song is a
+  /// stream URL plus a [Track] for its title and artist. The user's own queue comes
+  /// back with [stopPreview], or is dropped when they play a downloaded song.
+  Future<void> playOnline(List<(Uri, Track)> songs, {int start = 0, required String key}) async {
+    if (songs.isEmpty) return;
+    _fadeFactor = 1;
+    _gainFactor = 1;
+    _applyVolume();
+    if (!previewing) {
+      _saved = _Saved(
+        ids: [for (final s in player.sequence) (s.tag as MediaItem).id],
+        index: player.currentIndex ?? 0,
+        position: player.position,
+        wasPlaying: player.playing,
+        loop: player.loopMode,
+      );
+    }
+    extraTracks.removeWhere((k, _) => k.startsWith('online:'));
+    for (final (_, t) in songs) {
+      extraTracks[t.id] = t;
+    }
+    previewing = true;
+    onlineList = true;
+    previewKey = key;
+    notifyListeners();
+    try {
+      await player.setLoopMode(LoopMode.off);
+      await player.setAudioSources(
+        [for (final (u, t) in songs) AudioSource.uri(u, tag: MediaItem(id: t.id, title: t.title, artist: t.artist.isEmpty ? null : t.artist))],
+        initialIndex: start.clamp(0, songs.length - 1),
+      );
+      player.play();
+    } catch (e) {
+      debugPrint('play online failed: $e');
+      await stopPreview();
+      rethrow;
+    }
+  }
+
   /// Ends the preview and puts the user's queue back where it was.
   Future<void> stopPreview() async {
     if (!previewing) return;
     previewing = false;
+    onlineList = false;
     previewKey = null;
     final saved = _saved;
     _saved = null;
@@ -632,6 +681,7 @@ class PlayerService extends ChangeNotifier {
     if (!previewing) return;
     final loop = _saved?.loop;
     previewing = false;
+    onlineList = false;
     previewKey = null;
     _saved = null;
     if (loop != null) await player.setLoopMode(loop);

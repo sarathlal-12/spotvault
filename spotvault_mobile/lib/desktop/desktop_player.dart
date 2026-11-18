@@ -17,11 +17,12 @@ class DesktopPlayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: playerService,
+      listenable: Listenable.merge([playerService, store]),
       builder: (context, _) {
         final p = pal;
         final t = playerService.current;
         final pl = playerService.player;
+        final focus = store.playerLook == 'focus';
         return Material(
           color: p.bg.withValues(alpha: p.dark ? 0.72 : 0.78),
           child: Padding(
@@ -46,7 +47,9 @@ class DesktopPlayer extends StatelessWidget {
               Expanded(
                 child: t == null
                     ? Center(child: Text('Pick a song to play.', style: TextStyle(color: p.muted)))
-                    : Row(children: [
+                    : focus
+                        ? _FocusPlayer(track: t)
+                        : Row(children: [
                         Expanded(
                           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                             Flexible(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420, maxHeight: 420), child: AspectRatio(aspectRatio: 1, child: WavyCover(track: t)))),
@@ -84,6 +87,91 @@ class DesktopPlayer extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Focus style: one centred column like the phone. The ring around the cover is
+/// the timeline; the lyrics card at the bottom opens the full lyrics in place.
+class _FocusPlayer extends StatefulWidget {
+  final Track track;
+  const _FocusPlayer({required this.track});
+
+  @override
+  State<_FocusPlayer> createState() => _FocusPlayerState();
+}
+
+class _FocusPlayerState extends State<_FocusPlayer> {
+  bool lyrics = false;
+
+  String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pal;
+    final t = widget.track;
+    final pl = playerService.player;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Column(children: [
+          StreamBuilder<Duration>(
+            stream: pl.positionStream,
+            builder: (context, s) => Text.rich(
+              TextSpan(children: [
+                TextSpan(text: _fmt(s.data ?? Duration.zero), style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
+                TextSpan(text: '  |  ${_fmt(pl.duration ?? Duration.zero)}', style: TextStyle(color: p.muted)),
+              ]),
+              style: const TextStyle(fontSize: 15, fontFeatures: [FontFeature.tabularFigures()]),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: lyrics
+                  ? _LyricsPanel(key: const ValueKey('lyrics'), track: t)
+                  : Center(key: const ValueKey('cover'), child: AspectRatio(aspectRatio: 1, child: WavyCover(track: t))),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(t.title.toUpperCase(), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+          const SizedBox(height: 4),
+          Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 15)),
+          const SizedBox(height: 14),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            IconButton(
+              onPressed: playerService.cycleLoop,
+              tooltip: 'Repeat',
+              icon: Icon(pl.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: pl.loopMode == LoopMode.off ? p.text : p.accent),
+            ),
+            IconButton(onPressed: playerService.previous, tooltip: 'Previous', iconSize: 30, icon: const Icon(Icons.skip_previous_rounded)),
+            const PlayButton(size: 72),
+            IconButton(onPressed: playerService.next, tooltip: 'Next', iconSize: 30, icon: const Icon(Icons.skip_next_rounded)),
+            IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
+          ]),
+          const SizedBox(height: 14),
+          Material(
+            color: p.surface.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(22),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () => setState(() => lyrics = !lyrics),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 16, 16),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(child: Text('Lyrics', style: TextStyle(color: p.text, fontWeight: FontWeight.w700))),
+                    Icon(lyrics ? Icons.close_fullscreen_rounded : Icons.open_in_full_rounded, size: 16, color: p.muted),
+                  ]),
+                  const SizedBox(height: 6),
+                  SizedBox(width: double.infinity, child: lyrics ? Text('Showing the lyrics above. Click to see the cover.', style: TextStyle(color: p.muted, fontSize: 13)) : LyricsPeek(track: t)),
+                ]),
+              ),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -298,7 +386,7 @@ class _RingPainter extends CustomPainter {
 /// Big live lyrics: the line being sung lights up and stays in view. Click a line to jump there.
 class _LyricsPanel extends StatefulWidget {
   final Track track;
-  const _LyricsPanel({required this.track});
+  const _LyricsPanel({super.key, required this.track});
 
   @override
   State<_LyricsPanel> createState() => _LyricsPanelState();

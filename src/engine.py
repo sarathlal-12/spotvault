@@ -52,11 +52,17 @@ from phone_sync import PhoneSyncServer, generate_pin, get_lan_ips, HTTP_PORT  # 
 import sources  # noqa: E402
 import updater  # noqa: E402
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 CONFIG_FILE = "library_config.json"
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".spot_sync_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 REPORT_FILE = os.path.join(CACHE_DIR, "last_sync_report.json")
+
+
+def _words(text):
+    """Lower-case words of a song title, without brackets like (From "X") or [Official]."""
+    text = re.sub(r"[\[(][^\])]*[\])]", " ", str(text).lower())
+    return {w for w in re.findall(r"[\w']+", text) if len(w) > 1}
 INVALID_NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 FEED_KEEP = 400
 
@@ -226,11 +232,30 @@ class Engine:
             del self.feed[:-FEED_KEEP]
             if kind in self.counts:
                 self.counts[kind] += 1
-                if self.report is not None and self.running:
+                if self.report is not None and self.running and getattr(self, "_manual", False):
+                    if kind == "done":
+                        self._tick_off(title, path)
+                elif self.report is not None and self.running:
                     self.report["entries"].append({
                         "kind": kind, "group": sources.group_for(kind, detail), "title": title,
                         "detail": detail or "", "path": path or "", "playlist": self.current_playlist,
                     })
+
+    def _tick_off(self, title, path=""):
+        """Marks the failed/skipped report entry that a hand download just saved."""
+        got = _words(title)
+        best, score = None, 0.0
+        for e in self.report.get("entries", []):
+            if e.get("kind") not in ("fail", "skip") or e.get("playlist") != self.current_playlist:
+                continue
+            want = _words(e.get("title", ""))
+            if not want:
+                continue
+            s = len(want & got) / len(want)
+            if s > score:
+                best, score = e, s
+        if best is not None and score >= 0.6:
+            best.update(kind="done", group="done", detail="Saved by hand", path=path or "")
 
     # ------------------------------------------------------------ library
     def folder_stats(self, folder):
@@ -330,6 +355,50 @@ class Engine:
                 return "Nothing to download."
         return self._start([{"folder": folder, "urls": urls, "source": sources.YOUTUBE, "playlist": False}])
 
+    def import_lists(self, lists):
+        """Song list import: {playlist name: ["Title - Artist", ...]}.
+
+        Each playlist becomes a folder in the music folder; every song is found by
+        name (clean-music search) and downloaded. Songs already there are skipped.
+        """
+        with self.lock:
+            if self.running:
+                return "A sync is already running."
+        tasks = []
+        for name, songs in list(lists.items())[:200]:
+            folder = clean_folder_name(str(name)) or "Imported"
+            names = [str(x).strip() for x in songs if str(x).strip()][:3000]
+            if names:
+                tasks.append({"folder": folder, "urls": [], "names": names, "source": sources.YOUTUBE, "playlist": False})
+        if not tasks:
+            return "There are no songs in that list."
+        return self._start(tasks)
+
+    def _download_names(self, names, target_dir, ffmpeg_path):
+        """Find each "Title - Artist" online and download it, skipping songs already saved."""
+        have = []
+        try:
+            have = [_words(os.path.splitext(e.name)[0]) for e in os.scandir(target_dir) if e.is_file()]
+        except OSError:
+            pass
+        self._on_song_total(len(names))
+        for name in names:
+            if self.stop_requested:
+                break
+            want = _words(name)
+            if want and any(len(want & h) / len(want) >= 0.8 for h in have):
+                self._report("skip", name, "Already saved")
+                continue
+            try:
+                url = sources.best_url_for(name)
+            except Exception:
+                self._report("fail", name, "Couldn't find this song online")
+                continue
+            before = self._songs_seen
+            sources.download([url], target_dir, lambda kind, title, detail, path="": self._event(kind, title, detail, path), ffmpeg_path)
+            self._songs_seen = before + 1
+            self._song_progress()
+
     def _start(self, tasks):
         with self.lock:
             self._tasks = tasks
@@ -340,8 +409,12 @@ class Engine:
             self.status = "Starting"
             self.ring_label = "Starting…"
             self.current_playlist = ""
-            self.report = {"started": time.time(), "finished": None,
-                           "playlists": [t["folder"] for t in tasks if t.get("playlist")], "entries": []}
+            # A hand download (search -> download) keeps the last sync report, so the
+            # songs that still failed stay listed; a song saved by hand is ticked off.
+            self._manual = not any(t.get("playlist") or t.get("names") for t in tasks) and self.report is not None
+            if not self._manual:
+                self.report = {"started": time.time(), "finished": None,
+                               "playlists": [t["folder"] for t in tasks if t.get("playlist")], "entries": []}
         threading.Thread(target=self._worker, daemon=True).start()
         return None
 
@@ -405,7 +478,9 @@ class Engine:
                     self.ring_label = folder[:22]
                 self._event("start", folder, target_dir)
                 try:
-                    if task["source"] == sources.SPOTIFY:
+                    if task.get("names"):
+                        self._download_names(task["names"], target_dir, ffmpeg_path)
+                    elif task["source"] == sources.SPOTIFY:
                         self._run_spotdl(task["urls"][0], target_dir)
                     elif task["source"] == sources.YOUTUBE and task.get("playlist"):
                         sources.sync_youtube(task["urls"][0], target_dir, self._report, ffmpeg_path)
@@ -579,6 +654,12 @@ class Engine:
             return 200, {"ok": True}
         if r == "/download":
             err = self.download_songs(str(data.get("folder", "")), [str(u) for u in data.get("urls") or []])
+            return (400, {"error": err}) if err else (200, {"ok": True})
+        if r == "/import":
+            lists = data.get("lists")
+            if not isinstance(lists, dict):
+                return 400, {"error": "Bad list"}
+            err = self.import_lists({str(k): [str(x) for x in (v or [])] for k, v in lists.items() if isinstance(v, list)})
             return (400, {"error": err}) if err else (200, {"ok": True})
         if r == "/add":
             item, err = self.add_playlist(str(data.get("url", "")), str(data.get("folder", "")))

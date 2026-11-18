@@ -447,6 +447,60 @@ def download(urls, target_dir, report, ffmpeg_path=None):
 
 
 # ---------------------------------------------------------------------------
+# Play online: the songs of a playlist, without downloading them
+# ---------------------------------------------------------------------------
+def list_tracks(url, limit=300):
+    """Return [{"title", "artist", "secs", "url"}] for a playlist link.
+
+    Spotify songs come from the public embed page (no API key, up to ~100 songs)
+    and have no "url": the app streams them by searching "title artist".
+    """
+    import json as _json
+    source, clean = normalize_url(url)
+    if not clean:
+        raise ValueError("Not a playlist link")
+    if source == SPOTIFY:
+        import requests
+        m = re.search(r"open\.spotify\.com/(?:intl-\w+/)?(playlist|album|track)/([A-Za-z0-9]+)", clean)
+        if not m:
+            raise ValueError("Not a Spotify playlist link")
+        res = requests.get(f"https://open.spotify.com/embed/{m.group(1)}/{m.group(2)}",
+                           headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        res.raise_for_status()
+        data = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', res.text, re.S)
+        if not data:
+            raise RuntimeError("Spotify page changed")
+        entity = _json.loads(data.group(1))["props"]["pageProps"]["state"]["data"]["entity"]
+        items = entity.get("trackList") or []
+        return [{"title": t.get("title", ""), "artist": (t.get("subtitle") or "").replace(" ", " "),
+                 "secs": int((t.get("duration") or 0) / 1000), "url": ""}
+                for t in items[:limit] if t.get("title")]
+    import yt_dlp
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "skip_download": True,
+            "playlistend": limit, "logger": _SilentLogger()}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(clean, download=False)
+    out = []
+    for e in info.get("entries") or [info]:
+        if not e:
+            continue
+        link = e.get("url") or e.get("webpage_url") or ""
+        if link and not link.startswith("http"):
+            link = f"https://www.youtube.com/watch?v={link}"
+        out.append({"title": e.get("title") or "", "artist": e.get("uploader") or e.get("channel") or "",
+                    "secs": int(e.get("duration") or 0), "url": link})
+    return [t for t in out if t["title"] and t["url"]]
+
+
+def best_url_for(query):
+    """The first clean-music search result for "title artist"."""
+    results = search_any(query, 3)
+    if not results:
+        raise RuntimeError("No match")
+    return results[0]["url"]
+
+
+# ---------------------------------------------------------------------------
 # Preview (phone app plays a song before downloading it)
 # ---------------------------------------------------------------------------
 def resolve_stream(url):

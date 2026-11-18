@@ -98,16 +98,18 @@ class _DesktopShellState extends State<DesktopShell> {
                     const SizedBox(width: 230, child: _Sidebar()),
                     VerticalDivider(width: 1, color: p.line),
                     Expanded(
-                      child: ValueListenableBuilder<DPage>(
-                        valueListenable: dPage,
-                        builder: (context, page, _) => AnimatedSwitcher(
+                      // Listens to the playlist too: switching from one playlist to another keeps
+                      // dPage at DPage.playlist, so dPage alone wouldn't rebuild the page.
+                      child: ListenableBuilder(
+                        listenable: Listenable.merge([dPage, dPlaylist]),
+                        builder: (context, _) => AnimatedSwitcher(
                           duration: const Duration(milliseconds: 260),
                           switchInCurve: Curves.easeOutCubic,
                           transitionBuilder: (child, a) => FadeTransition(
                             opacity: a,
                             child: SlideTransition(position: Tween(begin: const Offset(0, 0.015), end: Offset.zero).animate(a), child: child),
                           ),
-                          child: KeyedSubtree(key: ValueKey('$page${dPlaylist.value}'), child: pageFor(page)),
+                          child: KeyedSubtree(key: ValueKey('${dPage.value}${dPlaylist.value}'), child: pageFor(dPage.value)),
                         ),
                       ),
                     ),
@@ -134,7 +136,10 @@ class _DesktopShellState extends State<DesktopShell> {
                 scale: open ? 1 : 0.98,
                 duration: const Duration(milliseconds: 280),
                 curve: Curves.easeOutCubic,
-                child: open ? const DesktopPlayer() : const SizedBox(),
+                // Blurs the whole app behind the player, so only a soft haze shows through.
+                child: open
+                    ? ClipRect(child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40), child: const DesktopPlayer()))
+                    : const SizedBox(),
               ),
             ),
           ),

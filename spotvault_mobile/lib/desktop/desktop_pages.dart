@@ -1,3 +1,4 @@
+import 'dart:io' show File;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -11,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../app_state.dart';
 import '../library_store.dart';
+import '../song_list.dart';
 import '../ui/common.dart' show ArtImage, TrackArt;
 import '../ui/lab_screen.dart';
 import '../ui/menus.dart' show showSongMenu;
@@ -103,6 +105,73 @@ Widget _pill(String text, {VoidCallback? onTap, IconData? icon}) => OutlinedButt
       label: Text(text),
     );
 
+/// Song list import: paste the list (or open a .txt), see what's in it, download it all.
+Future<void> importSongListDialog(BuildContext context) async {
+  final ctrl = TextEditingController();
+  String? err;
+  var busy = false;
+  await showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(builder: (context, setState) {
+      final lists = parseSongList(ctrl.text);
+      final songs = lists.values.fold<int>(0, (n, l) => n + l.length);
+      Future<void> go() async {
+        setState(() {
+          busy = true;
+          err = null;
+        });
+        final e = await engine.importLists(lists);
+        if (e != null) {
+          setState(() {
+            busy = false;
+            err = e;
+          });
+          return;
+        }
+        if (context.mounted) Navigator.pop(context);
+        dPage.value = DPage.sync;
+      }
+
+      return AlertDialog(
+        title: const Text('Import a song list'),
+        content: SizedBox(
+          width: 560,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Paste the list from your phone (Studio, Song list, Copy), or open a .txt file. Each "## name" becomes a playlist; songs you already have are skipped.', style: _muted(13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              minLines: 8,
+              maxLines: 12,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(hintText: '## Drive mix\nMidnight Drive - Night Cassette', errorText: err, errorMaxLines: 3, border: const OutlineInputBorder()),
+              style: const TextStyle(fontSize: 13, fontFamily: 'Consolas'),
+            ),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: Text(songs == 0 ? 'No songs yet.' : '$songs songs in ${lists.length} playlist${lists.length == 1 ? '' : 's'}: ${lists.keys.take(4).join(', ')}${lists.length > 4 ? '…' : ''}', style: _muted(12))),
+              TextButton.icon(
+                onPressed: () async {
+                  final f = await openFile(acceptedTypeGroups: const [XTypeGroup(label: 'Text', extensions: ['txt'])]);
+                  if (f == null) return;
+                  ctrl.text = await f.readAsString();
+                  setState(() {});
+                },
+                icon: const Icon(Icons.folder_open_rounded, size: 16),
+                label: const Text('Open .txt'),
+              ),
+            ]),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(style: _primary(), onPressed: busy || songs == 0 ? null : go, child: Text(busy ? 'Starting…' : 'Download $songs songs')),
+        ],
+      );
+    }),
+  );
+}
+
 /// "Add a playlist": paste a Spotify, YouTube or SoundCloud link.
 Future<void> addPlaylistDialog(BuildContext context, {bool syncNow = true}) async {
   final ctrl = TextEditingController();
@@ -112,7 +181,7 @@ Future<void> addPlaylistDialog(BuildContext context, {bool syncNow = true}) asyn
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) {
-        Future<void> go() async {
+        Future<void> go({bool online = false}) async {
           setState(() {
             busy = true;
             err = null;
@@ -128,8 +197,13 @@ Future<void> addPlaylistDialog(BuildContext context, {bool syncNow = true}) asyn
           }
           await engine.refresh();
           final added = engine.playlists.map((p) => '${p['folder']}').where((f) => !before.contains(f)).toList();
-          if (syncNow && added.isNotEmpty) await engine.syncFolders(added);
           if (context.mounted) Navigator.pop(context);
+          if (online && added.isNotEmpty) {
+            // Play online: nothing downloads; the playlist page lists the songs to stream.
+            openPlaylist(added.first);
+            return;
+          }
+          if (syncNow && added.isNotEmpty) await engine.syncFolders(added);
           dPage.value = DPage.sync;
         }
 
@@ -138,7 +212,7 @@ Future<void> addPlaylistDialog(BuildContext context, {bool syncNow = true}) asyn
           content: SizedBox(
             width: 460,
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Paste a Spotify, YouTube, YouTube Music or SoundCloud playlist link.', style: _muted(13)),
+              Text('Paste a Spotify, YouTube, YouTube Music or SoundCloud playlist link. Download it to this PC, or play it online for now and download later.', style: _muted(13)),
               const SizedBox(height: 14),
               TextField(
                 controller: ctrl,
@@ -150,7 +224,8 @@ Future<void> addPlaylistDialog(BuildContext context, {bool syncNow = true}) asyn
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            FilledButton(style: _primary(), onPressed: busy ? null : go, child: Text(busy ? 'Adding…' : 'Save playlist')),
+            OutlinedButton.icon(style: _outline(), onPressed: busy ? null : () => go(online: true), icon: const Icon(Icons.wifi_rounded, size: 16), label: const Text('Play online')),
+            FilledButton.icon(style: _primary(), onPressed: busy ? null : go, icon: const Icon(Icons.download_rounded, size: 16), label: Text(busy ? 'Adding…' : 'Download')),
           ],
         );
       },
@@ -426,18 +501,49 @@ class _SongsPageState extends State<SongsPage> {
 // ============================================================ Playlist
 const _sorts = [('pc', 'My order'), ('recent', 'Recently added'), ('title', 'A–Z'), ('artist', 'Artist')];
 
-class PlaylistPage extends StatelessWidget {
+/// When each playlist was last checked for new songs on open (this run of the app).
+final Map<String, DateTime> _checkedAt = {};
+
+class PlaylistPage extends StatefulWidget {
   final String folder;
   const PlaylistPage({super.key, required this.folder});
 
   @override
+  State<PlaylistPage> createState() => _PlaylistPageState();
+}
+
+class _PlaylistPageState extends State<PlaylistPage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkForNewSongs();
+  }
+
+  /// Opening a downloaded playlist checks its link for new songs (at most every
+  /// 10 minutes). Songs removed from the playlist online stay on this PC.
+  void _checkForNewSongs() {
+    final f = widget.folder;
+    final e = engine.playlists.where((x) => x['folder'] == f).firstOrNull;
+    if (e == null || e['has_synced'] != true || engine.syncing) return;
+    final last = _checkedAt[f];
+    if (last != null && DateTime.now().difference(last) < const Duration(minutes: 10)) return;
+    _checkedAt[f] = DateTime.now();
+    engine.syncFolders([f]);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final folder = widget.folder;
     return ListenableBuilder(
       listenable: Listenable.merge([store, engine, playerService]),
       builder: (context, _) {
         final p = pal;
         final pl = store.playlistByFolder(folder);
-        if (pl == null) return Center(child: Text('This playlist is gone.', style: _muted()));
+        final link = '${engine.playlists.where((x) => x['folder'] == folder).firstOrNull?['url'] ?? ''}';
+        if (pl == null || store.tracksOf(pl).isEmpty) {
+          if (link.isNotEmpty) return _OnlinePlaylist(folder: folder, link: link);
+          if (pl == null) return Center(child: Text('This playlist is gone.', style: _muted()));
+        }
         final sort = store.playlistSort[folder] ?? 'pc';
         var tracks = store.tracksOf(pl);
         tracks = switch (sort) {
@@ -1081,6 +1187,135 @@ class _ReportCard extends StatelessWidget {
   }
 }
 
+/// A playlist that isn't downloaded yet: its songs, streamed from the internet.
+class _OnlinePlaylist extends StatefulWidget {
+  final String folder, link;
+  const _OnlinePlaylist({required this.folder, required this.link});
+
+  @override
+  State<_OnlinePlaylist> createState() => _OnlinePlaylistState();
+}
+
+class _OnlinePlaylistState extends State<_OnlinePlaylist> {
+  List<Map<String, dynamic>>? songs;
+  String error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => error = '');
+    try {
+      final t = await engine.tracks(widget.link);
+      if (mounted) setState(() => songs = t);
+    } catch (e) {
+      if (mounted) setState(() => error = '$e'.replaceFirst('Exception: ', ''));
+    }
+  }
+
+  String get _key => 'online:${widget.folder}';
+
+  Future<void> _play(int start) async {
+    final list = songs ?? const [];
+    final items = <(Uri, Track)>[
+      for (final (i, t) in list.indexed)
+        (
+          engine.streamFor(t),
+          Track(
+            id: 'online:${widget.folder}:$i',
+            path: '',
+            title: '${t['title']}',
+            artist: '${t['artist'] ?? ''}',
+            album: widget.folder,
+            size: 0,
+            mtime: 0,
+            duration: ((t['secs'] as num?) ?? 0).toDouble(),
+            addedAt: 0,
+            hasArt: false,
+          ),
+        ),
+    ];
+    try {
+      await playerService.playOnline(items, start: start, key: _key);
+    } catch (_) {
+      if (mounted) dToast(context, "Couldn't play that song online. Check your internet.");
+    }
+  }
+
+  Future<void> _download() async {
+    final e = await engine.syncFolders([widget.folder]);
+    if (!mounted) return;
+    if (e != null) {
+      dToast(context, e);
+    } else {
+      dPage.value = DPage.sync;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pal;
+    final e = engine.playlists.where((x) => x['folder'] == widget.folder).firstOrNull;
+    final title = '${e?['title'] ?? widget.folder}';
+    final list = songs;
+    final mine = playerService.onlineList && playerService.previewKey == _key;
+    final playingId = mine ? playerService.current?.id : null;
+    return ListView(padding: const EdgeInsets.fromLTRB(30, 28, 30, 30), children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Container(
+          width: 170,
+          height: 170,
+          decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(26), border: Border.all(color: p.line)),
+          child: Icon(Icons.wifi_rounded, size: 54, color: p.muted),
+        ),
+        const SizedBox(width: 24),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('ONLINE PLAYLIST', style: _muted(12).copyWith(letterSpacing: 1.1, fontWeight: FontWeight.w700)),
+            Text(title, style: _h1().copyWith(fontSize: 34)),
+            const SizedBox(height: 4),
+            Text(list == null ? 'Loading the songs…' : '${list.length} songs · streaming, not downloaded yet', style: _muted()),
+            const SizedBox(height: 16),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              FilledButton.icon(style: _primary(), onPressed: (list ?? const []).isEmpty ? null : () => _play(0), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play online')),
+              _pill(engine.syncing ? 'Syncing…' : 'Download all', icon: Icons.download_rounded, onTap: engine.syncing ? null : _download),
+              _PlaylistMore(folder: widget.folder, title: title),
+            ]),
+          ]),
+        ),
+      ]),
+      const SizedBox(height: 22),
+      if (error.isNotEmpty)
+        Row(children: [Expanded(child: Text(error, style: TextStyle(color: p.danger))), _pill('Try again', icon: Icons.refresh_rounded, onTap: _load)])
+      else if (list == null)
+        Padding(padding: const EdgeInsets.all(30), child: Center(child: CircularProgressIndicator(color: p.accent)))
+      else if (list.isEmpty)
+        Text('This playlist is empty, or private.', style: _muted())
+      else
+        for (final (i, t) in list.indexed)
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            leading: SizedBox(
+              width: 28,
+              child: Center(
+                child: playingId == 'online:${widget.folder}:$i'
+                    ? Icon(Icons.graphic_eq_rounded, color: p.accent, size: 20)
+                    : Text('${i + 1}', style: _muted(13)),
+              ),
+            ),
+            title: Text('${t['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w500)),
+            subtitle: Text('${t['artist'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _muted(12)),
+            trailing: Text(fmtTime(Duration(seconds: ((t['secs'] as num?) ?? 0).toInt())), style: _muted(12)),
+            onTap: () => _play(i),
+          ),
+    ]);
+  }
+}
+
 String _queryFor(String title) => title
     .replaceAll(RegExp(r'\(\s*from[^)]*\)', caseSensitive: false), '')
     .replaceAll(RegExp(r'[\[\(][^\]\)]*[\]\)]'), '')
@@ -1243,6 +1478,33 @@ class _SettingsPageState extends State<SettingsPage> {
             ]),
             const SizedBox(height: 14),
             Row(children: [
+              SizedBox(width: 90, child: Text('Player', style: TextStyle(color: p.text))),
+              ChoiceChip(
+                label: const Text('Classic'),
+                selected: store.playerLook != 'focus',
+                onSelected: (_) async {
+                  store.playerLook = 'classic';
+                  store.changed();
+                  await store.save();
+                  setState(() {});
+                },
+              ),
+              const SizedBox(width: 10),
+              ChoiceChip(
+                label: const Text('Focus'),
+                selected: store.playerLook == 'focus',
+                onSelected: (_) async {
+                  store.playerLook = 'focus';
+                  store.changed();
+                  await store.save();
+                  setState(() {});
+                },
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Focus: one column, the ring around the cover is the timeline, lyrics in a card.', style: _muted(12))),
+            ]),
+            const SizedBox(height: 14),
+            Row(children: [
               SizedBox(width: 90, child: Text('Glass', style: TextStyle(color: p.text))),
               Text('Clear', style: _muted(12)),
               Expanded(
@@ -1259,6 +1521,23 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               Text('Solid', style: _muted(12)),
+            ]),
+          ]),
+          _Section('Song list', [
+            Text('Every playlist and song as plain text. Keep it as a backup, or import a list from your phone to download all of it.', style: _muted(13)),
+            const SizedBox(height: 12),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              _pill('Copy my list', icon: Icons.copy_rounded, onTap: () {
+                Clipboard.setData(ClipboardData(text: buildSongList(store)));
+                dToast(context, 'Copied ${store.tracks.length} songs');
+              }),
+              _pill('Save as .txt', icon: Icons.save_alt_rounded, onTap: () async {
+                final loc = await getSaveLocation(suggestedName: 'SpotVault song list.txt', acceptedTypeGroups: const [XTypeGroup(label: 'Text', extensions: ['txt'])]);
+                if (loc == null) return;
+                await File(loc.path).writeAsString(buildSongList(store));
+                if (context.mounted) dToast(context, 'Saved');
+              }),
+              FilledButton.icon(style: _primary(), onPressed: () => importSongListDialog(context), icon: const Icon(Icons.download_rounded, size: 16), label: const Text('Import a list')),
             ]),
           ]),
           _Section('Music folder', [

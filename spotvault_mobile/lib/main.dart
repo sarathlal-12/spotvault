@@ -25,6 +25,7 @@ import 'ui/library_screen.dart';
 import 'ui/search_screen.dart';
 import 'ui/sync_screen.dart';
 import 'ui/update_ui.dart';
+import 'windows_media.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +53,9 @@ Future<void> main() async {
     unawaited(engine.start());
   }
   await playerService.init();
+  // Windows: show in the Win+A media box and answer the keyboard media keys.
+  // (audio_service, used on phones, has no Windows support.)
+  if (Platform.isWindows) WindowsMedia(playerService, store).start();
   // Phones nearby: share songs and Jam over the same Wi-Fi.
   nearbyService
     ..onIncomingShare = askIncomingShare

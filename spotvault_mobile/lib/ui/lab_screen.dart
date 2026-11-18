@@ -1,12 +1,49 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../library_store.dart';
+import '../song_list.dart';
 import 'aurora.dart';
 import 'car_mode.dart';
 import 'common.dart';
+
+/// Studio card: copy every playlist and song as text, to download them all
+/// again on the Windows app or a new phone.
+class SongListCard extends StatelessWidget {
+  const SongListCard({super.key});
+
+  Future<void> _copy(BuildContext context) async {
+    final text = buildSongList(store);
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    final n = store.tracks.length;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Copied $n song${n == 1 ? '' : 's'}. Paste it somewhere safe, like a note or a chat to yourself.'),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pal;
+    return GlassCard(
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Song list', style: TextStyle(color: p.text, fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text('Every playlist and song as text. Paste it into the Windows app (Settings, Song list) to download them all.', style: TextStyle(color: p.muted, fontSize: 12)),
+          ]),
+        ),
+        const SizedBox(width: 10),
+        FilledButton.tonalIcon(onPressed: () => _copy(context), icon: const Icon(Icons.copy_rounded, size: 16), label: const Text('Copy')),
+      ]),
+    );
+  }
+}
 
 /// Studio (was Vault Lab): tools for how your music plays.
 class LabScreen extends StatelessWidget {
@@ -39,10 +76,17 @@ class LabScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const FadeSlideIn(delay: Duration(milliseconds: 30), child: CarModeCard()),
-            const SizedBox(height: 14),
+            // Car mode is for phones; the Windows app doesn't show it.
+            if (!Platform.isWindows) ...[
+              const FadeSlideIn(delay: Duration(milliseconds: 30), child: CarModeCard()),
+              const SizedBox(height: 14),
+            ],
             const FadeSlideIn(delay: Duration(milliseconds: 45), child: LookCard()),
             const SizedBox(height: 14),
+            if (!Platform.isWindows) ...[
+              const FadeSlideIn(delay: Duration(milliseconds: 52), child: SongListCard()),
+              const SizedBox(height: 14),
+            ],
             const FadeSlideIn(delay: Duration(milliseconds: 60), child: _RewindCard()),
             const SizedBox(height: 14),
             const FadeSlideIn(delay: Duration(milliseconds: 120), child: _MomentsCard()),

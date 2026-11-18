@@ -10,6 +10,8 @@ in the "Phone Sync" window), then pulls the library over HTTP:
     GET /api/cover?folder=<name>    playlist cover image (needs PIN)
     GET /api/search?q=<text>        find songs online (needs PIN)
     GET /api/preview?url=<song>     stream a search result for a listen (needs PIN)
+    GET /api/preview?q=<title artist>  stream the best match for a song name (needs PIN)
+    GET /api/tracks?url=<playlist>  the songs of a playlist, for Play online (needs PIN)
     POST /api/download              {"url", "folder"}: the PC downloads a song into a
                                     playlist folder, returns {"job"} (needs PIN)
     GET /api/job?id=<job>           download state: queued/working/done/failed (needs PIN)
@@ -239,7 +241,21 @@ class _Handler(BaseHTTPRequestHandler):
             if route == "/api/suggest":
                 return self._suggest(query.get("q", [""])[0])
             if route == "/api/preview":
-                return self._preview(query.get("url", [""])[0])
+                url = query.get("url", [""])[0]
+                q = query.get("q", [""])[0]
+                if not url and q:
+                    # Play online: a song known only by name (Spotify) -> its best match.
+                    try:
+                        url = self.sync.url_for_query(q)
+                    except Exception as e:
+                        return self._error(502, f"No match: {type(e).__name__}")
+                return self._preview(url)
+            if route == "/api/tracks":
+                import sources
+                try:
+                    return self._send_json(200, {"tracks": sources.list_tracks(query.get("url", [""])[0])})
+                except Exception as e:
+                    return self._error(502, f"Couldn't read that playlist ({type(e).__name__})")
             if route == "/api/job":
                 job = self.sync.get_job(query.get("id", [""])[0])
                 return self._send_json(200, job) if job else self._error(404, "Unknown job")
@@ -755,6 +771,20 @@ class PhoneSyncServer:
                 self._streams.clear()
             self._streams[url] = (time.time(), resolved)
         return resolved
+
+    def url_for_query(self, q):
+        """Search result cache for Play online, so replaying a song doesn't search again."""
+        import sources
+        with self._lock:
+            cache = self.__dict__.setdefault("_query_urls", {})
+            if q in cache:
+                return cache[q]
+        url = sources.best_url_for(q)
+        with self._lock:
+            if len(cache) > 500:
+                cache.clear()
+            cache[q] = url
+        return url
 
     def forget_stream(self, url):
         with self._lock:
