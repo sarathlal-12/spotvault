@@ -111,7 +111,7 @@ Future<void> confirmDeleteSongs(BuildContext context, List<Track> tracks) async 
         ),
         if (fromPc > 0)
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: kViolet, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(backgroundColor: kViolet, foregroundColor: kOnInk),
             onPressed: () => Navigator.pop(ctx, 'pc'),
             child: const Text('Delete from phone and PC'),
           ),
@@ -148,7 +148,7 @@ Future<bool> confirmDeletePlaylist(BuildContext context, PlaylistInfo p) async {
         ),
         if (!p.phoneOnly)
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: kViolet, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(backgroundColor: kViolet, foregroundColor: kOnInk),
             onPressed: () => Navigator.pop(ctx, 'pc'),
             child: const Text('Delete from phone and PC'),
           ),

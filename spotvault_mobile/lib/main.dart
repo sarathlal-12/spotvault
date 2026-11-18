@@ -104,6 +104,27 @@ ThemeData buildTheme(Palette p) {
       trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? kViolet : p.track),
       trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
+    // Cloud look: every button is a pill; filled ones are ink with light text.
+    filledButtonTheme: isCloud
+        ? FilledButtonThemeData(style: FilledButton.styleFrom(backgroundColor: kInk, foregroundColor: kOnInk, shape: const StadiumBorder(), minimumSize: const Size(0, 46)))
+        : null,
+    elevatedButtonTheme: isCloud
+        ? ElevatedButtonThemeData(style: ElevatedButton.styleFrom(backgroundColor: kInk, foregroundColor: kOnInk, elevation: 0, shape: const StadiumBorder()))
+        : null,
+    outlinedButtonTheme: isCloud
+        ? OutlinedButtonThemeData(style: OutlinedButton.styleFrom(foregroundColor: p.text, side: BorderSide(color: p.text), shape: const StadiumBorder()))
+        : null,
+    textButtonTheme: isCloud ? TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: p.text, shape: const StadiumBorder())) : null,
+    chipTheme: isCloud
+        ? ChipThemeData(
+            shape: StadiumBorder(side: BorderSide(color: p.line)),
+            backgroundColor: Colors.transparent,
+            selectedColor: kInk,
+            labelStyle: TextStyle(color: p.text, fontWeight: FontWeight.w500),
+            secondaryLabelStyle: TextStyle(color: kOnInk, fontWeight: FontWeight.w600),
+            checkmarkColor: kOnInk,
+          )
+        : null,
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
       TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),

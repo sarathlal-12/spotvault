@@ -218,7 +218,7 @@ class _RewindCard extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   borderRadius: const BorderRadius.vertical(top: Radius.circular(6), bottom: Radius.circular(3)),
                                   gradient: i == 6
-                                      ? const LinearGradient(
+                                      ? LinearGradient(
                                           colors: [kEmber, kViolet], begin: Alignment.topCenter, end: Alignment.bottomCenter)
                                       : null,
                                   color: i == 6 ? null : kViolet.withValues(alpha: pal.dark ? 0.30 : 0.22),

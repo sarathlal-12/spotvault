@@ -100,8 +100,9 @@ class LookCard extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [
-          chip('Minimal', isMinimal, () => _style('minimal')),
+          chip('Minimal', isMinimal && !isCloud, () => _style('minimal')),
           chip('Crimson', !isMinimal, () => _style('crimson')),
+          chip('Cloud', isCloud, () => _style('cloud')),
           const SizedBox(width: 6),
           chip('Dark', darkMode.value, () => setDarkMode(true)),
           chip('Light', !darkMode.value, () => setDarkMode(false)),

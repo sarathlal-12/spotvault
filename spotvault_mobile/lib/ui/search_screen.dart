@@ -320,7 +320,7 @@ class _SearchScreenState extends State<SearchScreen> {
           Text('Not on this phone yet', style: TextStyle(color: kMuted)),
           const SizedBox(height: 12),
           FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: kOnInk),
             onPressed: () {
               setState(() => mode = _Mode.online);
               _runOnline();
@@ -440,10 +440,10 @@ class _SearchScreenState extends State<SearchScreen> {
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(gradient: kBrandGradient, borderRadius: BorderRadius.circular(99)),
-        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.check_rounded, size: 16, color: Colors.white),
-          SizedBox(width: 4),
-          Text('Saved', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.check_rounded, size: 16, color: kOnInk),
+          const SizedBox(width: 4),
+          Text('Saved', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnInk)),
         ]),
       );
     } else {
@@ -595,10 +595,10 @@ class _ModeSwitch extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(icon, size: 18, color: online == value ? Colors.white : kMuted),
+                    Icon(icon, size: 18, color: online == value ? kOnInk : kMuted),
                     const SizedBox(width: 6),
                     Text(label,
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: online == value ? Colors.white : kMuted)),
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: online == value ? kOnInk : kMuted)),
                   ],
                 ),
               ),

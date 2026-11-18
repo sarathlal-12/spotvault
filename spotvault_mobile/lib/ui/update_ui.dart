@@ -72,7 +72,7 @@ Future<void> _showUpdateDialog(BuildContext context, UpdateInfo info) async {
         TextButton(onPressed: () => Navigator.pop(ctx, 'skip'), child: Text('Skip', style: TextStyle(color: kMuted))),
         TextButton(onPressed: () => Navigator.pop(ctx, 'later'), child: const Text('Later')),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: Colors.white),
+          style: FilledButton.styleFrom(backgroundColor: kAccent, foregroundColor: kOnInk),
           onPressed: () => Navigator.pop(ctx, 'update'),
           child: const Text('Update'),
         ),

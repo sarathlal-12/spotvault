@@ -414,11 +414,12 @@ class _PulseDotState extends State<PulseDot> with SingleTickerProviderStateMixin
 
 /// Header title in the app's display style.
 TextStyle displayStyle(double size) => TextStyle(
-      fontFamily: kDisplayFont,
-      fontFamilyFallback: kDisplayFallback,
+      // Cloud uses the clean system sans instead of the serif.
+      fontFamily: isCloud ? null : kDisplayFont,
+      fontFamilyFallback: isCloud ? null : kDisplayFallback,
       fontSize: size,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.3,
+      fontWeight: isCloud ? FontWeight.w800 : FontWeight.w700,
+      letterSpacing: isCloud ? -0.8 : -0.3,
       height: 1.1,
       color: kText,
     );
@@ -471,8 +472,8 @@ class GradientButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (icon != null) ...[Icon(icon, color: Colors.white, size: 20), const SizedBox(width: 8)],
-                Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                if (icon != null) ...[Icon(icon, color: kOnInk, size: 20), const SizedBox(width: 8)],
+                Text(label, style: TextStyle(color: kOnInk, fontWeight: FontWeight.w700, fontSize: 15)),
               ],
             ),
           ),
@@ -480,4 +481,20 @@ class GradientButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A heading. In the Cloud look the first word is bold and the rest light
+/// ("**Your** playlists"); other looks show it as is.
+Widget splitTitle(String text, TextStyle style, {int? maxLines, TextOverflow? overflow}) {
+  final i = text.indexOf(' ');
+  if (!isCloud || i <= 0) return Text(text, style: style, maxLines: maxLines, overflow: overflow);
+  return Text.rich(
+    TextSpan(children: [
+      TextSpan(text: text.substring(0, i), style: const TextStyle(fontWeight: FontWeight.w800)),
+      TextSpan(text: text.substring(i), style: const TextStyle(fontWeight: FontWeight.w300)),
+    ]),
+    style: style,
+    maxLines: maxLines,
+    overflow: overflow,
+  );
 }

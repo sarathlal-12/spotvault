@@ -608,7 +608,7 @@ class _RingPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
-      ..shader = const SweepGradient(
+      ..shader = SweepGradient(
         colors: [Colors.transparent, Colors.transparent, kEmber, kViolet, Colors.transparent],
         stops: [0, 0.55, 0.75, 0.9, 1],
       ).createShader(rect);
@@ -674,16 +674,16 @@ class _PlayButton extends StatelessWidget {
               height: 76,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(colors: [kEmber, kViolet], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                gradient: LinearGradient(colors: [kEmber, kViolet], begin: Alignment.topLeft, end: Alignment.bottomRight),
                 boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.55), blurRadius: 30, offset: const Offset(0, 12))],
               ),
               child: buffering
-                  ? const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
+                  ? Padding(padding: const EdgeInsets.all(24), child: CircularProgressIndicator(strokeWidth: 3, color: kOnInk))
                   : AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
                       transitionBuilder: (c, a) =>
                           RotationTransition(turns: Tween(begin: 0.75, end: 1.0).animate(a), child: ScaleTransition(scale: a, child: c)),
-                      child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, key: ValueKey(playing), size: 40, color: Colors.white),
+                      child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, key: ValueKey(playing), size: 40, color: kOnInk),
                     ),
             ),
           ),

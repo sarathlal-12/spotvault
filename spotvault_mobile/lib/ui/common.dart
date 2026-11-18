@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import 'wave_shape.dart';
 import '../library_store.dart';
 import 'aurora.dart';
 import 'menus.dart';
@@ -28,7 +29,7 @@ class ArtImage extends StatelessWidget {
           // Minimal look: calm greys; Crimson: the brand gradient.
           colors: isMinimal
               ? (pal.dark ? const [Color(0xFF2A2A2D), Color(0xFF55524E)] : const [Color(0xFFB9B5AE), Color(0xFF8E8B86)])
-              : [kViolet.withValues(alpha: 0.75), kForest.withValues(alpha: 0.85)],
+              : [const Color(0xFFA31C1B).withValues(alpha: 0.75), kForest.withValues(alpha: 0.85)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -37,9 +38,7 @@ class ArtImage extends StatelessWidget {
       child: Icon(fallback, color: Colors.white.withValues(alpha: 0.9), size: size * 0.42),
     );
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: file == null
+    final Widget img = file == null
           ? placeholder
           : Image.file(
               file!,
@@ -49,8 +48,12 @@ class ArtImage extends StatelessWidget {
               cacheWidth: (size * dpr).round(),
               gaplessPlayback: true,
               errorBuilder: (_, __, ___) => placeholder,
-            ),
-    );
+            );
+    // Cloud look: big covers get the wavy shape, small ones are round.
+    if (isCloud) {
+      return size >= 72 ? ClipPath(clipper: const WaveClipper(), child: img) : ClipOval(child: img);
+    }
+    return ClipRRect(borderRadius: BorderRadius.circular(radius), child: img);
   }
 }
 

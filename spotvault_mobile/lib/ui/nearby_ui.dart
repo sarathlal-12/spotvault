@@ -646,7 +646,7 @@ class _JamScreenState extends State<JamScreen> {
               IconButton.filled(
                 iconSize: 40,
                 tooltip: playing ? 'Pause' : 'Play',
-                style: IconButton.styleFrom(backgroundColor: kViolet, foregroundColor: Colors.white),
+                style: IconButton.styleFrom(backgroundColor: kViolet, foregroundColor: kOnInk),
                 icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
                 onPressed: () => control(playing ? 'pause' : 'play'),
               ),
@@ -954,7 +954,7 @@ class _ModeCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(gradient: kBrandGradient, borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, color: Colors.white),
+              child: Icon(icon, color: kOnInk),
             ),
             const SizedBox(width: 14),
             Expanded(

@@ -111,19 +111,20 @@ class _TrackListScreenState extends State<TrackListScreen> {
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(26),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: pal.dark ? 0.4 : 0.16), blurRadius: 30, offset: const Offset(0, 14))
-                  ],
+                  // Cloud's wavy cover has no square shadow behind it.
+                  boxShadow: isCloud
+                      ? null
+                      : [BoxShadow(color: Colors.black.withValues(alpha: pal.dark ? 0.4 : 0.16), blurRadius: 30, offset: const Offset(0, 14))],
                 ),
                 child: ArtImage(file: cover, size: 132, radius: 26, fallback: widget.icon),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(reordering ? 'Drag to reorder' : title,
+                  splitTitle(reordering ? 'Drag to reorder' : title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.5, height: 1.1, color: kText)),
+                      TextStyle(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.5, height: 1.1, color: kText)),
                   const SizedBox(height: 4),
                   Text('${tracks.length} songs · ${formatDuration(total)}', style: TextStyle(color: kMuted, fontSize: 13)),
                   const SizedBox(height: 12),
@@ -276,7 +277,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
                               shape: BoxShape.circle,
                               boxShadow: [BoxShadow(color: kViolet.withValues(alpha: 0.5), blurRadius: 22, offset: const Offset(0, 8))],
                             ),
-                            child: const Icon(Icons.play_arrow_rounded, size: 34, color: Colors.white, semanticLabel: 'Play all'),
+                            child: Icon(Icons.play_arrow_rounded, size: 34, color: kOnInk, semanticLabel: 'Play all'),
                           ),
                         ),
                       ],
@@ -305,8 +306,8 @@ class _TrackListScreenState extends State<TrackListScreen> {
                             Container(
                               width: 32,
                               height: 32,
-                              decoration: const BoxDecoration(color: Color(0xFFE0403B), shape: BoxShape.circle),
-                              child: const Icon(Icons.add_rounded, color: Colors.white, size: 18),
+                              decoration: BoxDecoration(color: isCloud ? kInk : const Color(0xFFE0403B), shape: BoxShape.circle),
+                              child: Icon(Icons.add_rounded, color: kOnInk, size: 18),
                             ),
                             const SizedBox(width: 12),
                             Expanded(child: Text('Add songs from the web', style: TextStyle(color: kText, fontWeight: FontWeight.w600))),

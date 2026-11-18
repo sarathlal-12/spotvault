@@ -70,8 +70,8 @@ class MinimalHome extends StatelessWidget {
                       Container(
                         width: 44,
                         height: 44,
-                        decoration: const BoxDecoration(color: Color(0xFFE0403B), shape: BoxShape.circle),
-                        child: const Icon(Icons.groups_rounded, color: Colors.white, size: 22),
+                        decoration: BoxDecoration(color: isCloud ? p.bg : const Color(0xFFE0403B), shape: BoxShape.circle),
+                        child: Icon(Icons.groups_rounded, color: isCloud ? p.text : Colors.white, size: 22),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -106,7 +106,7 @@ class MinimalHome extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Row(children: [
-                  Expanded(child: Text('Your playlists', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: p.text))),
+                  Expanded(child: splitTitle('Your playlists', TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: p.text))),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: p.text,
@@ -163,7 +163,7 @@ class MinimalHome extends StatelessWidget {
             if (recent.isNotEmpty) ...[
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(20, 28, 20, 6),
-                sliver: SliverToBoxAdapter(child: Text('Recently played', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: p.text))),
+                sliver: SliverToBoxAdapter(child: splitTitle('Recently played', TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: p.text))),
               ),
               SliverList.builder(
                 itemCount: recent.length,

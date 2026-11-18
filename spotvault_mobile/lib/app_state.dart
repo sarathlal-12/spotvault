@@ -92,15 +92,20 @@ const Palette kLightPalette = Palette(
 
 /// Brand colours that stay the same in both themes.
 /// (Names kept from the first design so every screen picks up the new skin.)
-const Color kViolet = Color(0xFFA31C1B); // crimson red: buttons, fills, glow
-const Color kEmber = Color(0xFFD9443F); // brighter crimson for gradients
+// In the Cloud look these become ink (black on light, off-white on dark).
+Color get kViolet => isCloud ? kInk : const Color(0xFFA31C1B); // crimson red: buttons, fills, glow
+Color get kEmber => isCloud ? kInk : const Color(0xFFD9443F); // brighter crimson for gradients
+/// Cloud's button colour, and the colour of text and icons on it.
+Color get kInk => pal.dark ? const Color(0xFFECEBE7) : const Color(0xFF111111);
+Color get kOnInk => isCloud ? (pal.dark ? const Color(0xFF111111) : const Color(0xFFF2F1ED)) : Colors.white;
 const Color kCyan = Color(0xFF9CC5B0); // sage green: second accent
 const Color kForest = Color(0xFF2F6B52); // deep green for glows
 const Color kPink = Color(0xFFF0605A); // likes and Moments
 const Color kDanger = Color(0xFFF43F5E);
 /// Crimson gradient (Crimson look) or a flat crimson accent (Minimal look).
-LinearGradient get kBrandGradient =>
-    isMinimal ? const LinearGradient(colors: [Color(0xFFD63A35), Color(0xFFD63A35)]) : const LinearGradient(colors: [kViolet, kEmber]);
+LinearGradient get kBrandGradient => isCloud
+    ? LinearGradient(colors: [kInk, kInk])
+    : isMinimal ? const LinearGradient(colors: [Color(0xFFD63A35), Color(0xFFD63A35)]) : LinearGradient(colors: [kViolet, kEmber]);
 
 /// Serif display type, like the brand headline. System fonts only, so the
 /// app works offline: Georgia on iPhone, the system serif on Android.
@@ -142,16 +147,56 @@ const Palette kMinimalLight = Palette(
   orbB: Color(0x00000000),
 );
 
+// ---------------------------------------------------------------------------
+// "Cloud" palette (2.2.1): soft grey, black pill buttons, wavy covers.
+// The dark version is charcoal with off-white pills.
+// ---------------------------------------------------------------------------
+const Palette kCloudLight = Palette(
+  dark: false,
+  bg: Color(0xFFDEDDD9),
+  surface: Color(0xFFF2F1ED),
+  card: Color(0xFFE9E8E4),
+  raised: Color(0xFFF2F1ED),
+  text: Color(0xFF111111),
+  muted: Color(0xFF55544F),
+  accent: Color(0xFF111111),
+  line: Color(0xFFC4C3BE),
+  track: Color(0xFFCDCCC7),
+  glass: Color(0xB3F2F1ED),
+  orbA: Color(0x00000000),
+  orbB: Color(0x00000000),
+);
+
+const Palette kCloudDark = Palette(
+  dark: true,
+  bg: Color(0xFF1B1B1A),
+  surface: Color(0xFF262624),
+  card: Color(0xFF2C2C2A),
+  raised: Color(0xFF323230),
+  text: Color(0xFFECEBE7),
+  muted: Color(0xFFA9A8A3),
+  accent: Color(0xFFECEBE7),
+  line: Color(0xFF42423F),
+  track: Color(0xFF3A3A37),
+  glass: Color(0x0FFFFFFF),
+  orbA: Color(0x00000000),
+  orbB: Color(0x00000000),
+);
+
 /// The theme in use. Changing it repaints the whole app (see main.dart).
 final ValueNotifier<bool> darkMode = ValueNotifier<bool>(true);
 
-/// 'crimson' (the 1.x look) or 'minimal' (2.0's calm look).
+/// 'crimson' (the 1.x look), 'minimal' (2.0's calm look) or 'cloud' (2.2.1).
 final ValueNotifier<String> themeStyle = ValueNotifier<String>('minimal');
+/// Cloud builds on the Minimal layouts, so it counts as minimal too.
 bool get isMinimal => themeStyle.value != 'crimson';
+bool get isCloud => themeStyle.value == 'cloud';
 
 Palette paletteFor(bool dark, String style) => style == 'crimson'
     ? (dark ? kDarkPalette : kLightPalette)
-    : (dark ? kMinimalDark : kMinimalLight);
+    : style == 'cloud'
+        ? (dark ? kCloudDark : kCloudLight)
+        : (dark ? kMinimalDark : kMinimalLight);
 Palette get pal => paletteFor(darkMode.value, themeStyle.value);
 
 /// Morning, afternoon or evening.

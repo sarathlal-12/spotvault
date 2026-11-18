@@ -1,8 +1,10 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import 'wave_shape.dart';
 
 /// First start (and once after updating to 2.0): your name and a look.
 class WelcomeScreen extends StatefulWidget {
@@ -69,10 +71,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 const SizedBox(height: 4),
                 Text('You can change it any time in Settings.', style: TextStyle(color: p.muted, fontSize: 13)),
                 const SizedBox(height: 14),
-                Row(children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Expanded(child: _LookCard(title: 'Minimal', sub: 'Calm grey and black', style: 'minimal', selected: style == 'minimal', onTap: () => _pick('minimal'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _LookCard(title: 'Crimson', sub: 'The classic SpotVault look', style: 'crimson', selected: style == 'crimson', onTap: () => _pick('crimson'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: _LookCard(title: 'Crimson', sub: 'The classic look', style: 'crimson', selected: style == 'crimson', onTap: () => _pick('crimson'))),
+                  // Cloud is phone-only for now (Windows gets it in a later update).
+                  if (!Platform.isWindows) const SizedBox(width: 10),
+                  if (!Platform.isWindows) Expanded(child: _LookCard(title: 'Cloud', sub: 'Soft grey, wavy covers', style: 'cloud', selected: style == 'cloud', onTap: () => _pick('cloud'))),
                 ]),
                 const SizedBox(height: 32),
                 FilledButton(
@@ -94,6 +99,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       ),
     );
   }
+}
+
+/// A tiny cover in the look's shape: wavy for Cloud, rounded squares otherwise.
+Widget _swatch(Palette look, String style) {
+  final box = Container(width: 22, height: 22, decoration: BoxDecoration(color: style == 'cloud' ? look.muted : look.card, borderRadius: BorderRadius.circular(6)));
+  return style == 'cloud' ? ClipPath(clipper: const WaveClipper(amp: 0.06), child: box) : box;
 }
 
 class _LookCard extends StatelessWidget {
@@ -134,19 +145,19 @@ class _LookCard extends StatelessWidget {
               ),
               padding: const EdgeInsets.all(10),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(width: 46, height: 6, decoration: BoxDecoration(color: look.text, borderRadius: BorderRadius.circular(3))),
+                Container(width: 40, height: 6, decoration: BoxDecoration(color: look.text, borderRadius: BorderRadius.circular(3))),
                 const SizedBox(height: 6),
                 Container(width: 30, height: 5, decoration: BoxDecoration(color: look.muted, borderRadius: BorderRadius.circular(3))),
                 const Spacer(),
                 Row(children: [
-                  Container(width: 26, height: 26, decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(7))),
+                  _swatch(look, style),
                   const SizedBox(width: 6),
-                  Container(width: 26, height: 26, decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(7))),
+                  _swatch(look, style),
                   const Spacer(),
                   Container(
                     width: 26,
                     height: 26,
-                    decoration: BoxDecoration(color: style == 'crimson' ? kViolet : look.text, shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: style == 'crimson' ? const Color(0xFFA31C1B) : look.text, shape: BoxShape.circle),
                     child: Icon(Icons.play_arrow_rounded, size: 16, color: style == 'crimson' ? Colors.white : look.bg),
                   ),
                 ]),

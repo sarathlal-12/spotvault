@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../app_state.dart';
+import '../ui/wave_shape.dart';
 import '../library_store.dart';
 import '../lyrics_service.dart';
 import '../player_service.dart' show SleepMode;
@@ -328,7 +329,7 @@ class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMix
           child: Padding(
             padding: EdgeInsets.all(widget.inset),
             child: ClipPath(
-              clipper: _WaveClipper(),
+              clipper: const WaveClipper(),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 child: art == null
@@ -343,26 +344,6 @@ class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMix
   }
 }
 
-Path _wave(Size s, double inset, {double amp = 0.022, int lobes = 9}) {
-  final c = Offset(s.width / 2, s.height / 2);
-  final r = s.shortestSide / 2 - inset;
-  final path = Path();
-  for (var i = 0; i <= 240; i++) {
-    final a = i / 240 * math.pi * 2 - math.pi / 2;
-    final rr = r * (1 - amp + amp * math.cos(lobes * (a + math.pi / 2)));
-    final pt = c + Offset(math.cos(a), math.sin(a)) * rr;
-    i == 0 ? path.moveTo(pt.dx, pt.dy) : path.lineTo(pt.dx, pt.dy);
-  }
-  return path..close();
-}
-
-class _WaveClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) => _wave(size, 0, amp: 0.035);
-  @override
-  bool shouldReclip(_WaveClipper old) => false;
-}
-
 class _RingPainter extends CustomPainter {
   final double v;
   final Color fg, bg, dot;
@@ -370,7 +351,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = _wave(size, 8);
+    final path = wavePath(size, 8);
     canvas.drawPath(path, Paint()..color = bg..style = PaintingStyle.stroke..strokeWidth = 2);
     final metric = path.computeMetrics().first;
     final len = metric.length * v;
