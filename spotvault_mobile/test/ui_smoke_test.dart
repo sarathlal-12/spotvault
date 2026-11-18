@@ -44,6 +44,7 @@ void main() {
       expect(find.textContaining('Govind Vasantha', findRichText: true), findsOneWidget);
       // Phones show more cards above it (Car mode, Song list), so scroll to it.
       await tester.scrollUntilVisible(find.text('Smart Sleep'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.pump(const Duration(seconds: 2)); // let the cards' fade-in delays finish
       expect(find.text('Smart Sleep'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
