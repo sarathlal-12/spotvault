@@ -8,7 +8,8 @@ import 'engine_client.dart';
 class DesktopTrendingBackend implements TrendingBackend {
   @override
   Future<Map<String, dynamic>> load(String country, String chart) =>
-      loadTrending(() => engine.trending(country: country, chart: chart), country, chart);
+      loadTrending(() => engine.trending(country: country, chart: chart), country, chart,
+          fromDownloaderFor: (c) => engine.trending(country: country, chart: c));
 
   @override
   Future<Uri> previewUri(Map<String, dynamic> s) async => engine.streamFor(s);

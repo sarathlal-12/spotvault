@@ -41,7 +41,8 @@ Future<List<Map<String, dynamic>>> appleTopSongs(String country) async {
 
 /// Charts list (YouTube Music lists come from the downloader) plus the songs of
 /// [chart]; the Apple chart always loads even if the downloader can't answer.
-Future<Map<String, dynamic>> loadTrending(Future<Map<String, dynamic>> Function() fromDownloader, String country, String chart) async {
+Future<Map<String, dynamic>> loadTrending(Future<Map<String, dynamic>> Function() fromDownloader, String country, String chart,
+    {required Future<Map<String, dynamic>> Function(String chart) fromDownloaderFor}) async {
   Map<String, dynamic>? j;
   Object? err;
   try {
@@ -54,7 +55,16 @@ Future<Map<String, dynamic>> loadTrending(Future<Map<String, dynamic>> Function(
     return j;
   }
   final charts = (j?['charts'] as List?) ?? const [{'id': 'apple', 'title': 'Apple Music Top 50'}];
-  return {'charts': charts, 'songs': await appleTopSongs(country)};
+  try {
+    return {'charts': charts, 'songs': await appleTopSongs(country)};
+  } catch (e) {
+    // Apple's chart can't be reached (some networks block it): show the first
+    // YouTube Music chart instead, so the tab is never empty.
+    final yt = charts.cast<Map>().where((c) => '${c['id']}'.startsWith('yt:')).toList();
+    if (yt.isEmpty) rethrow;
+    final alt = await fromDownloaderFor('${yt.first['id']}');
+    return {...alt, 'charts': charts, 'chart': '${yt.first['id']}'};
+  }
 }
 
 String countryName(String code) => kChartCountries.where((c) => c.$1 == code).firstOrNull?.$2 ?? code;
@@ -76,7 +86,8 @@ String songKey(Map<String, dynamic> s) {
 class PhoneTrendingBackend implements TrendingBackend {
   @override
   Future<Map<String, dynamic>> load(String country, String chart) =>
-      loadTrending(() => pcLink.trending(country: country, chart: chart), country, chart);
+      loadTrending(() => pcLink.trending(country: country, chart: chart), country, chart,
+          fromDownloaderFor: (c) => pcLink.trending(country: country, chart: c));
 
   /// Apple chart songs have no link: find the best match by name first.
   Future<OnlineSong> _resolve(Map<String, dynamic> s) async {
@@ -136,6 +147,7 @@ class _TrendingViewState extends State<TrendingView> {
       if (!mounted) return;
       setState(() {
         charts = [for (final c in (j['charts'] as List? ?? const [])) (c as Map).cast<String, dynamic>()];
+        if (j['chart'] is String) chart = j['chart'] as String;
         songs = [for (final s in (j['songs'] as List? ?? const [])) (s as Map).cast<String, dynamic>()];
       });
     } catch (e) {
