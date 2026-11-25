@@ -62,6 +62,7 @@ class EngineClient extends ChangeNotifier {
     try {
       final exe = candidates.where((f) => f.existsSync()).firstOrNull;
       if (exe != null) {
+        await _clearLeftoverEngine();
         _proc = await Process.start(exe.path, const [], workingDirectory: exeDir.path, environment: env);
       } else {
         // Development: python src/engine.py, run from the repository root.
@@ -73,7 +74,7 @@ class EngineClient extends ChangeNotifier {
       unawaited(_proc!.exitCode.then((code) {
         if (!ready) {
           error = code == 2
-              ? 'SpotVault is already running (or another app uses port $port). Close the old SpotVault window and try again.'
+              ? 'Another app is using port $port, so the downloader could not start. Close that app and reopen SpotVault.'
               : 'The downloader stopped (code $code).';
           notifyListeners();
         }
@@ -88,6 +89,28 @@ class EngineClient extends ChangeNotifier {
       await refresh();
     }
     _timer = Timer.periodic(const Duration(milliseconds: 700), (_) => refresh());
+  }
+
+  /// An engine from an earlier run that didn't quit (it holds port 50505 and
+  /// would block this launch): end it first.
+  Future<void> _clearLeftoverEngine() async {
+    Future<bool> portFree() async {
+      try {
+        final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+        await s.close();
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (await portFree()) return;
+    try {
+      await Process.run('taskkill', ['/F', '/T', '/IM', 'SpotVaultEngine.exe']);
+    } catch (_) {}
+    for (var i = 0; i < 20 && !await portFree(); i++) {
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
   }
 
   Future<void> refresh() async {
@@ -134,6 +157,14 @@ class EngineClient extends ChangeNotifier {
     final j = jsonDecode(r.body) as Map<String, dynamic>;
     if (r.statusCode != 200) throw Exception('${j['error'] ?? "Couldn't read that playlist"}');
     return [for (final t in (j['tracks'] as List? ?? const [])) (t as Map).cast<String, dynamic>()];
+  }
+
+  /// Trending charts: {"charts": [{id, title}], "songs": [{title, artist, art, url, secs}]}.
+  Future<Map<String, dynamic>> trending({String country = 'IN', String chart = 'apple'}) async {
+    final r = await http.get(_u('/api/trending', {'country': country, 'chart': chart}), headers: _h).timeout(const Duration(seconds: 40));
+    final j = (jsonDecode(r.body) as Map).cast<String, dynamic>();
+    if (r.statusCode != 200) throw Exception('${j['error'] ?? "Couldn't load the chart"}');
+    return j;
   }
 
   /// A stream of one online song: its link, or (Spotify) the best match for its name.

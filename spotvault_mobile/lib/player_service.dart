@@ -285,6 +285,32 @@ class PlayerService extends ChangeNotifier {
     _persist();
   }
 
+  /// Drag-to-reorder in the queue. [from] and [to] are positions in the order
+  /// songs will play (what the queue shows). With shuffle on (phones), the
+  /// shuffled order is kept as the real order so the drag sticks; shuffle then
+  /// shows as off because songs play exactly as listed.
+  Future<void> moveInQueue(int from, int to) async {
+    if (from == to) return;
+    final order = playOrder;
+    if (from < 0 || to < 0 || from >= order.length || to >= order.length) return;
+    final shuffledHere = !_listShuffle && player.shuffleModeEnabled;
+    if (!shuffledHere && !_listShuffle) return move(order[from], order[to]);
+    // Windows (its mpv list is the play order) and shuffled phones: rebuild.
+    final seq = player.sequence;
+    final list = [for (final i in order) if (i < seq.length) trackById((seq[i].tag as MediaItem).id)].whereType<Track>().toList();
+    if (list.length != order.length) return;
+    final cur = current;
+    list.insert(to, list.removeAt(from));
+    final pos = player.position;
+    final playing = player.playing;
+    if (shuffledHere) await player.setShuffleModeEnabled(false);
+    await player.setAudioSources([for (final t in list) _source(t)],
+        initialIndex: cur == null ? 0 : list.indexWhere((t) => t.id == cur.id).clamp(0, list.length - 1), initialPosition: pos, shuffleOrder: _newOrder());
+    if (playing) player.play();
+    _persist();
+    notifyListeners();
+  }
+
   Future<void> jumpTo(int index) async {
     await player.seek(Duration.zero, index: index);
     player.play();
@@ -302,6 +328,22 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> next() => player.seekToNext();
+
+  /// Jump forward or back inside the song (the 10-second buttons and double-tap).
+  Future<void> seekBy(Duration d) async {
+    var to = player.position + d;
+    final len = player.duration;
+    if (to < Duration.zero) to = Duration.zero;
+    if (len != null && to > len - const Duration(seconds: 1)) to = len - const Duration(seconds: 1);
+    await player.seek(to < Duration.zero ? Duration.zero : to);
+  }
+
+  /// Jump to a fraction (0..1) of the song (the Focus player's draggable ring).
+  Future<void> seekToFraction(double f) async {
+    final len = player.duration;
+    if (len == null || len == Duration.zero) return;
+    await player.seek(len * f.clamp(0.0, 0.995));
+  }
 
   Future<void> toggleShuffle() async {
     if (onlineList) return; // an online playlist plays in its own order

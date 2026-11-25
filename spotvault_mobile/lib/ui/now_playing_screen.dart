@@ -6,6 +6,7 @@ import 'package:audio_service/audio_service.dart' show MediaItem;
 
 import '../desktop/desktop_player.dart' show WavyCover;
 import '../app_state.dart';
+import 'seek_controls.dart';
 import '../library_store.dart';
 import '../player_service.dart';
 import 'aurora.dart';
@@ -84,12 +85,12 @@ class NowPlayingScreen extends StatelessWidget {
                           if (v < -300) playerService.next();
                           if (v > 300) playerService.previous();
                         },
-                        onDoubleTap: () => store.toggleLike(t.id),
                         child: LayoutBuilder(
                           builder: (_, c) {
                             final maxH = MediaQuery.sizeOf(context).height * 0.38;
                             final side = math.min(c.maxWidth - 24, maxH);
-                            return _GlowingArt(track: t, side: side, playing: p.playing);
+                            // Double-tap left / right half: back / forward 10 s.
+                            return DoubleTapSeek(child: _GlowingArt(track: t, side: side, playing: p.playing));
                           },
                         ),
                       ),
@@ -125,25 +126,31 @@ class NowPlayingScreen extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           IconButton(
+                            visualDensity: VisualDensity.compact,
                             tooltip: playerService.shuffleOn ? 'Shuffle on' : 'Shuffle off',
                             iconSize: 24,
                             icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? kAccent : kMuted),
                             onPressed: playerService.toggleShuffle,
                           ),
                           IconButton(
+                            visualDensity: VisualDensity.compact,
                             tooltip: 'Previous',
-                            iconSize: 38,
+                            iconSize: 34,
                             icon: Icon(Icons.skip_previous_rounded, color: kText),
                             onPressed: playerService.previous,
                           ),
+                          const SeekTenButton(forward: false),
                           _PlayButton(player: p),
+                          const SeekTenButton(forward: true),
                           IconButton(
+                            visualDensity: VisualDensity.compact,
                             tooltip: 'Next',
-                            iconSize: 38,
+                            iconSize: 34,
                             icon: Icon(Icons.skip_next_rounded, color: kText),
                             onPressed: playerService.next,
                           ),
                           IconButton(
+                            visualDensity: VisualDensity.compact,
                             tooltip: switch (p.loopMode) { LoopMode.off => 'Repeat off', LoopMode.all => 'Repeat all', LoopMode.one => 'Repeat one' },
                             iconSize: 24,
                             icon: Icon(
@@ -260,19 +267,18 @@ class _MinimalPlayer extends StatelessWidget {
                       if (v < -300) playerService.next();
                       if (v > 300) playerService.previous();
                     },
-                    onDoubleTap: () => store.toggleLike(t.id),
                     child: SizedBox(
                       width: side,
                       height: side,
-                      child: Hero(
+                      child: DoubleTapSeek(child: Hero(
                         tag: 'art',
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 450),
                           transitionBuilder: (c, a) =>
                               FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: c)),
-                          child: WavyCover(key: ValueKey(t.id), track: t, inset: 18),
+                          child: WavyCover(key: ValueKey(t.id), track: t, inset: 18, seekable: focus),
                         ),
-                      ),
+                      )),
                     ),
                   );
                 }),
@@ -296,15 +302,17 @@ class _MinimalPlayer extends StatelessWidget {
             SizedBox(height: focus ? 18 : 6),
             if (!focus) Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: _SlimSeek(player: player)),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 IconButton(
+                  visualDensity: VisualDensity.compact,
                   tooltip: switch (player.loopMode) { LoopMode.off => 'Repeat off', LoopMode.all => 'Repeat all', LoopMode.one => 'Repeat one' },
                   icon: Icon(player.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
                       color: player.loopMode == LoopMode.off ? p.text : const Color(0xFFE0403B)),
                   onPressed: playerService.cycleLoop,
                 ),
-                IconButton(tooltip: 'Previous', iconSize: 30, icon: Icon(Icons.skip_previous_rounded, color: p.text), onPressed: playerService.previous),
+                IconButton(visualDensity: VisualDensity.compact, tooltip: 'Previous', iconSize: 30, icon: Icon(Icons.skip_previous_rounded, color: p.text), onPressed: playerService.previous),
+                const SeekTenButton(forward: false),
                 StreamBuilder<PlayerState>(
                   stream: player.playerStateStream,
                   builder: (context, s) {
@@ -315,8 +323,8 @@ class _MinimalPlayer extends StatelessWidget {
                       child: Pressable(
                         onTap: playerService.togglePlay,
                         child: Container(
-                          width: 72,
-                          height: 72,
+                          width: 66,
+                          height: 66,
                           decoration: BoxDecoration(color: p.text, shape: BoxShape.circle),
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 180),
@@ -328,8 +336,10 @@ class _MinimalPlayer extends StatelessWidget {
                     );
                   },
                 ),
-                IconButton(tooltip: 'Next', iconSize: 30, icon: Icon(Icons.skip_next_rounded, color: p.text), onPressed: playerService.next),
+                const SeekTenButton(forward: true),
+                IconButton(visualDensity: VisualDensity.compact, tooltip: 'Next', iconSize: 30, icon: Icon(Icons.skip_next_rounded, color: p.text), onPressed: playerService.next),
                 IconButton(
+                  visualDensity: VisualDensity.compact,
                   tooltip: playerService.shuffleOn ? 'Shuffle on' : 'Shuffle off',
                   icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? const Color(0xFFE0403B) : p.text),
                   onPressed: playerService.toggleShuffle,
@@ -1114,7 +1124,6 @@ class _QueueList extends StatelessWidget {
         final order = playerService.playOrder;
         final start = order.contains(cur) ? order.indexOf(cur) : 0;
         final shown = order.sublist(start);
-        final canDrag = !playerService.shuffleOn;
         return Column(
           children: [
             Padding(
@@ -1126,11 +1135,11 @@ class _QueueList extends StatelessWidget {
                 ],
               ),
             ),
-            if (playerService.shuffleOn)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('Shuffle is on: songs play in random order', style: TextStyle(color: kMuted, fontSize: 12)),
-              ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(playerService.shuffleOn ? 'Shuffle is on. Drag a song to set the order yourself.' : 'Drag the handle to change the order',
+                  style: TextStyle(color: kMuted, fontSize: 12)),
+            ),
             Expanded(
               child: ReorderableListView.builder(
                 scrollController: scroll,
@@ -1138,7 +1147,8 @@ class _QueueList extends StatelessWidget {
                 itemCount: shown.length,
                 // Shuffle off: the shown list is the sequence from the current song on.
                 onReorderItem: (from, to) {
-                  if (canDrag && from > 0 && to > 0) playerService.move(start + from, start + to);
+                  // Position 0 is the song playing now; it stays on top.
+                  if (from > 0 && to > 0) playerService.moveInQueue(start + from, start + to);
                 },
                 itemBuilder: (_, pos) {
                   final i = shown[pos];
@@ -1162,9 +1172,7 @@ class _QueueList extends StatelessWidget {
                       subtitle: Text(item.artist ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: kMuted)),
                       trailing: isCur
                           ? EqBars(color: kAccent, height: 14, bars: 3, playing: p.playing)
-                          : canDrag
-                              ? ReorderableDragStartListener(index: pos, child: Icon(Icons.drag_handle_rounded, color: kMuted))
-                              : null,
+                          : ReorderableDragStartListener(index: pos, child: Icon(Icons.drag_handle_rounded, color: kMuted)),
                       onTap: () => playerService.jumpTo(i),
                     ),
                   );

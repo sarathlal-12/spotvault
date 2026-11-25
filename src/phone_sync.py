@@ -12,6 +12,7 @@ in the "Phone Sync" window), then pulls the library over HTTP:
     GET /api/preview?url=<song>     stream a search result for a listen (needs PIN)
     GET /api/preview?q=<title artist>  stream the best match for a song name (needs PIN)
     GET /api/tracks?url=<playlist>  the songs of a playlist, for Play online (needs PIN)
+    GET /api/trending?country=IN&chart=apple  top songs charts (needs PIN)
     POST /api/download              {"url", "folder"}: the PC downloads a song into a
                                     playlist folder, returns {"job"} (needs PIN)
     GET /api/job?id=<job>           download state: queued/working/done/failed (needs PIN)
@@ -256,6 +257,15 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send_json(200, {"tracks": sources.list_tracks(query.get("url", [""])[0])})
                 except Exception as e:
                     return self._error(502, f"Couldn't read that playlist ({type(e).__name__})")
+            if route == "/api/trending":
+                import sources
+                country = query.get("country", ["IN"])[0]
+                chart = query.get("chart", ["apple"])[0]
+                try:
+                    return self._send_json(200, {"charts": sources.trending_charts(country),
+                                                 "songs": sources.trending_songs(country, chart)})
+                except Exception as e:
+                    return self._error(502, f"Couldn't load the chart ({type(e).__name__})")
             if route == "/api/job":
                 job = self.sync.get_job(query.get("id", [""])[0])
                 return self._send_json(200, job) if job else self._error(404, "Unknown job")

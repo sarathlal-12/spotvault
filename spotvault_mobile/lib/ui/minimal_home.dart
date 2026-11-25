@@ -5,6 +5,7 @@ import '../library_store.dart';
 import 'aurora.dart';
 import 'common.dart';
 import 'menus.dart';
+import 'mix_sheet.dart';
 import 'nearby_ui.dart';
 import 'track_list_screen.dart';
 import 'welcome_screen.dart' show SpotVaultMark;
@@ -99,6 +100,7 @@ class MinimalHome extends StatelessWidget {
                           () => _open(context, TrackListScreen(title: 'Liked Songs', source: () => store.likedTracks, icon: Icons.favorite, allowPcOrder: false))),
                       _Pill('All songs · ${store.tracks.length}', Icons.library_music_outlined,
                           () => _open(context, TrackListScreen(title: 'All Songs', source: () => store.allTracks, icon: Icons.library_music, allowPcOrder: false))),
+                      _Pill('Mix playlists', Icons.shuffle_rounded, () => showMixSheet(context)),
                       _Pill('Most played', Icons.trending_up_rounded,
                           () => _open(context, TrackListScreen(title: 'Most Played', source: () => store.mostPlayed, icon: Icons.trending_up))),
                     ]),

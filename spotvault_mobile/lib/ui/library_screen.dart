@@ -6,6 +6,7 @@ import '../library_store.dart';
 import 'aurora.dart';
 import 'common.dart';
 import 'menus.dart';
+import 'mix_sheet.dart';
 import 'nearby_ui.dart';
 import 'track_list_screen.dart';
 
@@ -118,6 +119,11 @@ class LibraryScreen extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(child: Text('Your playlists', style: displayStyle(20))),
+                        TextButton.icon(
+                          onPressed: () => showMixSheet(context),
+                          icon: const Icon(Icons.shuffle_rounded, size: 18),
+                          label: const Text('Mix'),
+                        ),
                         TextButton.icon(
                           onPressed: () => createPlaylistFlow(context),
                           icon: const Icon(Icons.add_rounded, size: 18),

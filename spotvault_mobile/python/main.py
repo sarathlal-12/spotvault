@@ -9,6 +9,7 @@ uses one code path for both:
     GET  /api/preview?url=<song>       streams a result for a listen
     POST /api/download                 {"url","folder","title","artist","thumb"}
     GET  /api/job?id=<id>              download progress / result
+    GET  /api/trending?country=IN&chart=apple  top songs charts
 
 Every request except /api/status needs the token the app passed in
 SV_TOKEN (header X-SpotVault-Pin or ?pin=), so other apps on the phone
@@ -446,6 +447,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._suggest(q.get("q", [""])[0])
             if route == "/api/preview":
                 return self._preview(q.get("url", [""])[0])
+            if route == "/api/trending":
+                try:
+                    country = q.get("country", ["IN"])[0]
+                    chart = q.get("chart", ["apple"])[0]
+                    return self._json(200, {"charts": sources.trending_charts(country),
+                                            "songs": sources.trending_songs(country, chart)})
+                except Exception as e:
+                    log("trending failed:", traceback.format_exc())
+                    return self._error(502, f"Couldn't load the chart ({type(e).__name__})")
             if route == "/api/job":
                 with _cv:
                     job = _jobs.get(q.get("id", [""])[0])

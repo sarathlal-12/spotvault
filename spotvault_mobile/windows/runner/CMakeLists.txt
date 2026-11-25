@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "smtc.cpp"
+  "audio_capture.cpp"
   "main.cpp"
   "utils.cpp"
   "win32_window.cpp"
@@ -37,6 +38,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 # Windows media controls (smtc.cpp) use C++/WinRT.
 target_link_libraries(${BINARY_NAME} PRIVATE "windowsapp.lib")
+# Song recognition audio capture (audio_capture.cpp): WASAPI.
+target_link_libraries(${BINARY_NAME} PRIVATE "ole32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

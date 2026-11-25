@@ -3,7 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../app_expiry.dart';
 import '../app_state.dart';
 import '../library_store.dart';
 import '../song_list.dart';
@@ -45,6 +47,68 @@ class SongListCard extends StatelessWidget {
   }
 }
 
+/// iPhone only: how long until AltStore's 7-day signature runs out, with a
+/// button that opens AltStore to refresh. Never shown on Android or Windows.
+class AltStoreCard extends StatefulWidget {
+  const AltStoreCard({super.key});
+
+  @override
+  State<AltStoreCard> createState() => _AltStoreCardState();
+}
+
+class _AltStoreCardState extends State<AltStoreCard> {
+  @override
+  void initState() {
+    super.initState();
+    appExpiry.refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: appExpiry,
+        builder: (context, _) {
+          final left = appExpiry.left;
+          if (!AppExpiry.supported || left == null) return const SizedBox.shrink();
+          final p = pal;
+          final used = (1 - left.inMinutes / const Duration(days: 7).inMinutes).clamp(0.0, 1.0);
+          final urgent = left < const Duration(days: 2);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: GlassCard(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(Icons.timer_outlined, color: urgent ? p.danger : p.text, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('AltStore refresh', style: TextStyle(color: p.text, fontSize: 16, fontWeight: FontWeight.w700))),
+                  Text(left.isNegative ? 'Expired' : '${describeLeft(left)} left',
+                      style: TextStyle(color: urgent ? p.danger : p.muted, fontSize: 13, fontWeight: FontWeight.w600)),
+                ]),
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(value: used, minHeight: 6, backgroundColor: p.track, color: urgent ? p.danger : kAccent),
+                ),
+                const SizedBox(height: 10),
+                Text('Refresh SpotVault in AltStore before it runs out, or it stops opening. You get a reminder every 2 days. After a refresh this resets to 7 days by itself.',
+                    style: TextStyle(color: p.muted, fontSize: 12)),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () async {
+                    final ok = await launchUrl(Uri.parse('altstore://'), mode: LaunchMode.externalApplication).catchError((_) => false);
+                    if (!ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't open AltStore. Open it from your home screen.")));
+                    }
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Open AltStore'),
+                ),
+              ]),
+            ),
+          );
+        },
+      );
+}
+
 /// Studio (was Vault Lab): tools for how your music plays.
 class LabScreen extends StatelessWidget {
   const LabScreen({super.key});
@@ -76,6 +140,8 @@ class LabScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            // iPhone only (AltStore installs expire); hidden everywhere else.
+            if (AppExpiry.supported) const AltStoreCard(),
             // Car mode is for phones; the Windows app doesn't show it.
             if (!Platform.isWindows) ...[
               const FadeSlideIn(delay: Duration(milliseconds: 30), child: CarModeCard()),

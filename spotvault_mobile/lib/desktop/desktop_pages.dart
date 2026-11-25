@@ -1,4 +1,4 @@
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -19,6 +19,8 @@ import '../ui/menus.dart' show showSongMenu;
 import '../ui/nearby_ui.dart' show JamScreen;
 import '../ui/qr.dart' show pcLinkFor;
 import 'desktop_shell.dart';
+import 'desktop_trending.dart';
+import '../recognize/recognize_sheet.dart';
 import 'engine_client.dart';
 
 Widget pageFor(DPage page) => switch (page) {
@@ -30,7 +32,21 @@ Widget pageFor(DPage page) => switch (page) {
       DPage.jam => const _Nested(child: JamScreen()),
       DPage.studio => const _Nested(child: LabScreen()),
       DPage.settings => const SettingsPage(),
+      DPage.trending => TrendingPage(actions: [RecognizeButton(backend: DesktopTrendingBackend())]),
     };
+
+/// The engine exe next to the installed app (it is also the MCP server).
+String mcpExePath() => '${File(Platform.resolvedExecutable).parent.path}\engine\SpotVaultEngine.exe';
+
+/// claude_desktop_config.json snippet for the MCP server.
+String mcpConfigJson() => const JsonEncoder.withIndent('  ').convert({
+      'mcpServers': {
+        'spotvault': {
+          'command': mcpExePath(),
+          'args': ['--mcp'],
+        },
+      },
+    });
 
 String dSearchQuery = '';
 String? dSearchFolder;
@@ -1200,6 +1216,9 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
   List<Map<String, dynamic>>? songs;
   String error = '';
 
+  /// Picking songs to download (null = not picking).
+  Set<int>? picked;
+
   @override
   void initState() {
     super.initState();
@@ -1255,11 +1274,69 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
     }
   }
 
+  /// Downloads the ticked songs into a playlist the user picks (or a new one).
+  Future<void> _downloadPicked(String title) async {
+    final list = songs ?? const [];
+    final chosen = [for (final i in (picked ?? <int>{}).toList()..sort()) if (i < list.length) list[i]];
+    if (chosen.isEmpty) return;
+    final target = await _pickTarget(title);
+    if (target == null || !mounted) return;
+    final urls = [for (final t in chosen) '${t['url'] ?? ''}'];
+    // Links we have (YouTube, SoundCloud) are downloaded as they are; Spotify
+    // songs have no link, so they are found by name, like a song list import.
+    final existing = engine.playlists.any((x) => x['folder'] == target);
+    final err = existing && urls.every((u) => u.isNotEmpty)
+        ? await engine.downloadSongs(target, urls)
+        : await engine.importLists({target: [for (final t in chosen) '${t['title']} - ${t['artist'] ?? ''}'.trim()]});
+    if (!mounted) return;
+    if (err != null) {
+      dToast(context, err);
+      return;
+    }
+    setState(() => picked = null);
+    dToast(context, 'Downloading ${chosen.length} song${chosen.length == 1 ? '' : 's'} into "$target"');
+    dPage.value = DPage.sync;
+  }
+
+  Future<String?> _pickTarget(String current) {
+    final ctrl = TextEditingController();
+    final names = <String>{current, for (final x in engine.playlists) '${x['folder']}'}.where((n) => n.isNotEmpty).toList();
+    return showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Save the songs into'),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(labelText: 'New playlist name', prefixIcon: Icon(Icons.add_rounded)),
+              onSubmitted: (v) => v.trim().isEmpty ? null : Navigator.pop(c, v.trim()),
+            ),
+            const SizedBox(height: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300),
+              child: ListView(shrinkWrap: true, children: [
+                for (final n in names)
+                  ListTile(leading: const Icon(Icons.queue_music_rounded), title: Text(n, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => Navigator.pop(c, n)),
+              ]),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          FilledButton(onPressed: () => ctrl.text.trim().isEmpty ? null : Navigator.pop(c, ctrl.text.trim()), child: const Text('Create and download')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = pal;
     final e = engine.playlists.where((x) => x['folder'] == widget.folder).firstOrNull;
     final title = '${e?['title'] ?? widget.folder}';
+    final sel = picked;
     final list = songs;
     final mine = playerService.onlineList && playerService.previewKey == _key;
     final playingId = mine ? playerService.current?.id : null;
@@ -1282,6 +1359,20 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
             Wrap(spacing: 10, runSpacing: 10, children: [
               FilledButton.icon(style: _primary(), onPressed: (list ?? const []).isEmpty ? null : () => _play(0), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play online')),
               _pill(engine.syncing ? 'Syncing…' : 'Download all', icon: Icons.download_rounded, onTap: engine.syncing ? null : _download),
+              if (sel == null)
+                _pill('Pick songs', icon: Icons.checklist_rounded, onTap: (list ?? const []).isEmpty ? null : () => setState(() => picked = {}))
+              else ...[
+                FilledButton.icon(
+                  style: _primary(),
+                  onPressed: sel.isEmpty || engine.syncing ? null : () => _downloadPicked(title),
+                  icon: const Icon(Icons.download_done_rounded),
+                  label: Text(sel.isEmpty ? 'Tick songs to download' : 'Download ${sel.length} selected'),
+                ),
+                _pill(sel.length == (list ?? const []).length ? 'Clear all' : 'Select all',
+                    icon: Icons.select_all_rounded,
+                    onTap: () => setState(() => picked = sel.length == (list ?? const []).length ? {} : {for (var i = 0; i < (list ?? const []).length; i++) i})),
+                _pill('Cancel', icon: Icons.close_rounded, onTap: () => setState(() => picked = null)),
+              ],
               _PlaylistMore(folder: widget.folder, title: title),
             ]),
           ]),
@@ -1299,7 +1390,9 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            leading: SizedBox(
+            leading: sel != null
+                ? Checkbox(value: sel.contains(i), onChanged: (v) => setState(() => v == true ? sel.add(i) : sel.remove(i)))
+                : SizedBox(
               width: 28,
               child: Center(
                 child: playingId == 'online:${widget.folder}:$i'
@@ -1310,7 +1403,7 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
             title: Text('${t['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w500)),
             subtitle: Text('${t['artist'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _muted(12)),
             trailing: Text(fmtTime(Duration(seconds: ((t['secs'] as num?) ?? 0).toInt())), style: _muted(12)),
-            onTap: () => _play(i),
+            onTap: sel != null ? () => setState(() => sel.contains(i) ? sel.remove(i) : sel.add(i)) : () => _play(i),
           ),
     ]);
   }
@@ -1538,6 +1631,22 @@ class _SettingsPageState extends State<SettingsPage> {
                 if (context.mounted) dToast(context, 'Saved');
               }),
               FilledButton.icon(style: _primary(), onPressed: () => importSongListDialog(context), icon: const Icon(Icons.download_rounded, size: 16), label: const Text('Import a list')),
+            ]),
+          ]),
+          _Section('AI assistants (MCP)', [
+            Text('Let Claude, Cursor or other AI apps see trending songs, search, and save songs into your playlists. '
+                'Add SpotVault as an MCP server in the AI app (copy the setup below). SpotVault must be open to save songs.',
+                style: _muted(13)),
+            const SizedBox(height: 12),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              _pill('Copy Claude Desktop setup', icon: Icons.copy_rounded, onTap: () {
+                Clipboard.setData(ClipboardData(text: mcpConfigJson()));
+                dToast(context, 'Copied. Paste it into claude_desktop_config.json (Settings, Developer, Edit config).');
+              }),
+              _pill('Copy Claude Code command', icon: Icons.terminal_rounded, onTap: () {
+                Clipboard.setData(ClipboardData(text: 'claude mcp add spotvault -- "${mcpExePath()}" --mcp'));
+                dToast(context, 'Copied. Run it in a terminal.');
+              }),
             ]),
           ]),
           _Section('Music folder', [

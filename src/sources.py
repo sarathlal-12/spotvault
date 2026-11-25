@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import sys
+import time
 import urllib.parse
 
 SPOTIFY = "spotify"
@@ -442,8 +443,18 @@ def download(urls, target_dir, report, ffmpeg_path=None):
     if ffmpeg_path:
         opts["ffmpeg_location"] = ffmpeg_path
 
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download(list(urls))
+    def stop_hook(_d):
+        if stopped():
+            raise yt_dlp.utils.DownloadCancelled("Stopped")
+
+    opts["progress_hooks"].append(stop_hook)
+    if stopped():
+        return
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download(list(urls))
+    except yt_dlp.utils.DownloadCancelled:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -560,6 +571,8 @@ def sync_youtube(url, target_dir, report, ffmpeg_path=None):
         os.replace(tmp, path)
 
     for e in entries:
+        if stopped():
+            break
         vid = e["id"]
         title = e.get("title") or ""
         if vid in done:
@@ -642,6 +655,8 @@ def apply_spotdl_clean_rules():
     original_download = Downloader.async_search_and_download
 
     async def download_with_retry(self, song):
+        if stopped():
+            return song, None
         # Songs already on disk: skip them here, before spotdl looks the song
         # up on Spotify again (10-14 s each with the shared, rate-limited key).
         try:
@@ -662,6 +677,8 @@ def apply_spotdl_clean_rules():
         except Exception:
             pass
         for attempt in range(3):
+            if stopped():
+                return song, None
             song_out, path = await original_download(self, song)
             if path is not None:
                 picked = _spotdl_picked.pop(song.url, None)
@@ -709,6 +726,17 @@ spotdl_failures = []
 
 # Set by the app: called as listener(kind, title, detail, path) for each song.
 spotdl_listener = None
+# Set by the engine: returns True once the user pressed Stop. Every download
+# loop checks it so a sync stops within a song or two instead of finishing
+# the whole playlist.
+stop_check = None
+
+
+def stopped():
+    try:
+        return bool(stop_check and stop_check())
+    except Exception:
+        return False
 _spotdl_picked = {}
 
 
@@ -827,3 +855,73 @@ def group_for(kind, detail):
     if "youtube" in d:
         return "youtube"
     return "other"
+
+
+# ---------------------------------------------------------------------------
+# Trending: today's top songs (Apple Music and YouTube Music charts, free, no key)
+# ---------------------------------------------------------------------------
+_trend_cache = {}
+TREND_TTL = 30 * 60
+
+
+def _get_json(url, timeout=15):
+    import json
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "SpotVault"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def trending_charts(country="IN"):
+    """The charts on offer for a country: Apple Music top 50, then YouTube Music's
+    own lists (top songs, top videos, and per-language lists in India)."""
+    country = (country or "IN").upper()[:2]
+    key = ("charts", country)
+    hit = _trend_cache.get(key)
+    if hit and time.time() - hit[0] < TREND_TTL:
+        return hit[1]
+    charts = [{"id": "apple", "title": "Apple Music Top 50"}]
+    try:
+        from ytmusicapi import YTMusic
+        c = YTMusic().get_charts(country=country)
+        for group in ("daily", "weekly"):
+            for p in c.get(group) or []:
+                if p.get("playlistId") and p.get("title"):
+                    charts.append({"id": "yt:" + p["playlistId"], "title": p["title"]})
+    except Exception:
+        pass
+    _trend_cache[key] = (time.time(), charts)
+    return charts
+
+
+def trending_songs(country="IN", chart="apple", limit=50):
+    """[{"title", "artist", "art", "url", "secs"}] for one chart. Apple songs have
+    no link (they are found by name when played); YouTube Music ones do."""
+    country = (country or "IN").upper()[:2]
+    key = ("songs", country, chart)
+    hit = _trend_cache.get(key)
+    if hit and time.time() - hit[0] < TREND_TTL:
+        return hit[1]
+    out = []
+    if chart.startswith("yt:"):
+        from ytmusicapi import YTMusic
+        pl = YTMusic().get_playlist(chart[3:], limit=limit)
+        for t in (pl.get("tracks") or [])[:limit]:
+            vid = t.get("videoId")
+            if not vid or not t.get("title"):
+                continue
+            artists = ", ".join(a.get("name", "") for a in (t.get("artists") or []) if a.get("name"))
+            thumbs = t.get("thumbnails") or []
+            out.append({"title": t["title"], "artist": artists,
+                        "art": thumbs[-1].get("url", "") if thumbs else "",
+                        "url": f"https://music.youtube.com/watch?v={vid}",
+                        "secs": int(t.get("duration_seconds") or 0)})
+    else:
+        j = _get_json(f"https://rss.marketingtools.apple.com/api/v2/{country.lower()}/music/most-played/{limit}/songs.json")
+        for r in (j.get("feed") or {}).get("results") or []:
+            out.append({"title": r.get("name", ""), "artist": r.get("artistName", ""),
+                        "art": (r.get("artworkUrl100") or "").replace("100x100bb", "300x300bb"),
+                        "url": "", "secs": 0})
+    out = [s for s in out if s["title"]]
+    _trend_cache[key] = (time.time(), out)
+    return out

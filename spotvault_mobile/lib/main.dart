@@ -13,6 +13,7 @@ import 'desktop/engine_client.dart';
 import 'ui/welcome_screen.dart';
 import 'ui/qr.dart';
 
+import 'app_expiry.dart';
 import 'app_state.dart';
 import 'audio_handler.dart';
 import 'ui/menus.dart' show shareSongs;
@@ -24,6 +25,8 @@ import 'ui/lab_screen.dart';
 import 'ui/library_screen.dart';
 import 'ui/search_screen.dart';
 import 'ui/sync_screen.dart';
+import 'recognize/recognize_sheet.dart';
+import 'ui/trending_view.dart';
 import 'ui/update_ui.dart';
 import 'windows_media.dart';
 
@@ -62,6 +65,8 @@ Future<void> main() async {
     ..onJoinRequest = askJoin;
   shareSongs = shareFlow;
   nearbyService.start();
+  // iPhone only: plan the AltStore refresh reminders (a refresh resets them).
+  if (AppExpiry.supported) unawaited(appExpiry.refresh());
   runApp(const SpotVaultApp());
 }
 
@@ -255,7 +260,9 @@ class _HomeShellState extends State<HomeShell> {
         body: AuroraBackground(
           child: IndexedStack(
             index: tab,
-            children: const [LibraryScreen(), SearchScreen(), LabScreen(), SyncScreen()],
+            // Tab numbers stay 0 Home, 1 Search, 2 Studio, 3 Sync; Trending (4) sits
+            // between Search and Studio in the bar.
+            children: [const LibraryScreen(), const SearchScreen(), const LabScreen(), const SyncScreen(), TrendingView(backend: _trendBackend, actions: [RecognizeButton(backend: _trendBackend)])],
           ),
         ),
         bottomNavigationBar: Column(
@@ -265,8 +272,8 @@ class _HomeShellState extends State<HomeShell> {
             _GlassNav(
               index: tab,
               onTap: (i) {
-                // A preview only makes sense on the Search tab.
-                if (i != 1) playerService.stopPreview();
+                // A preview only makes sense on the Search and Trending tabs.
+                if (i != 1 && i != 4) playerService.stopPreview();
                 currentTab.value = i;
               },
             ),
@@ -277,17 +284,23 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
+/// Trending and song recognition on phones go through the phone's downloader.
+final _trendBackend = PhoneTrendingBackend();
+
 class _GlassNav extends StatelessWidget {
   final int index;
   final ValueChanged<int> onTap;
   const _GlassNav({required this.index, required this.onTap});
 
-  static const _items = [
-    (Icons.home_outlined, Icons.home_rounded, 'Home'),
-    (Icons.search_rounded, Icons.manage_search_rounded, 'Search'),
-    (Icons.tune_outlined, Icons.tune_rounded, 'Studio'),
-    (Icons.sync_rounded, Icons.sync_rounded, 'Sync'),
+  // (tab number, icon, selected icon, label) in the order shown.
+  static const _tabs = [
+    (0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+    (1, Icons.search_rounded, Icons.manage_search_rounded, 'Search'),
+    (4, Icons.local_fire_department_outlined, Icons.local_fire_department_rounded, 'Trending'),
+    (2, Icons.tune_outlined, Icons.tune_rounded, 'Studio'),
+    (3, Icons.sync_rounded, Icons.sync_rounded, 'Sync'),
   ];
+  static final _items = [for (final t in _tabs) (t.$2, t.$3, t.$4)];
 
   @override
   Widget build(BuildContext context) {
@@ -302,14 +315,14 @@ class _GlassNav extends StatelessWidget {
           height: 66,
           child: Row(
             children: [
-              for (var i = 0; i < _items.length; i++)
+              for (var k = 0; k < _items.length; k++)
                 Expanded(
                   child: Semantics(
                     button: true,
-                    selected: i == index,
-                    label: _items[i].$3,
+                    selected: _tabs[k].$1 == index,
+                    label: _items[k].$3,
                     child: InkResponse(
-                      onTap: () => onTap(i),
+                      onTap: () => onTap(_tabs[k].$1),
                       radius: 36,
                       child: ExcludeSemantics(
                         child: Column(
@@ -318,22 +331,22 @@ class _GlassNav extends StatelessWidget {
                             AnimatedContainer(
                               duration: const Duration(milliseconds: 350),
                               curve: Curves.easeOutBack,
-                              padding: EdgeInsets.symmetric(horizontal: i == index && !isMinimal ? 18 : 10, vertical: 4),
+                              padding: EdgeInsets.symmetric(horizontal: _tabs[k].$1 == index && !isMinimal ? 18 : 10, vertical: 4),
                               decoration: BoxDecoration(
                                 // Minimal: no pill, the active tab is just darker.
-                                gradient: i == index && !isMinimal
+                                gradient: _tabs[k].$1 == index && !isMinimal
                                     ? LinearGradient(colors: [kViolet.withValues(alpha: 0.32), kEmber.withValues(alpha: 0.14)])
                                     : null,
                                 borderRadius: BorderRadius.circular(99),
                               ),
-                              child: Icon(i == index ? _items[i].$2 : _items[i].$1, color: i == index ? (isMinimal ? kText : kAccent) : kMuted, size: 23),
+                              child: Icon(_tabs[k].$1 == index ? _items[k].$2 : _items[k].$1, color: _tabs[k].$1 == index ? (isMinimal ? kText : kAccent) : kMuted, size: 23),
                             ),
                             const SizedBox(height: 3),
-                            Text(_items[i].$3,
+                            Text(_items[k].$3,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
-                                  color: i == index ? (isMinimal ? kText : kAccent) : kMuted,
+                                  fontWeight: _tabs[k].$1 == index ? FontWeight.w700 : FontWeight.w500,
+                                  color: _tabs[k].$1 == index ? (isMinimal ? kText : kAccent) : kMuted,
                                 )),
                           ],
                         ),

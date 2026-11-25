@@ -201,6 +201,9 @@ class LibraryStore extends ChangeNotifier {
 
   /// Player style: 'classic' or 'focus' (wavy cover, the ring as the timeline, lyrics card).
   String playerLook = 'classic';
+
+  /// Trending tab: which country's charts (ISO code).
+  String trendCountry = 'IN';
   /// Shown as "Good evening, <name>".
   String userName = '';
   /// Sort order chosen per playlist (folder -> 'pc' | 'recent' | 'title' | 'artist').
@@ -296,6 +299,7 @@ class LibraryStore extends ChangeNotifier {
       themeStyle = j['themeStyle'] ?? '';
       glassSolid = ((j['glassSolid'] ?? 0.35) as num).toDouble().clamp(0.0, 1.0);
       playerLook = j['playerLook'] == 'focus' ? 'focus' : 'classic';
+      trendCountry = (j['trendCountry'] as String?) ?? 'IN';
       userName = j['userName'] ?? '';
       playlistSort.addAll(Map<String, String>.from(j['playlistSort'] ?? const {}));
       savedPhones = [for (final p in (j['savedPhones'] as List? ?? const [])) Map<String, dynamic>.from(p as Map)];
@@ -358,6 +362,7 @@ class LibraryStore extends ChangeNotifier {
           'themeStyle': themeStyle,
           'glassSolid': glassSolid,
           'playerLook': playerLook,
+          'trendCountry': trendCountry,
           'userName': userName,
           'playlistSort': playlistSort,
           'savedPhones': savedPhones,

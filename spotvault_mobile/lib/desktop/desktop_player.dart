@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../app_state.dart';
+import '../ui/seek_controls.dart';
 import '../ui/wave_shape.dart';
 import '../library_store.dart';
 import '../lyrics_service.dart';
@@ -51,38 +52,45 @@ class DesktopPlayer extends StatelessWidget {
                     : focus
                         ? _FocusPlayer(track: t)
                         : Row(children: [
-                        Expanded(
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Flexible(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420, maxHeight: 420), child: AspectRatio(aspectRatio: 1, child: WavyCover(track: t)))),
-                            const SizedBox(height: 26),
-                            Text(t.title.toUpperCase(), textAlign: TextAlign.center, maxLines: 2, style: TextStyle(color: p.text, fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-                            const SizedBox(height: 6),
-                            Text(t.subtitle, style: TextStyle(color: p.muted, fontSize: 15)),
-                            const SizedBox(height: 18),
-                            const SizedBox(width: 460, child: SmoothTimeline()),
-                            const SizedBox(height: 6),
-                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
-                              const SizedBox(width: 10),
-                              IconButton(onPressed: playerService.previous, tooltip: 'Previous', iconSize: 30, icon: const Icon(Icons.skip_previous_rounded)),
-                              const SizedBox(width: 14),
-                              const PlayButton(size: 70),
-                              const SizedBox(width: 14),
-                              IconButton(onPressed: playerService.next, tooltip: 'Next', iconSize: 30, icon: const Icon(Icons.skip_next_rounded)),
-                              const SizedBox(width: 10),
-                              IconButton(
-                                onPressed: playerService.cycleLoop,
-                                tooltip: 'Repeat',
-                                icon: Icon(pl.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: pl.loopMode == LoopMode.off ? p.text : p.accent),
-                              ),
-                            ]),
-                            const SizedBox(height: 16),
-                            const _Tools(),
+                            Expanded(
+                              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                Flexible(
+                                    child: ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 420),
+                                        child: AspectRatio(aspectRatio: 1, child: DoubleTapSeek(child: WavyCover(track: t, seekable: true))))),
+                                const SizedBox(height: 26),
+                                Text(t.title.toUpperCase(), textAlign: TextAlign.center, maxLines: 2, style: TextStyle(color: p.text, fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                                const SizedBox(height: 6),
+                                Text(t.subtitle, style: TextStyle(color: p.muted, fontSize: 15)),
+                                const SizedBox(height: 18),
+                                const SizedBox(width: 460, child: SmoothTimeline()),
+                                const SizedBox(height: 6),
+                                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                  IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
+                                  const SizedBox(width: 10),
+                                  IconButton(onPressed: playerService.previous, tooltip: 'Previous', iconSize: 30, icon: const Icon(Icons.skip_previous_rounded)),
+                                  const SizedBox(width: 6),
+                                  const SeekTenButton(forward: false),
+                                  const SizedBox(width: 6),
+                                  const PlayButton(size: 70),
+                                  const SizedBox(width: 6),
+                                  const SeekTenButton(forward: true),
+                                  const SizedBox(width: 6),
+                                  IconButton(onPressed: playerService.next, tooltip: 'Next', iconSize: 30, icon: const Icon(Icons.skip_next_rounded)),
+                                  const SizedBox(width: 10),
+                                  IconButton(
+                                    onPressed: playerService.cycleLoop,
+                                    tooltip: 'Repeat',
+                                    icon: Icon(pl.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: pl.loopMode == LoopMode.off ? p.text : p.accent),
+                                  ),
+                                ]),
+                                const SizedBox(height: 16),
+                                const _Tools(),
+                              ]),
+                            ),
+                            const SizedBox(width: 36),
+                            Expanded(child: _LyricsPanel(track: t)),
                           ]),
-                        ),
-                        const SizedBox(width: 36),
-                        Expanded(child: _LyricsPanel(track: t)),
-                      ]),
               ),
             ]),
           ),
@@ -132,11 +140,12 @@ class _FocusPlayerState extends State<_FocusPlayer> {
               duration: const Duration(milliseconds: 300),
               child: lyrics
                   ? _LyricsPanel(key: const ValueKey('lyrics'), track: t)
-                  : Center(key: const ValueKey('cover'), child: AspectRatio(aspectRatio: 1, child: WavyCover(track: t))),
+                  : Center(key: const ValueKey('cover'), child: AspectRatio(aspectRatio: 1, child: DoubleTapSeek(child: WavyCover(track: t, seekable: true)))),
             ),
           ),
           const SizedBox(height: 14),
-          Text(t.title.toUpperCase(), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+          Text(t.title.toUpperCase(),
+              textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
           const SizedBox(height: 4),
           Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 15)),
           const SizedBox(height: 14),
@@ -147,7 +156,9 @@ class _FocusPlayerState extends State<_FocusPlayer> {
               icon: Icon(pl.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: pl.loopMode == LoopMode.off ? p.text : p.accent),
             ),
             IconButton(onPressed: playerService.previous, tooltip: 'Previous', iconSize: 30, icon: const Icon(Icons.skip_previous_rounded)),
+            const SeekTenButton(forward: false),
             const PlayButton(size: 72),
+            const SeekTenButton(forward: true),
             IconButton(onPressed: playerService.next, tooltip: 'Next', iconSize: 30, icon: const Icon(Icons.skip_next_rounded)),
             IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
           ]),
@@ -269,14 +280,25 @@ void _queueSheet(BuildContext context) {
             ];
             return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Padding(padding: const EdgeInsets.fromLTRB(22, 20, 22, 8), child: Text('Queue', style: TextStyle(color: p.text, fontSize: 20, fontWeight: FontWeight.w700))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 0, 22, 6),
+                child: Text('Drag the handle to change the order', style: TextStyle(color: p.muted, fontSize: 12)),
+              ),
               Expanded(
-                child: ListView.builder(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
                   itemCount: items.length,
+                  // Position 0 is the song playing now; it stays on top.
+                  onReorderItem: (from, to) {
+                    if (from > 0 && to > 0) playerService.moveInQueue(start + from, start + to);
+                  },
                   itemBuilder: (context, k) {
                     final (i, t) = items[k];
-                    if (t == null) return const SizedBox();
+                    if (t == null) return SizedBox(key: ValueKey('none-$i-$k'));
                     return ListTile(
+                      key: ValueKey('${t.id}-$i-$k'),
                       selected: i == cur,
+                      leading: i == cur ? null : ReorderableDragStartListener(index: k, child: Icon(Icons.drag_handle_rounded, color: p.muted)),
                       title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
                       onTap: () => playerService.jumpTo(i),
@@ -299,7 +321,10 @@ void _queueSheet(BuildContext context) {
 class WavyCover extends StatefulWidget {
   final Track track;
   final double inset;
-  const WavyCover({super.key, required this.track, this.inset = 30});
+
+  /// Drag along the ring to move through the song (the Focus player's timeline).
+  final bool seekable;
+  const WavyCover({super.key, required this.track, this.inset = 30, this.seekable = false});
 
   @override
   State<WavyCover> createState() => _WavyCoverState();
@@ -307,6 +332,23 @@ class WavyCover extends StatefulWidget {
 
 class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMixin {
   late final AnimationController _tick = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
+
+  /// Where the finger is on the ring while dragging (0..1), else null.
+  double? _drag;
+
+  double _fractionAt(Offset p, Size size) {
+    final c = size.center(Offset.zero);
+    // The ring starts at the top and runs clockwise.
+    var a = math.atan2(p.dy - c.dy, p.dx - c.dx) + math.pi / 2;
+    if (a < 0) a += 2 * math.pi;
+    return a / (2 * math.pi);
+  }
+
+  bool _onRing(Offset p, Size size) {
+    final r = size.shortestSide / 2;
+    final d = (p - size.center(Offset.zero)).distance;
+    return d > r - widget.inset - 24 && d < r + 12;
+  }
 
   @override
   void dispose() {
@@ -323,8 +365,8 @@ class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMix
       builder: (context, _) {
         final pl = playerService.player;
         final ms = pl.duration?.inMilliseconds ?? 0;
-        final v = ms == 0 ? 0.0 : (pl.position.inMilliseconds / ms).clamp(0.0, 1.0);
-        return CustomPaint(
+        final v = _drag ?? (ms == 0 ? 0.0 : (pl.position.inMilliseconds / ms).clamp(0.0, 1.0));
+        final ring = CustomPaint(
           foregroundPainter: _RingPainter(v, p.text, p.line, kEmber),
           child: Padding(
             padding: EdgeInsets.all(widget.inset),
@@ -333,15 +375,69 @@ class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMix
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 child: art == null
-                    ? Container(key: const ValueKey('none'), decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF7A1A19), Color(0xFF1A1A1C)], begin: Alignment.topLeft, end: Alignment.bottomRight)))
+                    ? Container(
+                        key: const ValueKey('none'),
+                        decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF7A1A19), Color(0xFF1A1A1C)], begin: Alignment.topLeft, end: Alignment.bottomRight)))
                     : Image.file(art, key: ValueKey(art.path), fit: BoxFit.cover, width: double.infinity, height: double.infinity, gaplessPlayback: true),
               ),
             ),
           ),
         );
+        if (!widget.seekable) return ring;
+        return LayoutBuilder(builder: (context, box) {
+          final size = Size(box.maxWidth, box.maxHeight);
+          return Semantics(
+            slider: true,
+            label: 'Song position',
+            // Only the ring band takes the drag (a clip shapes the touch area),
+            // so swipes on the cover itself still skip songs.
+            child: Stack(fit: StackFit.expand, children: [
+              ring,
+              ClipPath(
+                clipper: _RingBand(widget.inset),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (d) {
+                    if (_onRing(d.localPosition, size)) setState(() => _drag = _fractionAt(d.localPosition, size));
+                  },
+                  onPanUpdate: (d) {
+                    if (_drag != null) setState(() => _drag = _fractionAt(d.localPosition, size));
+                  },
+                  onPanEnd: (_) {
+                    final f = _drag;
+                    if (f == null) return;
+                    playerService.seekToFraction(f).whenComplete(() {
+                      if (mounted) setState(() => _drag = null);
+                    });
+                  },
+                  onPanCancel: () => setState(() => _drag = null),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ]),
+          );
+        });
       },
     );
   }
+}
+
+/// The ring around the Focus cover, as a touch area.
+class _RingBand extends CustomClipper<Path> {
+  final double inset;
+  _RingBand(this.inset);
+  @override
+  Path getClip(Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    return Path()
+      ..fillType = PathFillType.evenOdd
+      ..addOval(Rect.fromCircle(center: c, radius: r + 4))
+      ..addOval(Rect.fromCircle(center: c, radius: math.max(0, r - inset - 22)));
+  }
+
+  @override
+  bool shouldReclip(_RingBand old) => old.inset != inset;
 }
 
 class _RingPainter extends CustomPainter {
@@ -352,10 +448,21 @@ class _RingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = wavePath(size, 8);
-    canvas.drawPath(path, Paint()..color = bg..style = PaintingStyle.stroke..strokeWidth = 2);
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = bg
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2);
     final metric = path.computeMetrics().first;
     final len = metric.length * v;
-    canvas.drawPath(metric.extractPath(0, len), Paint()..color = fg..style = PaintingStyle.stroke..strokeWidth = 3..strokeCap = StrokeCap.round);
+    canvas.drawPath(
+        metric.extractPath(0, len),
+        Paint()
+          ..color = fg
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round);
     final tan = metric.getTangentForOffset(len);
     if (tan != null) canvas.drawCircle(tan.position, 7, Paint()..color = dot);
   }
@@ -483,7 +590,8 @@ class LyricsPeek extends StatelessWidget {
         final l = snap.data;
         if (l == null || l.isEmpty) return const SizedBox();
         if (!l.synced) {
-          return Text(l.plain.split('\n').where((s) => s.trim().isNotEmpty).take(2).join('\n'), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 13, height: 1.5));
+          return Text(l.plain.split('\n').where((s) => s.trim().isNotEmpty).take(2).join('\n'),
+              maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 13, height: 1.5));
         }
         return StreamBuilder<Duration>(
           stream: playerService.player.positionStream,

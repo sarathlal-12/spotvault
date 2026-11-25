@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "audio_capture.h"
 #include "smtc.h"
 #include "win32_window.h"
 
@@ -32,6 +33,9 @@ class FlutterWindow : public Win32Window {
 
   // Windows media controls (Win+A media box, media keys).
   std::unique_ptr<Smtc> smtc_;
+
+  // Short recordings for song recognition.
+  std::unique_ptr<AudioCapture> capture_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

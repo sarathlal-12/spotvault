@@ -52,7 +52,7 @@ from phone_sync import PhoneSyncServer, generate_pin, get_lan_ips, HTTP_PORT  # 
 import sources  # noqa: E402
 import updater  # noqa: E402
 
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.3.0"
 CONFIG_FILE = "library_config.json"
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".spot_sync_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -421,8 +421,10 @@ class Engine:
     def stop(self):
         with self.lock:
             if self.running:
+                # Every download loop checks sources.stopped(), so the sync ends
+                # within a song or two; songs already saved are kept.
                 self.stop_requested = True
-                self.status = "Stopping after this playlist"
+                self.status = "Stopping"
 
     def _worker(self):
         real_signal = signal.signal
@@ -461,6 +463,7 @@ class Engine:
         tasks = list(self._tasks)
         total = len(tasks)
         sources.total_listener = self._on_song_total
+        sources.stop_check = lambda: self.stop_requested
         try:
             for i, task in enumerate(tasks, 1):
                 if self.stop_requested:
@@ -496,6 +499,7 @@ class Engine:
                 self.progress = i / total
         finally:
             sources.total_listener = None
+            sources.stop_check = None
 
     def _report(self, kind, title, detail, path=""):
         self._event(kind, title, detail, path)
@@ -709,6 +713,11 @@ def main():
     if getattr(sys, "frozen", False):
         os.chdir(os.path.dirname(os.path.dirname(sys.executable)) if os.path.basename(
             os.path.dirname(sys.executable)).lower() == "engine" else os.path.dirname(sys.executable))
+    if "--mcp" in sys.argv:
+        # AI assistants (MCP): charts, search, save songs; no engine server here.
+        import mcp_server
+        mcp_server.run()
+        return
     engine = Engine()
     engine.phone.start()
     if not engine.phone.running:
@@ -718,8 +727,10 @@ def main():
     parent = os.environ.get("SV_PARENT_PID")
     while True:
         time.sleep(2)
-        # Quit with the Windows app (unless it is syncing: finish first).
-        if parent and not _pid_alive(int(parent)) and not engine.running:
+        # Quit with the Windows app, even mid-sync: songs already saved are kept,
+        # and a running engine would block the next launch (port in use).
+        if parent and not _pid_alive(int(parent)):
+            engine.stop()
             os._exit(0)
 
 

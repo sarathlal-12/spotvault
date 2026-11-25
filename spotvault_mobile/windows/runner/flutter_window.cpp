@@ -26,6 +26,7 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   smtc_ = std::make_unique<Smtc>(flutter_controller_->engine()->messenger(), GetHandle());
+  capture_ = std::make_unique<AudioCapture>(flutter_controller_->engine()->messenger(), GetHandle());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -42,6 +43,7 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   smtc_ = nullptr;  // clears the media box before the engine goes away
+  capture_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -64,6 +66,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   if (smtc_ && smtc_->HandleMessage(message, wparam, lparam)) {
+    return 0;
+  }
+  if (capture_ && capture_->HandleMessage(message, wparam, lparam)) {
     return 0;
   }
 

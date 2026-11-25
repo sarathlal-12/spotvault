@@ -108,8 +108,12 @@ class LyricsService {
     final artist = mainArtist(t.artist);
     Map<String, dynamic>? hit;
     try {
-      hit = await _getExact(title, artist, t.duration);
+      // Fast first: LRCLIB's cache and its search answer in about a second.
+      // The plain /api/get can take 10+ seconds when it asks other sites, so
+      // it is only the last try (skipping songs used to wait on it).
+      hit = await _getExact(title, artist, t.duration, cachedOnly: true).catchError((_) => null);
       hit ??= await _search(title, artist, t.duration);
+      hit ??= await _getExact(title, artist, t.duration);
     } catch (e) {
       debugPrint('lyrics lookup failed: $e');
       rethrow; // offline: don't remember "no lyrics"
@@ -134,17 +138,17 @@ class LyricsService {
 
   Map<String, String> get _headers => {'User-Agent': 'SpotVault/$kAppVersion (https://spotvault-web.vercel.app)'};
 
-  Future<Map<String, dynamic>?> _getExact(String title, String artist, double duration) async {
+  Future<Map<String, dynamic>?> _getExact(String title, String artist, double duration, {bool cachedOnly = false}) async {
     if (artist.isEmpty) return null;
     final res = await http
         .get(
-            Uri.https(_host, '/api/get', {
+            Uri.https(_host, cachedOnly ? '/api/get-cached' : '/api/get', {
               'track_name': title,
               'artist_name': artist,
               if (duration > 0) 'duration': '${duration.round()}',
             }),
             headers: _headers)
-        .timeout(const Duration(seconds: 12));
+        .timeout(Duration(seconds: cachedOnly ? 6 : 12));
     if (res.statusCode != 200) return null;
     final j = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
     return _useful(j) ? j : null;

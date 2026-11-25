@@ -807,6 +807,27 @@ class _PlaylistPicker extends StatelessWidget {
   }
 }
 
+/// Save an online song into a playlist the user picks (used by Trending and
+/// song recognition too).
+Future<void> saveOnlineSongFlow(BuildContext context, OnlineSong song) async {
+  if (store.playlists.isEmpty && !pcLink.onPhone) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No playlists yet. Sync your playlists from the PC first.')));
+    return;
+  }
+  final pl = await showModalBottomSheet<PlaylistInfo>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (ctx) => _PlaylistPicker(song: song),
+  );
+  if (pl == null || !context.mounted) return;
+  final ghost = store.ghostQueue;
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(ghost ? '"${song.title}" is in your Ghost Queue. It plays next once it reaches the phone.' : 'Saving "${song.title}" to ${pl.name}…')));
+  pcLink.download(song, pl, playWhenReady: ghost);
+}
+
 /// Download progress for songs the user saved from search.
 class _JobsPanel extends StatelessWidget {
   final List<DlJob> jobs;

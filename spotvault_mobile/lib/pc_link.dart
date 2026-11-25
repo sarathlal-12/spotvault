@@ -181,6 +181,16 @@ class PcLink extends ChangeNotifier {
     }
   }
 
+  /// Trending charts: {"charts": [{id, title}], "songs": [{title, artist, art, url, secs}]}.
+  Future<Map<String, dynamic>> trending({String country = 'IN', String chart = 'apple'}) async {
+    await connect();
+    final res = await http
+        .get(_uri('/api/trending', {'country': country, 'chart': chart}), headers: _headers)
+        .timeout(const Duration(seconds: 40));
+    _checkStatus(res);
+    return (jsonDecode(utf8.decode(res.bodyBytes)) as Map).cast<String, dynamic>();
+  }
+
   /// Search suggestions while typing. Never throws; empty when unavailable.
   Future<List<String>> suggest(String text) async {
     try {

@@ -14,7 +14,7 @@ import 'desktop_player.dart';
 import 'engine_client.dart';
 
 /// Pages in the Windows app's sidebar.
-enum DPage { home, songs, playlist, search, sync, jam, studio, settings }
+enum DPage { home, songs, playlist, search, sync, jam, studio, settings, trending }
 
 final ValueNotifier<DPage> dPage = ValueNotifier(DPage.home);
 final ValueNotifier<String> dPlaylist = ValueNotifier('');
@@ -275,6 +275,7 @@ class _Sidebar extends StatelessWidget {
             ),
             const _NavItem(Icons.home_outlined, 'Home', DPage.home),
             const _NavItem(Icons.music_note_outlined, 'Songs', DPage.songs),
+            const _NavItem(Icons.local_fire_department_outlined, 'Trending', DPage.trending),
             _NavItem(Icons.download_outlined, 'Sync & downloads', DPage.sync,
                 badge: engine.syncing ? '${(engine.progress * 100).round()}%' : (failed is num && failed > 0 ? '$failed' : null)),
             const _NavItem(Icons.groups_outlined, 'Jam', DPage.jam),

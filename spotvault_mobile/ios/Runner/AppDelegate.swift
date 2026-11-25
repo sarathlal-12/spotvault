@@ -1,10 +1,14 @@
+import AVFoundation
 import Flutter
 import MultipeerConnectivity
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var p2p: P2pLink?
+  private var expiry: AppExpiry?
+  private var capture: MicCapture?
 
   override func application(
     _ application: UIApplication,
@@ -17,6 +21,171 @@ import UIKit
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SpotVaultP2p") {
       p2p = P2pLink(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SpotVaultExpiry") {
+      expiry = AppExpiry(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SpotVaultCapture") {
+      capture = MicCapture(messenger: registrar.messenger())
+    }
+  }
+}
+
+/// Song recognition on iPhone: a short microphone recording as 16 kHz mono
+/// 16-bit PCM ("spotvault/capture" record {source: "mic", ms}). iOS doesn't let
+/// apps hear other apps, so the microphone is the only source here.
+class MicCapture: NSObject {
+  private var engine: AVAudioEngine?
+  private var busy = false
+
+  init(messenger: FlutterBinaryMessenger) {
+    super.init()
+    FlutterMethodChannel(name: "spotvault/capture", binaryMessenger: messenger).setMethodCallHandler { [weak self] call, result in
+      guard call.method == "record" else { return result(FlutterMethodNotImplemented) }
+      let args = call.arguments as? [String: Any] ?? [:]
+      let ms = min(max((args["ms"] as? Int) ?? 10000, 1000), 20000)
+      self?.record(ms: ms, result: result)
+    }
+  }
+
+  private func record(ms: Int, result: @escaping FlutterResult) {
+    if busy { return result(FlutterError(code: "busy", message: "Already listening", details: nil)) }
+    AVAudioSession.sharedInstance().requestRecordPermission { granted in
+      DispatchQueue.main.async {
+        guard granted else {
+          return result(FlutterError(code: "capture", message: "SpotVault needs the microphone. Allow it in Settings, SpotVault.", details: nil))
+        }
+        self.start(ms: ms, result: result)
+      }
+    }
+  }
+
+  private func start(ms: Int, result: @escaping FlutterResult) {
+    let session = AVAudioSession.sharedInstance()
+    let oldCategory = session.category, oldMode = session.mode, oldOptions = session.categoryOptions
+    do {
+      try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothA2DP])
+      try session.setActive(true)
+    } catch {
+      return result(FlutterError(code: "capture", message: "Couldn't use the microphone.", details: nil))
+    }
+    let engine = AVAudioEngine()
+    let input = engine.inputNode
+    let inFormat = input.outputFormat(forBus: 0)
+    guard let outFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true),
+      let converter = AVAudioConverter(from: inFormat, to: outFormat), inFormat.sampleRate > 0
+    else {
+      return result(FlutterError(code: "capture", message: "Couldn't use the microphone.", details: nil))
+    }
+    let wanted = 16000 * ms / 1000
+    var pcm = Data()
+    let lock = NSLock()
+    input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { buffer, _ in
+      let cap = AVAudioFrameCount(Double(buffer.frameLength) * 16000 / inFormat.sampleRate) + 32
+      guard let out = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: cap) else { return }
+      var fed = false
+      converter.convert(to: out, error: nil) { _, status in
+        if fed {
+          status.pointee = .noDataNow
+          return nil
+        }
+        fed = true
+        status.pointee = .haveData
+        return buffer
+      }
+      if let ch = out.int16ChannelData {
+        lock.lock()
+        pcm.append(UnsafeBufferPointer(start: ch[0], count: Int(out.frameLength)))
+        lock.unlock()
+      }
+    }
+    busy = true
+    self.engine = engine
+    do {
+      try engine.start()
+    } catch {
+      input.removeTap(onBus: 0)
+      busy = false
+      return result(FlutterError(code: "capture", message: "Couldn't start the microphone.", details: nil))
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(ms + 300)) {
+      input.removeTap(onBus: 0)
+      engine.stop()
+      self.engine = nil
+      self.busy = false
+      try? session.setCategory(oldCategory, mode: oldMode, options: oldOptions)
+      lock.lock()
+      let data = pcm.prefix(wanted * 2)
+      lock.unlock()
+      var peak: Int16 = 0
+      data.withUnsafeBytes { raw in
+        for s in raw.bindMemory(to: Int16.self) { peak = max(peak, s == Int16.min ? Int16.max : abs(s)) }
+      }
+      if data.count < wanted * 2 / 3 || peak < 100 {
+        return result(FlutterError(code: "capture", message: "The microphone heard only silence.", details: nil))
+      }
+      result(FlutterStandardTypedData(bytes: Data(data)))
+    }
+  }
+}
+
+/// AltStore installs expire 7 days after each refresh. The end date is in the
+/// app's signing file (embedded.mobileprovision); AltStore replaces that file
+/// on every refresh, so reading it always gives the current date. Also
+/// schedules the "refresh soon" reminders (iPhone only).
+class AppExpiry: NSObject {
+  init(messenger: FlutterBinaryMessenger) {
+    super.init()
+    FlutterMethodChannel(name: "spotvault/expiry", binaryMessenger: messenger).setMethodCallHandler { [weak self] call, result in
+      self?.handle(call, result)
+    }
+  }
+
+  private func expiryDate() -> Date? {
+    guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+      let data = try? Data(contentsOf: url),
+      let text = String(data: data, encoding: .isoLatin1),
+      let start = text.range(of: "<?xml"), let end = text.range(of: "</plist>")
+    else { return nil }
+    let xml = String(text[start.lowerBound..<end.upperBound])
+    guard let plist = try? PropertyListSerialization.propertyList(from: Data(xml.utf8), options: [], format: nil) as? [String: Any]
+    else { return nil }
+    return plist["ExpirationDate"] as? Date
+  }
+
+  private func handle(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    switch call.method {
+    case "expiry":
+      if let d = expiryDate() { result(Int(d.timeIntervalSince1970 * 1000)) } else { result(nil) }
+    case "schedule":
+      let times = (args["times"] as? [NSNumber]) ?? []
+      let title = (args["title"] as? String) ?? "SpotVault"
+      let bodies = (args["bodies"] as? [String]) ?? []
+      let center = UNUserNotificationCenter.current()
+      center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+        center.getPendingNotificationRequests { pending in
+          center.removePendingNotificationRequests(withIdentifiers: pending.map { $0.identifier }.filter { $0.hasPrefix("altstore-") })
+          guard granted else {
+            DispatchQueue.main.async { result(false) }
+            return
+          }
+          let now = Date().timeIntervalSince1970
+          for (i, t) in times.enumerated() {
+            let wait = t.doubleValue / 1000 - now
+            if wait < 5 { continue }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = i < bodies.count ? bodies[i] : "Open AltStore and refresh SpotVault."
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: wait, repeats: false)
+            center.add(UNNotificationRequest(identifier: "altstore-\(i)", content: content, trigger: trigger))
+          }
+          DispatchQueue.main.async { result(true) }
+        }
+      }
+    default:
+      result(FlutterMethodNotImplemented)
     }
   }
 }
