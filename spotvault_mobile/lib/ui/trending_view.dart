@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../app_state.dart';
 import '../pc_link.dart';
@@ -14,6 +17,45 @@ const List<(String, String)> kChartCountries = [
   ('IT', 'Italy'), ('NL', 'Netherlands'), ('BR', 'Brazil'), ('MX', 'Mexico'), ('ZA', 'South Africa'),
   ('NG', 'Nigeria'), ('KE', 'Kenya'), ('EG', 'Egypt'), ('TR', 'Turkey'), ('NZ', 'New Zealand'),
 ];
+
+/// Apple Music's top 50 for a country, straight from Apple's public chart
+/// feed (no key). Fetched here rather than in the phone's Python, which timed
+/// out on it.
+Future<List<Map<String, dynamic>>> appleTopSongs(String country) async {
+  final r = await http
+      .get(Uri.parse('https://rss.marketingtools.apple.com/api/v2/${country.toLowerCase()}/music/most-played/50/songs.json'))
+      .timeout(const Duration(seconds: 20));
+  if (r.statusCode != 200) throw Exception('Apple chart ${r.statusCode}');
+  final results = ((jsonDecode(utf8.decode(r.bodyBytes)) as Map)['feed'] as Map?)?['results'] as List? ?? const [];
+  return [
+    for (final x in results.cast<Map>())
+      if ('${x['name'] ?? ''}'.isNotEmpty)
+        {
+          'title': '${x['name']}',
+          'artist': '${x['artistName'] ?? ''}',
+          'art': '${x['artworkUrl100'] ?? ''}'.replaceAll('100x100bb', '300x300bb'),
+          'url': '',
+        },
+  ];
+}
+
+/// Charts list (YouTube Music lists come from the downloader) plus the songs of
+/// [chart]; the Apple chart always loads even if the downloader can't answer.
+Future<Map<String, dynamic>> loadTrending(Future<Map<String, dynamic>> Function() fromDownloader, String country, String chart) async {
+  Map<String, dynamic>? j;
+  Object? err;
+  try {
+    j = await fromDownloader();
+  } catch (e) {
+    err = e;
+  }
+  if (chart != 'apple') {
+    if (j == null) throw err ?? Exception('Chart unavailable');
+    return j;
+  }
+  final charts = (j?['charts'] as List?) ?? const [{'id': 'apple', 'title': 'Apple Music Top 50'}];
+  return {'charts': charts, 'songs': await appleTopSongs(country)};
+}
 
 String countryName(String code) => kChartCountries.where((c) => c.$1 == code).firstOrNull?.$2 ?? code;
 
@@ -33,7 +75,8 @@ String songKey(Map<String, dynamic> s) {
 /// Phones: through the phone's downloader (or the PC, when bridged).
 class PhoneTrendingBackend implements TrendingBackend {
   @override
-  Future<Map<String, dynamic>> load(String country, String chart) => pcLink.trending(country: country, chart: chart);
+  Future<Map<String, dynamic>> load(String country, String chart) =>
+      loadTrending(() => pcLink.trending(country: country, chart: chart), country, chart);
 
   /// Apple chart songs have no link: find the best match by name first.
   Future<OnlineSong> _resolve(Map<String, dynamic> s) async {

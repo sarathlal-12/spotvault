@@ -452,7 +452,7 @@ class Handler(BaseHTTPRequestHandler):
                     country = q.get("country", ["IN"])[0]
                     chart = q.get("chart", ["apple"])[0]
                     return self._json(200, {"charts": sources.trending_charts(country),
-                                            "songs": sources.trending_songs(country, chart)})
+                                            "songs": [] if chart == "apple" else sources.trending_songs(country, chart)})
                 except Exception as e:
                     log("trending failed:", traceback.format_exc())
                     return self._error(502, f"Couldn't load the chart ({type(e).__name__})")

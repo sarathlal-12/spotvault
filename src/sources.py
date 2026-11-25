@@ -866,6 +866,13 @@ TREND_TTL = 30 * 60
 
 def _get_json(url, timeout=15):
     import json
+    try:
+        import requests
+        r = requests.get(url, headers={"User-Agent": "SpotVault"}, timeout=timeout)
+        r.raise_for_status()
+        return r.json()
+    except ImportError:
+        pass
     import urllib.request
     req = urllib.request.Request(url, headers={"User-Agent": "SpotVault"})
     with urllib.request.urlopen(req, timeout=timeout) as r:

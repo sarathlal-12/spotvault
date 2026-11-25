@@ -263,7 +263,7 @@ class _Handler(BaseHTTPRequestHandler):
                 chart = query.get("chart", ["apple"])[0]
                 try:
                     return self._send_json(200, {"charts": sources.trending_charts(country),
-                                                 "songs": sources.trending_songs(country, chart)})
+                                                 "songs": [] if chart == "apple" else sources.trending_songs(country, chart)})
                 except Exception as e:
                     return self._error(502, f"Couldn't load the chart ({type(e).__name__})")
             if route == "/api/job":

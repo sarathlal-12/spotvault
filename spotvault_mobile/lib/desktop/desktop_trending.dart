@@ -7,7 +7,8 @@ import 'engine_client.dart';
 /// the PC playlists (or a new one).
 class DesktopTrendingBackend implements TrendingBackend {
   @override
-  Future<Map<String, dynamic>> load(String country, String chart) => engine.trending(country: country, chart: chart);
+  Future<Map<String, dynamic>> load(String country, String chart) =>
+      loadTrending(() => engine.trending(country: country, chart: chart), country, chart);
 
   @override
   Future<Uri> previewUri(Map<String, dynamic> s) async => engine.streamFor(s);
