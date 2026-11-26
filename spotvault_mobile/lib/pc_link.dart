@@ -244,11 +244,13 @@ class PcLink extends ChangeNotifier {
     // Already on this phone: list that copy in the playlists, don't download again.
     final have = phone ? songOnPhone(song.title, song.artist, _secs(song.duration)) : null;
     if (have != null) {
-      for (final p in [playlist, ...also]) {
+      final targets = [playlist, ...also];
+      final wasThere = targets.every((p) => store.playlists.any((x) => x.folder == p.folder && x.trackIds.contains(have.id)));
+      for (final p in targets) {
         store.addPhoneTrack(have, folder: p.folder, title: p.name);
       }
       final where = also.isEmpty ? playlist.name : '${also.length + 1} playlists';
-      _set(job, DlState.saved, 'Already on your phone · added to $where');
+      _set(job, DlState.saved, wasThere ? 'Already in $where' : 'Already on your phone · added to $where');
       if (job.playWhenReady) await onReady?.call(have);
       return;
     }
