@@ -128,7 +128,7 @@ class NowPlayingScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 18),
-                      _WaveSeek(track: t),
+                      store.seekStyle == 'wavy' ? _SlimSeek(player: p) : _WaveSeek(track: t),
                       const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -314,8 +314,11 @@ class _MinimalPlayer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            // The classic wave slider (the ring around the cover moves through the song too).
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _WaveSeek(track: t)),
+            // The timeline the user picked in Studio (wavy by default); the ring around
+            // the cover moves through the song too.
+            store.seekStyle == 'classic'
+                ? Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _WaveSeek(track: t))
+                : Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: _SlimSeek(player: player)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [

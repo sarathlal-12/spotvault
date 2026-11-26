@@ -59,8 +59,8 @@ class LookCard extends StatelessWidget {
     await store.save();
   }
 
-  Future<void> _player(String look) async {
-    store.playerLook = look;
+  Future<void> _seek(String style) async {
+    store.seekStyle = style;
     store.changed();
     await store.save();
   }
@@ -107,6 +107,20 @@ class LookCard extends StatelessWidget {
           chip('Dark', darkMode.value, () => setDarkMode(true)),
           chip('Light', !darkMode.value, () => setDarkMode(false)),
         ]),
+        const SizedBox(height: 12),
+        Text('Player slider', style: TextStyle(color: p.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        ListenableBuilder(
+          listenable: store,
+          builder: (context, _) {
+            // Empty = the look's own: wavy for Minimal and Cloud, classic for Crimson.
+            final wavy = store.seekStyle.isEmpty ? isMinimal : store.seekStyle == 'wavy';
+            return Wrap(spacing: 8, runSpacing: 8, children: [
+              chip('Wavy', wavy, () => _seek('wavy')),
+              chip('Classic', !wavy, () => _seek('classic')),
+            ]);
+          },
+        ),
       ]),
     );
   }

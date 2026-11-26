@@ -202,6 +202,10 @@ class LibraryStore extends ChangeNotifier {
   /// Player style: 'classic' or 'focus' (wavy cover, the ring as the timeline, lyrics card).
   String playerLook = 'classic';
 
+  /// Phone player timeline: 'wavy' (thin line with the moving wave) or 'classic'
+  /// (the wave slider). Empty: each look's own (Minimal/Cloud wavy, Crimson classic).
+  String seekStyle = '';
+
   /// Trending tab: which country's charts (ISO code).
   String trendCountry = 'IN';
 
@@ -304,6 +308,7 @@ class LibraryStore extends ChangeNotifier {
       themeStyle = j['themeStyle'] ?? '';
       glassSolid = ((j['glassSolid'] ?? 0.35) as num).toDouble().clamp(0.0, 1.0);
       playerLook = j['playerLook'] == 'focus' ? 'focus' : 'classic';
+      seekStyle = const {'wavy', 'classic'}.contains(j['seekStyle']) ? j['seekStyle'] as String : '';
       trendCountry = (j['trendCountry'] as String?) ?? 'IN';
       eqOn = j['eqOn'] == true;
       final g = (j['eqGains'] as List?)?.map((x) => (x as num).toDouble()).toList();
@@ -374,6 +379,7 @@ class LibraryStore extends ChangeNotifier {
           'themeStyle': themeStyle,
           'glassSolid': glassSolid,
           'playerLook': playerLook,
+          'seekStyle': seekStyle,
           'trendCountry': trendCountry,
           'eqOn': eqOn,
           'eqGains': eqGains,
