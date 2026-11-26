@@ -103,6 +103,9 @@ class PlayerService extends ChangeNotifier {
     }
 
     player.currentIndexStream.listen((_) => _onTrackChanged());
+    player.loopModeStream.listen((m) {
+      if (m == _loopWanted) _loopWanted = null;
+    });
     player.sequenceStateStream.listen((_) => notifyListeners());
     player.playerStateStream.listen((s) {
       notifyListeners();
@@ -159,7 +162,7 @@ class PlayerService extends ChangeNotifier {
   List<String> _unshuffled = const [];
 
   /// Whether shuffle is on (use this, not player.shuffleModeEnabled).
-  bool get shuffleOn => _listShuffle ? _shuffleOn : player.shuffleModeEnabled;
+  bool get shuffleOn => onlineList ? _onlineShuffle : (_listShuffle ? _shuffleOn : player.shuffleModeEnabled);
 
   /// Queue in the order it will actually play (respects shuffle).
   List<int> get playOrder =>
@@ -347,7 +350,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> toggleShuffle() async {
-    if (onlineList) return; // an online playlist plays in its own order
+    if (onlineList) return _reorderOnline(!_onlineShuffle);
     if (_listShuffle) return _reorder(!_shuffleOn);
     final on = !player.shuffleModeEnabled;
     if (on) await player.shuffle();
@@ -395,12 +398,24 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Repeat as last chosen. The player reports a new mode a moment late, so a
+  /// quick second click on Repeat must not read the old one (it went off -> all
+  /// -> all instead of -> one).
+  LoopMode get loopMode => _loopWanted ?? player.loopMode;
+  LoopMode? _loopWanted;
+
   Future<void> cycleLoop() async {
-    final next = switch (player.loopMode) {
+    final next = switch (loopMode) {
       LoopMode.off => LoopMode.all,
       LoopMode.all => LoopMode.one,
       LoopMode.one => LoopMode.off,
     };
+    _loopWanted = next;
+    // Never let it stick if something else changes repeat meanwhile.
+    Timer(const Duration(milliseconds: 1500), () {
+      if (_loopWanted == next) _loopWanted = null;
+    });
+    notifyListeners();
     await player.setLoopMode(next);
     _persist();
     notifyListeners();
@@ -683,8 +698,11 @@ class PlayerService extends ChangeNotifier {
         position: player.position,
         wasPlaying: player.playing,
         loop: player.loopMode,
+        shuffle: shuffleOn,
       );
     }
+    _onlineItems = List.of(songs);
+    _onlineShuffle = false;
     extraTracks.removeWhere((k, _) => k.startsWith('online:'));
     for (final (_, t) in songs) {
       extraTracks[t.id] = t;
@@ -694,17 +712,11 @@ class PlayerService extends ChangeNotifier {
     previewKey = key;
     notifyListeners();
     try {
-      await player.setLoopMode(LoopMode.off);
+      // Repeat stays as the user set it (2.4.0 turned it off here, so repeat
+      // "didn't work" on Trending). Shuffle is done by reordering the list.
+      if (!_listShuffle && player.shuffleModeEnabled) await player.setShuffleModeEnabled(false);
       await player.setAudioSources(
-        [
-          for (final (u, t) in songs)
-            AudioSource.uri(u,
-                tag: MediaItem(
-                    id: t.id,
-                    title: t.title,
-                    artist: t.artist.isEmpty ? null : t.artist,
-                    artUri: onlineArt[t.id] == null ? null : Uri.tryParse(onlineArt[t.id]!))),
-        ],
+        [for (final (u, t) in songs) _onlineSource(u, t)],
         initialIndex: start.clamp(0, songs.length - 1),
       );
       player.play();
@@ -715,9 +727,49 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
+  AudioSource _onlineSource(Uri u, Track t) => AudioSource.uri(u,
+      tag: MediaItem(
+          id: t.id,
+          title: t.title,
+          artist: t.artist.isEmpty ? null : t.artist,
+          artUri: onlineArt[t.id] == null ? null : Uri.tryParse(onlineArt[t.id]!)));
+
+  List<(Uri, Track)> _onlineItems = const [];
+  bool _onlineShuffle = false;
+
+  /// Shuffle for an online list (Trending, a playlist not saved yet): the list
+  /// is rebuilt in random (or the original) order, the current song keeps playing.
+  Future<void> _reorderOnline(bool on) async {
+    _onlineShuffle = on;
+    final cur = current;
+    final i = _onlineItems.indexWhere((s) => s.$2.id == cur?.id);
+    if (cur == null || i < 0 || _onlineItems.length < 2) {
+      notifyListeners();
+      return;
+    }
+    final next = on ? [_onlineItems[i], ...(List.of(_onlineItems)..removeAt(i))..shuffle()] : _onlineItems;
+    final pos = player.position;
+    final playing = player.playing;
+    await player.setAudioSources([for (final (u, t) in next) _onlineSource(u, t)],
+        initialIndex: next.indexWhere((s) => s.$2.id == cur.id), initialPosition: pos);
+    if (playing) player.play();
+    notifyListeners();
+  }
+
+  /// After an online list, shuffle goes back to what it was for the user's songs.
+  Future<void> _restoreShuffle(bool? on) async {
+    if (on == null) return;
+    if (_listShuffle) {
+      _shuffleOn = on;
+    } else if (player.shuffleModeEnabled != on) {
+      await player.setShuffleModeEnabled(on);
+    }
+  }
+
   /// Ends the preview and puts the user's queue back where it was.
   Future<void> stopPreview() async {
     if (!previewing) return;
+    final wasOnline = onlineList;
     previewing = false;
     onlineList = false;
     previewKey = null;
@@ -727,7 +779,9 @@ class PlayerService extends ChangeNotifier {
     try {
       await player.stop();
       if (saved == null) return;
-      await player.setLoopMode(saved.loop);
+      // A repeat chosen while an online list played is kept.
+      if (!wasOnline) await player.setLoopMode(saved.loop);
+      await _restoreShuffle(saved.shuffle);
       final list = _playable([
         for (final id in saved.ids)
           if (store.tracks[id] != null) store.tracks[id]!
@@ -752,12 +806,15 @@ class PlayerService extends ChangeNotifier {
   /// The user started real playback while previewing: forget the old queue.
   Future<void> _dropPreview() async {
     if (!previewing) return;
+    final wasOnline = onlineList;
     final loop = _saved?.loop;
+    final shuffle = _saved?.shuffle;
     previewing = false;
     onlineList = false;
     previewKey = null;
     _saved = null;
-    if (loop != null) await player.setLoopMode(loop);
+    if (loop != null && !wasOnline) await player.setLoopMode(loop);
+    await _restoreShuffle(shuffle);
     notifyListeners();
   }
 
@@ -790,7 +847,7 @@ class PlayerService extends ChangeNotifier {
     store.resumeIndex = player.currentIndex ?? 0;
     store.resumePositionMs = player.position.inMilliseconds;
     store.resumeShuffle = shuffleOn;
-    store.resumeLoop = player.loopMode.index;
+    store.resumeLoop = loopMode.index;
     store.save();
   }
 
@@ -867,5 +924,6 @@ class _Saved {
   final Duration position;
   final bool wasPlaying;
   final LoopMode loop;
-  _Saved({required this.ids, required this.index, required this.position, required this.wasPlaying, required this.loop});
+  final bool? shuffle;
+  _Saved({required this.ids, required this.index, required this.position, required this.wasPlaying, required this.loop, this.shuffle});
 }

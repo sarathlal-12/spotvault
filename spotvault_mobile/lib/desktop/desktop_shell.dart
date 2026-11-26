@@ -568,8 +568,8 @@ class _PlayerBar extends StatelessWidget {
                       IconButton(
                         tooltip: 'Repeat',
                         onPressed: playerService.cycleLoop,
-                        icon: Icon(pl.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                            size: 19, color: pl.loopMode == LoopMode.off ? p.text : p.accent),
+                        icon: Icon(playerService.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                            size: 19, color: playerService.loopMode == LoopMode.off ? p.text : p.accent),
                       ),
                     ]),
                     const SizedBox(width: 560, child: SmoothTimeline(compact: true)),

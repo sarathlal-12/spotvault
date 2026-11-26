@@ -24,7 +24,6 @@ class DesktopPlayer extends StatelessWidget {
       builder: (context, _) {
         final p = pal;
         final t = playerService.current;
-        final pl = playerService.player;
         final focus = store.playerLook == 'focus';
         return Material(
           color: p.bg.withValues(alpha: p.dark ? 0.72 : 0.78),
@@ -88,7 +87,7 @@ class DesktopPlayer extends StatelessWidget {
                                   IconButton(
                                     onPressed: playerService.cycleLoop,
                                     tooltip: 'Repeat',
-                                    icon: Icon(pl.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: pl.loopMode == LoopMode.off ? p.text : p.accent),
+                                    icon: Icon(playerService.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: playerService.loopMode == LoopMode.off ? p.text : p.accent),
                                   ),
                                 ]),
                                 const SizedBox(height: 16),
@@ -160,7 +159,7 @@ class _FocusPlayerState extends State<_FocusPlayer> {
             IconButton(
               onPressed: playerService.cycleLoop,
               tooltip: 'Repeat',
-              icon: Icon(pl.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: pl.loopMode == LoopMode.off ? p.text : p.accent),
+              icon: Icon(playerService.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: playerService.loopMode == LoopMode.off ? p.text : p.accent),
             ),
             IconButton(onPressed: playerService.previous, tooltip: 'Previous', iconSize: 30, icon: const Icon(Icons.skip_previous_rounded)),
             const SeekTenButton(forward: false),

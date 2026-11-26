@@ -434,6 +434,13 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 18),
             _SyncStrip(),
           ],
+          const SizedBox(height: 22),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _pill('Liked · ${store.likedTracks.length}', icon: Icons.favorite_border_rounded, onTap: () => openSongs('liked')),
+            _pill('All songs · ${store.tracks.length}', icon: Icons.library_music_outlined, onTap: () => openSongs('all')),
+            _pill('Mix playlists', icon: Icons.shuffle_rounded, onTap: () => mixDialog(context)),
+            _pill('Most played', icon: Icons.trending_up_rounded, onTap: () => openSongs('most')),
+          ]),
           const SizedBox(height: 26),
           Row(children: [
             Expanded(child: Text('Jump back in', style: _h2())),
@@ -603,6 +610,70 @@ class _TrackRowState extends State<TrackRow> {
 }
 
 // ============================================================ Songs
+/// Which songs the Songs page shows: 'all', 'liked' or 'most' (most played).
+final ValueNotifier<String> dSongsView = ValueNotifier('all');
+
+void openSongs(String view) {
+  dSongsView.value = view;
+  dPage.value = DPage.songs;
+}
+
+/// Mix playlists: tick some, and their songs play together in random order.
+Future<void> mixDialog(BuildContext context) => showDialog(
+      context: context,
+      builder: (c) {
+        final picked = <String>{};
+        return StatefulBuilder(builder: (c, setState) {
+          final p = pal;
+          final lists = store.sortedPlaylists.where((l) => l.trackIds.isNotEmpty).toList();
+          final seen = <String>{};
+          final songs = [
+            for (final l in lists)
+              if (picked.contains(l.folder))
+                for (final t in store.tracksOf(l))
+                  if (seen.add(t.id)) t,
+          ];
+          return AlertDialog(
+            title: const Text('Mix playlists'),
+            content: SizedBox(
+              width: 440,
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Pick the playlists to mix. Their songs play in random order.', style: _muted(13)),
+                const SizedBox(height: 8),
+                if (lists.isEmpty) Text('No playlists with songs yet.', style: _muted(13)),
+                Flexible(
+                  child: ListView(shrinkWrap: true, children: [
+                    for (final l in lists)
+                      CheckboxListTile(
+                        value: picked.contains(l.folder),
+                        onChanged: (v) => setState(() => v == true ? picked.add(l.folder) : picked.remove(l.folder)),
+                        secondary: ArtImage(file: store.coverFor(l), size: 40, radius: 9, fallback: Icons.queue_music_rounded),
+                        title: Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text('${l.trackIds.length} songs', style: TextStyle(color: p.muted, fontSize: 12)),
+                      ),
+                  ]),
+                ),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+              FilledButton.icon(
+                style: _primary(),
+                onPressed: songs.isEmpty
+                    ? null
+                    : () {
+                        Navigator.pop(c);
+                        playerService.playTracks(List.of(songs)..shuffle(), shuffle: true);
+                      },
+                icon: const Icon(Icons.shuffle_rounded, size: 18),
+                label: Text(songs.isEmpty ? 'Play mix' : 'Play ${songs.length} songs'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+
 class SongsPage extends StatefulWidget {
   const SongsPage({super.key});
 
@@ -616,10 +687,12 @@ class _SongsPageState extends State<SongsPage> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([store, playerService]),
+      listenable: Listenable.merge([store, playerService, dSongsView]),
       builder: (context, _) {
+        final view = dSongsView.value;
         final words = q.toLowerCase().split(' ').where((w) => w.isNotEmpty);
-        final all = store.allTracks.where((t) {
+        final source = switch (view) { 'liked' => store.likedTracks, 'most' => store.mostPlayed, _ => store.allTracks };
+        final all = source.where((t) {
           final s = '${t.title} ${t.artist} ${t.album}'.toLowerCase();
           return words.every(s.contains);
         }).toList();
@@ -627,7 +700,14 @@ class _SongsPageState extends State<SongsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(30, 28, 30, 12),
             child: Row(children: [
-              Expanded(child: Text('Songs', style: _h1())),
+              Text(switch (view) { 'liked' => 'Liked songs', 'most' => 'Most played', _ => 'Songs' }, style: _h1()),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Wrap(spacing: 8, children: [
+                  for (final (v, label) in const [('all', 'All'), ('liked', 'Liked'), ('most', 'Most played')])
+                    ChoiceChip(label: Text(label), selected: view == v, onSelected: (_) => dSongsView.value = v),
+                ]),
+              ),
               SizedBox(
                 width: 300,
                 child: TextField(
@@ -644,6 +724,17 @@ class _SongsPageState extends State<SongsPage> {
               ),
             ]),
           ),
+          if (all.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(30, 8, 30, 0),
+              child: Text(
+                  switch (view) {
+                    'liked' => 'Songs you like (the heart) show up here.',
+                    'most' => 'The songs you play most show up here.',
+                    _ => q.isEmpty ? 'No songs yet.' : 'No songs match.',
+                  },
+                  style: _muted()),
+            ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -661,9 +752,6 @@ class _SongsPageState extends State<SongsPage> {
 // ============================================================ Playlist
 const _sorts = [('pc', 'My order'), ('recent', 'Recently added'), ('title', 'A–Z'), ('artist', 'Artist')];
 
-/// When each playlist was last checked for new songs on open (this run of the app).
-final Map<String, DateTime> _checkedAt = {};
-
 class PlaylistPage extends StatefulWidget {
   final String folder;
   const PlaylistPage({super.key, required this.folder});
@@ -673,23 +761,7 @@ class PlaylistPage extends StatefulWidget {
 }
 
 class _PlaylistPageState extends State<PlaylistPage> {
-  @override
-  void initState() {
-    super.initState();
-    _checkForNewSongs();
-  }
-
-  /// Opening a downloaded playlist checks its link for new songs (at most every
-  /// 10 minutes). Songs removed from the playlist online stay on this PC.
-  void _checkForNewSongs() {
-    final f = widget.folder;
-    final e = engine.playlists.where((x) => x['folder'] == f).firstOrNull;
-    if (e == null || e['has_synced'] != true || engine.syncing) return;
-    final last = _checkedAt[f];
-    if (last != null && DateTime.now().difference(last) < const Duration(minutes: 10)) return;
-    _checkedAt[f] = DateTime.now();
-    engine.syncFolders([f]);
-  }
+  // Opening a playlist never syncs it: only Sync now / Sync all do (2.4.2).
 
   @override
   Widget build(BuildContext context) {

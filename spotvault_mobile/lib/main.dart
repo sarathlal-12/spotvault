@@ -25,7 +25,6 @@ import 'ui/lab_screen.dart';
 import 'ui/library_screen.dart';
 import 'ui/search_screen.dart';
 import 'ui/sync_screen.dart';
-import 'recognize/recognize_sheet.dart';
 import 'ui/trending_view.dart';
 import 'ui/update_ui.dart';
 import 'windows_media.dart';
