@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'app_state.dart' show lyricsService;
+import 'phone_dedupe.dart';
 import 'library_store.dart';
 import 'phone_engine.dart';
 import 'sync_service.dart';
@@ -240,6 +241,17 @@ class PcLink extends ChangeNotifier {
     final job = DlJob(song, playlist.folder, playlist.name, playWhenReady: playWhenReady, onPhone: phone);
     jobs.add(job);
     notifyListeners();
+    // Already on this phone: list that copy in the playlists, don't download again.
+    final have = phone ? songOnPhone(song.title, song.artist, _secs(song.duration)) : null;
+    if (have != null) {
+      for (final p in [playlist, ...also]) {
+        store.addPhoneTrack(have, folder: p.folder, title: p.name);
+      }
+      final where = also.isEmpty ? playlist.name : '${also.length + 1} playlists';
+      _set(job, DlState.saved, 'Already on your phone · added to $where');
+      if (job.playWhenReady) await onReady?.call(have);
+      return;
+    }
     try {
       await connect();
       final res = await http
@@ -331,6 +343,13 @@ class PcLink extends ChangeNotifier {
     if (phone && job.state == DlState.failed) {
       await PhoneEngine.instance.note('save "${song.title}" failed: ${job.message}');
     }
+  }
+
+  /// "3:45" (or "1:02:03") in seconds; 0 when unknown.
+  static double _secs(String d) {
+    final parts = d.trim().split(':').map(int.tryParse).toList();
+    if (parts.isEmpty || parts.any((x) => x == null)) return 0;
+    return parts.fold<int>(0, (s, x) => s * 60 + x!).toDouble();
   }
 
   /// Registers a song the phone's downloader saved in the music folder.

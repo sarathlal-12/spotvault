@@ -8,6 +8,7 @@ import '../pc_link.dart';
 import '../sync_service.dart';
 import '../update_service.dart';
 import 'aurora.dart';
+import 'dupes_screen.dart';
 import 'update_ui.dart';
 
 /// Sync tab: one big Sync button, what's downloading right now, and
@@ -275,6 +276,15 @@ class _SyncScreenState extends State<SyncScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('They come back at your next sync')));
                 },
               ),
+            _MoreTile(
+              icon: Icons.cleaning_services_outlined,
+              title: 'Clean up duplicates',
+              subtitle: 'Songs saved on this phone more than once',
+              onTap: () async {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DupesScreen()));
+                _refreshStorage();
+              },
+            ),
             _MoreTile(
               icon: Icons.receipt_long_rounded,
               title: 'Downloader log',
