@@ -51,9 +51,27 @@ void main() {
 
     // ---- shuffle
     await ps.playTracks(tracks, shuffle: false);
-    await wait(1500);
+    await wait(2500);
+    final before = (ps.current?.id, p.position);
+    final states = <ProcessingState>{};
+    final sub = p.processingStateStream.listen(states.add);
     await ps.toggleShuffle();
     await wait(1000);
+    await sub.cancel();
+    // ignore: avoid_print
+    print('NO GAP song ${before.$1} -> ${ps.current?.id}, pos ${before.$2} -> ${p.position}, states=$states');
+    expect(ps.current?.id, before.$1, reason: 'shuffle changed the song');
+    expect(p.position >= before.$2, isTrue, reason: 'shuffle restarted the song');
+    expect(states.contains(ProcessingState.loading), isFalse, reason: 'shuffle reloaded the song');
+    // Shuffle off again and back on: still the same song, still playing.
+    await ps.toggleShuffle();
+    await wait(600);
+    final unshuffled = [for (final t in ps.queue) t.id];
+    // ignore: avoid_print
+    print('UNSHUFFLED $unshuffled');
+    expect(unshuffled.first, before.$1);
+    await ps.toggleShuffle();
+    await wait(600);
     final shown = [for (final t in ps.queue) t.id];
     final played = [ps.current?.id];
     for (var i = 0; i < 4; i++) {

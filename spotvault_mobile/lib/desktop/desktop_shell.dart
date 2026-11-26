@@ -18,6 +18,10 @@ import 'engine_client.dart';
 enum DPage { home, songs, playlist, search, sync, jam, studio, settings, trending }
 
 final ValueNotifier<DPage> dPage = ValueNotifier(DPage.home);
+
+/// Shuffle / repeat buttons when on: a soft circle behind the icon. A colour
+/// alone isn't enough: in the Cloud look "on" and "off" were the same colour.
+ButtonStyle? toggleStyle(bool on) => on ? IconButton.styleFrom(backgroundColor: pal.text.withValues(alpha: 0.13)) : null;
 final ValueNotifier<String> dPlaylist = ValueNotifier('');
 final ValueNotifier<bool> dPlayerOpen = ValueNotifier(false);
 
@@ -557,7 +561,7 @@ class _PlayerBar extends StatelessWidget {
                     Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                       IconButton(
                         tooltip: 'Shuffle',
-                        onPressed: playerService.toggleShuffle,
+                        onPressed: playerService.toggleShuffle, style: toggleStyle(playerService.shuffleOn),
                         icon: Icon(Icons.shuffle_rounded, size: 19, color: playerService.shuffleOn ? p.accent : p.text),
                       ),
                       IconButton(tooltip: 'Previous', onPressed: playerService.previous, icon: const Icon(Icons.skip_previous_rounded)),
@@ -567,7 +571,7 @@ class _PlayerBar extends StatelessWidget {
                       IconButton(tooltip: 'Next', onPressed: playerService.next, icon: const Icon(Icons.skip_next_rounded)),
                       IconButton(
                         tooltip: 'Repeat',
-                        onPressed: playerService.cycleLoop,
+                        onPressed: playerService.cycleLoop, style: toggleStyle(playerService.loopMode != LoopMode.off),
                         icon: Icon(playerService.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
                             size: 19, color: playerService.loopMode == LoopMode.off ? p.text : p.accent),
                       ),

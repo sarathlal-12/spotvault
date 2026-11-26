@@ -72,7 +72,7 @@ class DesktopPlayer extends StatelessWidget {
                                 const SizedBox(width: 460, child: SmoothTimeline()),
                                 const SizedBox(height: 6),
                                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                  IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
+                                  IconButton(onPressed: playerService.toggleShuffle, style: toggleStyle(playerService.shuffleOn), tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
                                   const SizedBox(width: 10),
                                   IconButton(onPressed: playerService.previous, tooltip: 'Previous', iconSize: 30, icon: const Icon(Icons.skip_previous_rounded)),
                                   const SizedBox(width: 6),
@@ -85,7 +85,7 @@ class DesktopPlayer extends StatelessWidget {
                                   IconButton(onPressed: playerService.next, tooltip: 'Next', iconSize: 30, icon: const Icon(Icons.skip_next_rounded)),
                                   const SizedBox(width: 10),
                                   IconButton(
-                                    onPressed: playerService.cycleLoop,
+                                    onPressed: playerService.cycleLoop, style: toggleStyle(playerService.loopMode != LoopMode.off),
                                     tooltip: 'Repeat',
                                     icon: Icon(playerService.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: playerService.loopMode == LoopMode.off ? p.text : p.accent),
                                   ),
@@ -157,7 +157,7 @@ class _FocusPlayerState extends State<_FocusPlayer> {
           const SizedBox(height: 14),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             IconButton(
-              onPressed: playerService.cycleLoop,
+              onPressed: playerService.cycleLoop, style: toggleStyle(playerService.loopMode != LoopMode.off),
               tooltip: 'Repeat',
               icon: Icon(playerService.loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: playerService.loopMode == LoopMode.off ? p.text : p.accent),
             ),
@@ -166,7 +166,7 @@ class _FocusPlayerState extends State<_FocusPlayer> {
             const PlayButton(size: 72),
             const SeekTenButton(forward: true),
             IconButton(onPressed: playerService.next, tooltip: 'Next', iconSize: 30, icon: const Icon(Icons.skip_next_rounded)),
-            IconButton(onPressed: playerService.toggleShuffle, tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
+            IconButton(onPressed: playerService.toggleShuffle, style: toggleStyle(playerService.shuffleOn), tooltip: 'Shuffle', icon: Icon(Icons.shuffle_rounded, color: playerService.shuffleOn ? p.accent : p.text)),
           ]),
           const SizedBox(height: 14),
           Material(

@@ -371,31 +371,41 @@ class PlayerService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    List<Track> next;
+    List<Track> after; // what plays after this song
     if (on) {
       _unshuffled = [for (final t in seq) t.id];
-      next = [cur, ...seq.where((t) => t.id != cur.id).toList()..shuffle()];
+      after = seq.where((t) => t.id != cur.id).toList()..shuffle();
     } else {
       final inSeq = {for (final t in seq) t.id};
       final known = _unshuffled.toSet();
       final orig = [
         for (final id in _unshuffled)
-          if (inSeq.contains(id) && trackById(id) != null) trackById(id)!
+          if (inSeq.contains(id) && trackById(id) != null && id != cur.id) trackById(id)!
       ];
-      // Songs added since shuffle went on (your queue) stay right after this one.
+      // Songs added since shuffle went on (your queue) stay right after this one,
+      // then the list goes on in order; songs before this one come round at the end.
       final extra = seq.where((t) => !known.contains(t.id) && t.id != cur.id).toList();
-      final i = orig.indexWhere((t) => t.id == cur.id);
-      next = i < 0
-          ? [cur, ...extra, ...orig]
-          : [...orig.take(i + 1), ...extra, ...orig.skip(i + 1)];
+      final i = _unshuffled.indexOf(cur.id);
+      final before = i < 0 ? 0 : orig.where((t) => _unshuffled.indexOf(t.id) < i).length;
+      after = [...extra, ...orig.skip(before), ...orig.take(before)];
     }
-    final pos = player.position;
-    final playing = player.playing;
-    await player.setAudioSources([for (final t in next) _source(t)],
-        initialIndex: next.indexWhere((t) => t.id == cur.id), initialPosition: pos, shuffleOrder: _newOrder());
-    if (playing) player.play();
+    notifyListeners(); // the button lights up at once
+    await _keepCurrentThen([for (final t in after) _source(t)]);
     _persist();
     notifyListeners();
+  }
+
+  /// Rebuilds the queue around the song that is playing, without reloading it,
+  /// so shuffle doesn't make the music stop for a moment (2.4.1 did).
+  /// Songs are added one at a time: media_kit puts several at once in the wrong place.
+  Future<void> _keepCurrentThen(List<AudioSource> after) async {
+    final ci = player.currentIndex ?? 0;
+    final len = player.sequence.length;
+    if (ci + 1 < len) await player.removeAudioSourceRange(ci + 1, len);
+    if (ci > 0) await player.removeAudioSourceRange(0, ci);
+    for (final s in after) {
+      await player.insertAudioSources(player.sequence.length, [s]);
+    }
   }
 
   /// Repeat as last chosen. The player reports a new mode a moment late, so a
@@ -747,12 +757,11 @@ class PlayerService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final next = on ? [_onlineItems[i], ...(List.of(_onlineItems)..removeAt(i))..shuffle()] : _onlineItems;
-    final pos = player.position;
-    final playing = player.playing;
-    await player.setAudioSources([for (final (u, t) in next) _onlineSource(u, t)],
-        initialIndex: next.indexWhere((s) => s.$2.id == cur.id), initialPosition: pos);
-    if (playing) player.play();
+    notifyListeners(); // the button lights up at once
+    final after = on
+        ? ((List.of(_onlineItems)..removeAt(i))..shuffle())
+        : [..._onlineItems.skip(i + 1), ..._onlineItems.take(i)];
+    await _keepCurrentThen([for (final (u, t) in after) _onlineSource(u, t)]);
     notifyListeners();
   }
 
