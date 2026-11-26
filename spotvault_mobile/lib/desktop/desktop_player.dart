@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -38,7 +39,13 @@ class DesktopPlayer extends StatelessWidget {
                     Text(t == null ? '' : t.folder, style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
                   ]),
                 ),
-                if (t != null)
+                if (t != null && playerService.currentOnlineSong != null && playerService.onlineSave != null)
+                  IconButton.outlined(
+                    tooltip: 'Save to playlists',
+                    onPressed: () => playerService.onlineSave!(context, playerService.currentOnlineSong!),
+                    icon: Icon(Icons.download_rounded, color: p.text),
+                  )
+                else if (t != null)
                   IconButton.outlined(
                     tooltip: 'Like',
                     onPressed: () => store.toggleLike(t.id),
@@ -350,6 +357,14 @@ class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMix
     return d > r - widget.inset - 24 && d < r + 12;
   }
 
+  void _commit() {
+    final f = _drag;
+    if (f == null) return;
+    playerService.seekToFraction(f).whenComplete(() {
+      if (mounted) setState(() => _drag = null);
+    });
+  }
+
   @override
   void dispose() {
     _tick.dispose();
@@ -395,22 +410,26 @@ class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMix
               ring,
               ClipPath(
                 clipper: _RingBand(widget.inset),
-                child: GestureDetector(
+                // The ring takes the finger the moment it lands (a tap jumps there),
+                // so the swipe-to-skip and swipe-down gestures around it never win.
+                child: RawGestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onPanStart: (d) {
-                    if (_onRing(d.localPosition, size)) setState(() => _drag = _fractionAt(d.localPosition, size));
+                  gestures: {
+                    _RingDrag: GestureRecognizerFactoryWithHandlers<_RingDrag>(
+                      () => _RingDrag(),
+                      (r) {
+                        r.dragStartBehavior = DragStartBehavior.down;
+                        r.onDown = (d) {
+                          if (_onRing(d.localPosition, size)) setState(() => _drag = _fractionAt(d.localPosition, size));
+                        };
+                        r.onUpdate = (d) {
+                          if (_drag != null) setState(() => _drag = _fractionAt(d.localPosition, size));
+                        };
+                        r.onEnd = (_) => _commit();
+                        r.onCancel = _commit;
+                      },
+                    ),
                   },
-                  onPanUpdate: (d) {
-                    if (_drag != null) setState(() => _drag = _fractionAt(d.localPosition, size));
-                  },
-                  onPanEnd: (_) {
-                    final f = _drag;
-                    if (f == null) return;
-                    playerService.seekToFraction(f).whenComplete(() {
-                      if (mounted) setState(() => _drag = null);
-                    });
-                  },
-                  onPanCancel: () => setState(() => _drag = null),
                   child: const SizedBox.expand(),
                 ),
               ),
@@ -422,7 +441,16 @@ class _WavyCoverState extends State<WavyCover> with SingleTickerProviderStateMix
   }
 }
 
-/// The ring around the Focus cover, as a touch area.
+/// A drag on the ring that wins at once: no slop, no waiting for other gestures.
+class _RingDrag extends PanGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
+}
+
+/// The ring around the cover, as a touch area.
 class _RingBand extends CustomClipper<Path> {
   final double inset;
   _RingBand(this.inset);
@@ -432,8 +460,8 @@ class _RingBand extends CustomClipper<Path> {
     final r = size.shortestSide / 2;
     return Path()
       ..fillType = PathFillType.evenOdd
-      ..addOval(Rect.fromCircle(center: c, radius: r + 4))
-      ..addOval(Rect.fromCircle(center: c, radius: math.max(0, r - inset - 22)));
+      ..addOval(Rect.fromCircle(center: c, radius: r + 6))
+      ..addOval(Rect.fromCircle(center: c, radius: math.max(0, r - inset - 26)));
   }
 
   @override

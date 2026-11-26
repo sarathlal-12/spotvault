@@ -11,6 +11,7 @@ import '../ui/wave_progress.dart';
 import '../ui/welcome_screen.dart' show SpotVaultMark;
 import 'desktop_pages.dart';
 import 'desktop_player.dart';
+import 'eq.dart';
 import 'engine_client.dart';
 
 /// Pages in the Windows app's sidebar.
@@ -533,6 +534,21 @@ class _PlayerBar extends StatelessWidget {
                                 Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.muted, fontSize: 12)),
                               ]),
                             ),
+                            // Trending queue: save the song playing, or open the big player.
+                            if (playerService.currentOnlineSong != null && playerService.onlineSave != null) ...[
+                              IconButton(
+                                tooltip: 'Save to playlists',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => playerService.onlineSave!(context, playerService.currentOnlineSong!),
+                                icon: Icon(Icons.download_rounded, color: p.text, size: 20),
+                              ),
+                              IconButton(
+                                tooltip: 'Open the player',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => dPlayerOpen.value = true,
+                                icon: Icon(Icons.keyboard_arrow_up_rounded, color: p.text, size: 22),
+                              ),
+                            ],
                           ]),
                         ),
                 ),
@@ -564,6 +580,11 @@ class _PlayerBar extends StatelessWidget {
                   child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                     IconButton(tooltip: 'Lyrics', onPressed: () => dPlayerOpen.value = true, icon: const Icon(Icons.lyrics_outlined, size: 19)),
                     IconButton(tooltip: 'Jam', onPressed: () => dPage.value = DPage.jam, icon: const Icon(Icons.groups_outlined, size: 19)),
+                    IconButton(
+                      tooltip: 'Equaliser',
+                      onPressed: () => showEqDialog(context),
+                      icon: Icon(Icons.equalizer_rounded, size: 19, color: store.eqOn ? p.accent : null),
+                    ),
                     Icon(Icons.volume_up_rounded, size: 18, color: p.muted),
                     SizedBox(
                       width: 100,

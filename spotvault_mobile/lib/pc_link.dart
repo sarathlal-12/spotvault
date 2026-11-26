@@ -215,6 +215,16 @@ class PcLink extends ChangeNotifier {
     return _uri('/api/preview', {'url': song.url, 'pin': _token});
   }
 
+  /// A stream for a chart song: its link, or the best match for its name.
+  Future<Uri> streamFor(Map<String, dynamic> s) async {
+    await connect();
+    final url = '${s['url'] ?? ''}';
+    return _uri('/api/preview', {
+      if (url.isNotEmpty) 'url': url else 'q': '${s['title']} ${s['artist'] ?? ''}'.trim(),
+      'pin': _token,
+    });
+  }
+
   DlJob? jobFor(OnlineSong song) {
     for (final j in jobs.reversed) {
       if (j.song.url == song.url) return j;
@@ -224,7 +234,8 @@ class PcLink extends ChangeNotifier {
 
   /// Downloads [song] into [playlist]: on the phone, or on the PC followed
   /// by a copy to the phone.
-  Future<void> download(OnlineSong song, PlaylistInfo playlist, {bool playWhenReady = false}) async {
+  /// Saves [song] into [playlist], and into [also] too: downloaded once, shown in each.
+  Future<void> download(OnlineSong song, PlaylistInfo playlist, {List<PlaylistInfo> also = const [], bool playWhenReady = false}) async {
     final phone = onPhone;
     final job = DlJob(song, playlist.folder, playlist.name, playWhenReady: playWhenReady, onPhone: phone);
     jobs.add(job);
@@ -240,6 +251,7 @@ class PcLink extends ChangeNotifier {
                 'title': song.title,
                 'artist': song.artist,
                 'thumb': song.thumb,
+                if (also.isNotEmpty && !phone) 'also': [for (final p in also) p.folder],
               }))
           .timeout(const Duration(seconds: 20));
       if (res.statusCode == 400) {
@@ -297,7 +309,14 @@ class PcLink extends ChangeNotifier {
         if (!arrived) throw PcException('Downloaded on the PC, but copying failed. Sync again from the Sync tab.');
         saved = store.tracks.values.where((t) => t.path == path).firstOrNull;
       }
-      _set(job, DlState.saved, j['already'] == true ? 'Already in ${playlist.name}' : 'Saved to ${playlist.name}');
+      // The other playlists list the same song (no second copy on the phone).
+      if (saved != null) {
+        for (final o in also) {
+          if (o.folder != playlist.folder) store.addPhoneTrack(saved, folder: o.folder, title: o.name);
+        }
+      }
+      final where = also.isEmpty ? playlist.name : '${also.length + 1} playlists';
+      _set(job, DlState.saved, j['already'] == true ? 'Already in ${playlist.name}' : 'Saved to $where');
       if (job.playWhenReady && saved != null) {
         await onReady?.call(saved);
         _set(job, DlState.saved, 'Saved to ${playlist.name} · playing next');

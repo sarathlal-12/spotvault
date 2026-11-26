@@ -40,7 +40,7 @@ class NowPlayingScreen extends StatelessWidget {
         }
         lyricsService.prefetch(t);
         // The Minimal look has its own player (2.0 design); Crimson keeps the classic one.
-        if (store.playerLook == 'focus') return _MinimalPlayer(track: t, playlistName: _playlistName(t), focus: true);
+        // (Phones have no Focus player since 2.4: Classic has the ring and the wave.)
         if (isMinimal) return _MinimalPlayer(track: t, playlistName: _playlistName(t));
         return Scaffold(
           body: AuroraBackground(
@@ -116,7 +116,15 @@ class NowPlayingScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          _LikeButton(liked: store.isLiked(t.id), onTap: () => store.toggleLike(t.id)),
+                          if (playerService.currentOnlineSong != null && playerService.onlineSave != null)
+                            IconButton(
+                              tooltip: 'Save to playlists',
+                              iconSize: 30,
+                              icon: Icon(Icons.download_rounded, color: kText),
+                              onPressed: () => playerService.onlineSave!(context, playerService.currentOnlineSong!),
+                            )
+                          else
+                            _LikeButton(liked: store.isLiked(t.id), onTap: () => store.toggleLike(t.id)),
                         ],
                       ),
                       const SizedBox(height: 18),
@@ -207,9 +215,7 @@ class _MinimalPlayer extends StatelessWidget {
   final Track track;
   final String playlistName;
 
-  /// Focus style: the ring around the cover is the only timeline, no tool row.
-  final bool focus;
-  const _MinimalPlayer({required this.track, required this.playlistName, this.focus = false});
+  const _MinimalPlayer({required this.track, required this.playlistName});
 
   String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
 
@@ -238,12 +244,20 @@ class _MinimalPlayer extends StatelessWidget {
                     Text(playlistName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: p.muted)),
                   ]),
                 ),
-                _OutlineIcon(
-                  icon: store.isLiked(t.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: store.isLiked(t.id) ? const Color(0xFFE0403B) : null,
-                  label: store.isLiked(t.id) ? 'Remove from Liked Songs' : 'Add to Liked Songs',
-                  onTap: () => store.toggleLike(t.id),
-                ),
+                if (playerService.currentOnlineSong != null && playerService.onlineSave != null)
+                  // Trending queue: keep the song you like.
+                  _OutlineIcon(
+                    icon: Icons.download_rounded,
+                    label: 'Save to playlists',
+                    onTap: () => playerService.onlineSave!(context, playerService.currentOnlineSong!),
+                  )
+                else
+                  _OutlineIcon(
+                    icon: store.isLiked(t.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: store.isLiked(t.id) ? const Color(0xFFE0403B) : null,
+                    label: store.isLiked(t.id) ? 'Remove from Liked Songs' : 'Add to Liked Songs',
+                    onTap: () => store.toggleLike(t.id),
+                  ),
               ]),
             ),
             const SizedBox(height: 14),
@@ -276,7 +290,7 @@ class _MinimalPlayer extends StatelessWidget {
                           duration: const Duration(milliseconds: 450),
                           transitionBuilder: (c, a) =>
                               FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: c)),
-                          child: WavyCover(key: ValueKey(t.id), track: t, inset: 18, seekable: focus),
+                          child: WavyCover(key: ValueKey(t.id), track: t, inset: 18, seekable: true),
                         ),
                       )),
                     ),
@@ -299,8 +313,9 @@ class _MinimalPlayer extends StatelessWidget {
                 ]),
               ),
             ),
-            SizedBox(height: focus ? 18 : 6),
-            if (!focus) Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: _SlimSeek(player: player)),
+            const SizedBox(height: 10),
+            // The classic wave slider (the ring around the cover moves through the song too).
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _WaveSeek(track: t)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -347,8 +362,8 @@ class _MinimalPlayer extends StatelessWidget {
               ]),
             ),
             const SizedBox(height: 10),
-            if (!focus) Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _ToolRow(track: t)),
-            SizedBox(height: focus ? 18 : 12),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: _ToolRow(track: t)),
+            const SizedBox(height: 12),
             _LyricsPeek(track: t),
           ]),
         ),

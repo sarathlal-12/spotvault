@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../app_state.dart';
+import '../library_store.dart' show Track;
 import '../pc_link.dart';
 import 'aurora.dart';
 import 'search_screen.dart' show saveOnlineSongFlow;
@@ -39,8 +41,91 @@ Future<List<Map<String, dynamic>>> appleTopSongs(String country) async {
   ];
 }
 
-/// Charts list (YouTube Music lists come from the downloader) plus the songs of
-/// [chart]; the Apple chart always loads even if the downloader can't answer.
+// ---- YouTube Music charts, read here (no key), so the phone gets every chart
+// even when its own downloader can't reach them.
+const _ytBrowse = 'https://music.youtube.com/youtubei/v1/browse?prettyPrint=false';
+
+Future<Map<String, dynamic>> _ytPost(String country, Map<String, dynamic> body) async {
+  final r = await http
+      .post(Uri.parse(_ytBrowse),
+          headers: {'Content-Type': 'application/json', 'Origin': 'https://music.youtube.com', 'User-Agent': 'Mozilla/5.0'},
+          body: jsonEncode({
+            'context': {
+              'client': {'clientName': 'WEB_REMIX', 'clientVersion': '1.20241023.01.00', 'hl': 'en', 'gl': country.toUpperCase()},
+            },
+            ...body,
+          }))
+      .timeout(const Duration(seconds: 20));
+  if (r.statusCode != 200) throw Exception('YouTube Music ${r.statusCode}');
+  return (jsonDecode(utf8.decode(r.bodyBytes)) as Map).cast<String, dynamic>();
+}
+
+Iterable<Map> _all(Object? o, String key) sync* {
+  if (o is Map) {
+    for (final e in o.entries) {
+      if (e.key == key && e.value is Map) yield e.value as Map;
+      yield* _all(e.value, key);
+    }
+  } else if (o is List) {
+    for (final v in o) {
+      yield* _all(v, key);
+    }
+  }
+}
+
+String _runs(Object? r) => r is Map ? [for (final x in (r['runs'] as List? ?? const [])) '${(x as Map)['text'] ?? ''}'].join() : '';
+
+/// YouTube Music's chart playlists for a country: [{id: "yt:<playlist>", title}].
+Future<List<Map<String, dynamic>>> ytMusicCharts(String country) async {
+  final j = await _ytPost(country, {
+    'browseId': 'FEmusic_charts',
+    'formData': {'selectedValues': [country.toUpperCase()]},
+  });
+  final out = <Map<String, dynamic>>[];
+  for (final it in _all(j, 'musicTwoRowItemRenderer')) {
+    final id = '${((it['navigationEndpoint'] as Map?)?['browseEndpoint'] as Map?)?['browseId'] ?? ''}';
+    final title = _runs(it['title']);
+    if (id.startsWith('VL') && title.isNotEmpty && !out.any((c) => c['id'] == 'yt:${id.substring(2)}')) {
+      out.add({'id': 'yt:${id.substring(2)}', 'title': title});
+    }
+  }
+  return out;
+}
+
+/// The songs of one YouTube Music chart playlist.
+Future<List<Map<String, dynamic>>> ytMusicChartSongs(String country, String playlistId) async {
+  final j = await _ytPost(country, {'browseId': 'VL$playlistId'});
+  final out = <Map<String, dynamic>>[];
+  for (final it in _all(j, 'musicResponsiveListItemRenderer')) {
+    final vid = '${(it['playlistItemData'] as Map?)?['videoId'] ?? ''}';
+    final cols = [
+      for (final c in (it['flexColumns'] as List? ?? const [])) _runs(((c as Map)['musicResponsiveListItemFlexColumnRenderer'] as Map?)?['text']),
+    ];
+    if (vid.isEmpty || cols.isEmpty || cols.first.isEmpty) continue;
+    final thumbs = _all(it['thumbnail'], 'thumbnail').map((t) => t['thumbnails']).whereType<List>().firstOrNull ?? const [];
+    final fixed = [
+      for (final c in (it['fixedColumns'] as List? ?? const [])) _runs(((c as Map)['musicResponsiveListItemFixedColumnRenderer'] as Map?)?['text']),
+    ];
+    var secs = 0;
+    if (fixed.isNotEmpty && fixed.first.contains(':')) {
+      for (final part in fixed.first.split(':')) {
+        secs = secs * 60 + (int.tryParse(part) ?? 0);
+      }
+    }
+    out.add({
+      'title': cols.first,
+      'artist': cols.length > 1 ? cols[1].split(' • ').first : '',
+      'art': thumbs.isEmpty ? '' : '${(thumbs.last as Map)['url'] ?? ''}',
+      'url': 'https://music.youtube.com/watch?v=$vid',
+      'secs': secs,
+    });
+  }
+  return out;
+}
+
+/// Charts list plus the songs of [chart]. The downloader answers first; when it
+/// can't (the phone's own downloader often can't reach YouTube Music's charts),
+/// the charts are read here. The Apple chart always loads.
 Future<Map<String, dynamic>> loadTrending(Future<Map<String, dynamic>> Function() fromDownloader, String country, String chart,
     {required Future<Map<String, dynamic>> Function(String chart) fromDownloaderFor}) async {
   Map<String, dynamic>? j;
@@ -50,20 +135,35 @@ Future<Map<String, dynamic>> loadTrending(Future<Map<String, dynamic>> Function(
   } catch (e) {
     err = e;
   }
-  if (chart != 'apple') {
-    if (j == null) throw err ?? Exception('Chart unavailable');
-    return j;
+  var charts = (j?['charts'] as List?)?.cast<Map>().map((m) => m.cast<String, dynamic>()).toList() ?? <Map<String, dynamic>>[];
+  if (!charts.any((c) => '${c['id']}'.startsWith('yt:'))) {
+    try {
+      charts = [{'id': 'apple', 'title': 'Apple Music Top 50'}, ...await ytMusicCharts(country)];
+    } catch (_) {}
   }
-  final charts = (j?['charts'] as List?) ?? const [{'id': 'apple', 'title': 'Apple Music Top 50'}];
+  if (charts.isEmpty) charts = [{'id': 'apple', 'title': 'Apple Music Top 50'}];
+  if (chart != 'apple') {
+    final have = (j?['songs'] as List?) ?? const [];
+    if (j != null && have.isNotEmpty) return {...j, 'charts': charts};
+    try {
+      return {'charts': charts, 'songs': await ytMusicChartSongs(country, chart.substring(3)), 'chart': chart};
+    } catch (e) {
+      throw err ?? e;
+    }
+  }
   try {
     return {'charts': charts, 'songs': await appleTopSongs(country)};
   } catch (e) {
     // Apple's chart can't be reached (some networks block it): show the first
     // YouTube Music chart instead, so the tab is never empty.
-    final yt = charts.cast<Map>().where((c) => '${c['id']}'.startsWith('yt:')).toList();
+    final yt = charts.where((c) => '${c['id']}'.startsWith('yt:')).toList();
     if (yt.isEmpty) rethrow;
-    final alt = await fromDownloaderFor('${yt.first['id']}');
-    return {...alt, 'charts': charts, 'chart': '${yt.first['id']}'};
+    final id = '${yt.first['id']}';
+    try {
+      final alt = await fromDownloaderFor(id);
+      if (((alt['songs'] as List?) ?? const []).isNotEmpty) return {...alt, 'charts': charts, 'chart': id};
+    } catch (_) {}
+    return {'charts': charts, 'songs': await ytMusicChartSongs(country, id.substring(3)), 'chart': id};
   }
 }
 
@@ -74,6 +174,9 @@ String countryName(String code) => kChartCountries.where((c) => c.$1 == code).fi
 abstract class TrendingBackend {
   Future<Map<String, dynamic>> load(String country, String chart);
   Future<Uri> previewUri(Map<String, dynamic> song);
+
+  /// A stream for a song in the chart queue (found by name when it has no link).
+  Future<Uri> streamFor(Map<String, dynamic> song);
   Future<void> save(BuildContext context, Map<String, dynamic> song);
 }
 
@@ -105,6 +208,9 @@ class PhoneTrendingBackend implements TrendingBackend {
   Future<Uri> previewUri(Map<String, dynamic> s) async => pcLink.previewUri(await _resolve(s));
 
   @override
+  Future<Uri> streamFor(Map<String, dynamic> s) => pcLink.streamFor(s);
+
+  @override
   Future<void> save(BuildContext context, Map<String, dynamic> s) async {
     final song = await _resolve(s);
     if (context.mounted) await saveOnlineSongFlow(context, song);
@@ -130,6 +236,13 @@ class _TrendingViewState extends State<TrendingView> {
   String chart = 'apple';
   String error = '';
   String? loadingKey;
+  final _chips = ScrollController();
+
+  @override
+  void dispose() {
+    _chips.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -182,16 +295,45 @@ class _TrendingViewState extends State<TrendingView> {
     _load();
   }
 
+  String get _queueKey => 'trend:${store.trendCountry}:$chart';
+  String _trackId(int i) => 'online:$_queueKey:$i';
+
+  /// Plays the chart from song [i]: the whole chart becomes the queue, so next
+  /// and previous move through it, and the player can save the song playing.
   Future<void> _play(Map<String, dynamic> s) async {
+    final list = songs ?? const [];
+    final i = list.indexOf(s);
     final key = songKey(s);
-    if (playerService.previewing && playerService.previewKey == key) {
-      await playerService.stopPreview();
+    if (playerService.onlineList && playerService.previewKey == _queueKey && playerService.current?.id == _trackId(i)) {
+      playerService.togglePlay();
       return;
     }
     setState(() => loadingKey = key);
     try {
-      final uri = await widget.backend.previewUri(s);
-      await playerService.playPreview(uri, key: key, title: '${s['title']}', artist: '${s['artist'] ?? ''}', artUrl: '${s['art'] ?? ''}');
+      final items = <(Uri, Track)>[
+        for (final (n, x) in list.indexed)
+          (
+            await widget.backend.streamFor(x),
+            Track(
+              id: _trackId(n),
+              path: '',
+              title: '${x['title']}',
+              artist: '${x['artist'] ?? ''}',
+              album: 'Trending',
+              size: 0,
+              mtime: 0,
+              duration: ((x['secs'] as num?) ?? 0).toDouble(),
+              addedAt: 0,
+              hasArt: false,
+            ),
+          ),
+      ];
+      await playerService.playOnline(items,
+          start: i < 0 ? 0 : i,
+          key: _queueKey,
+          arts: [for (final x in list) '${x['art'] ?? ''}'],
+          saveable: list,
+          onSave: (ctx, song) => widget.backend.save(ctx, song));
     } catch (e) {
       if (mounted) _snack(e is PcException ? e.message : "Couldn't play this song. Try another one.");
     } finally {
@@ -229,29 +371,50 @@ class _TrendingViewState extends State<TrendingView> {
           ...widget.actions,
         ]),
         const SizedBox(height: 14),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            ActionChip(
-              avatar: const Icon(Icons.public_rounded, size: 18),
-              label: Text(countryName(store.trendCountry)),
-              onPressed: _pickCountry,
-            ),
-            const SizedBox(width: 8),
-            for (final c in charts) ...[
-              ChoiceChip(
-                label: Text('${c['title']}'),
-                selected: c['id'] == chart,
-                showCheckmark: false,
-                onSelected: (_) {
-                  if (c['id'] == chart) return;
-                  chart = '${c['id']}';
-                  _load();
-                },
+        // The chart row: swipe on phones, drag or scroll the wheel on Windows.
+        SizedBox(
+          height: 48,
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(dragDevices: {...PointerDeviceKind.values}),
+            child: Listener(
+              onPointerSignal: (e) {
+                if (e is PointerScrollEvent && _chips.hasClients) {
+                  final to = (_chips.offset + e.scrollDelta.dy + e.scrollDelta.dx).clamp(0.0, _chips.position.maxScrollExtent);
+                  _chips.jumpTo(to);
+                }
+              },
+              child: ListView(
+                controller: _chips,
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                children: [
+                  Center(
+                    child: ActionChip(
+                      avatar: const Icon(Icons.public_rounded, size: 18),
+                      label: Text(countryName(store.trendCountry)),
+                      onPressed: _pickCountry,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  for (final c in charts) ...[
+                    Center(
+                      child: ChoiceChip(
+                        label: Text('${c['title']}'),
+                        selected: c['id'] == chart,
+                        showCheckmark: false,
+                        onSelected: (_) {
+                          if (c['id'] == chart) return;
+                          chart = '${c['id']}';
+                          _load();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ],
               ),
-              const SizedBox(width: 8),
-            ],
-          ]),
+            ),
+          ),
         ),
         const SizedBox(height: 10),
         if (error.isNotEmpty)
@@ -276,7 +439,7 @@ class _TrendingViewState extends State<TrendingView> {
   Widget _row(int i, Map<String, dynamic> s) {
     final p = pal;
     final key = songKey(s);
-    final playing = playerService.previewing && playerService.previewKey == key;
+    final playing = playerService.onlineList && playerService.previewKey == _queueKey && playerService.current?.id == _trackId(i) && playerService.player.playing;
     final art = '${s['art'] ?? ''}';
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4),

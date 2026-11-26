@@ -1,5 +1,7 @@
 #include "win32_window.h"
 
+#include <cwchar>
+
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
@@ -150,6 +152,10 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
+  // Started by the AI connector (MCP) to save a song: open minimised, no focus.
+  if (wcsstr(GetCommandLineW(), L"--minimized") != nullptr) {
+    return ShowWindow(window_handle_, SW_SHOWMINNOACTIVE);
+  }
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
 }
 

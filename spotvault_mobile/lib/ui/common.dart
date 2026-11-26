@@ -64,7 +64,16 @@ class TrackArt extends StatelessWidget {
   const TrackArt(this.track, {super.key, this.size = 48, this.radius = 10});
 
   @override
-  Widget build(BuildContext context) => ArtImage(file: store.artFor(track), size: size, radius: radius);
+  Widget build(BuildContext context) {
+    final web = store.artFor(track) == null ? playerService.onlineArt[track.id] : null;
+    if (web == null) return ArtImage(file: store.artFor(track), size: size, radius: radius);
+    // An online song (Trending queue): its cover from the web.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Image.network(web, width: size, height: size, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => ArtImage(file: null, size: size, radius: radius)),
+    );
+  }
 }
 
 /// One row in a song list. Tapping plays [list] starting at this song.
@@ -147,10 +156,13 @@ class MiniPlayer extends StatelessWidget {
         final t = playerService.current;
         if (t == null) return const SizedBox.shrink();
         final p = playerService.player;
+        final online = playerService.currentOnlineSong;
         return MiniPlayerBar(
           track: t,
           playing: p.playing,
           liked: store.isLiked(t.id),
+          // Trending queue: save the song instead of liking it, and an arrow to open the player.
+          onSave: online == null || playerService.onlineSave == null ? null : () => playerService.onlineSave!(context, online),
           progress: p.positionStream.map((pos) {
             final total = p.duration?.inMilliseconds ?? 0;
             return total > 0 ? (pos.inMilliseconds / total).clamp(0.0, 1.0) : 0.0;
@@ -174,7 +186,9 @@ class MiniPlayerBar extends StatelessWidget {
   final bool liked;
   final Stream<double> progress;
   final VoidCallback onOpen, onNext, onPrevious, onLike, onPlayPause;
+  final VoidCallback? onSave;
   const MiniPlayerBar({
+    this.onSave,
     super.key,
     required this.track,
     required this.playing,
@@ -234,11 +248,15 @@ class MiniPlayerBar extends StatelessWidget {
                         ),
                       ),
                       if (playing) Padding(padding: const EdgeInsets.only(right: 4), child: EqBars(color: kAccent, height: 14, bars: 3)),
-                      IconButton(
-                        tooltip: liked ? 'Remove from Liked Songs' : 'Add to Liked Songs',
-                        icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? kPink : kMuted),
-                        onPressed: onLike,
-                      ),
+                      if (onSave != null) ...[
+                        IconButton(tooltip: 'Save to playlists', icon: Icon(Icons.download_rounded, color: kText), onPressed: onSave),
+                        IconButton(tooltip: 'Open the player', icon: Icon(Icons.keyboard_arrow_up_rounded, color: kText), onPressed: onOpen),
+                      ] else
+                        IconButton(
+                          tooltip: liked ? 'Remove from Liked Songs' : 'Add to Liked Songs',
+                          icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? kPink : kMuted),
+                          onPressed: onLike,
+                        ),
                       Pressable(
                         onTap: onPlayPause,
                         child: Container(

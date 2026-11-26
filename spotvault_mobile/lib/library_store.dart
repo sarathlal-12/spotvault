@@ -204,6 +204,11 @@ class LibraryStore extends ChangeNotifier {
 
   /// Trending tab: which country's charts (ISO code).
   String trendCountry = 'IN';
+
+  /// Windows EQ: on/off, 5 band gains in dB, and the user's own presets.
+  bool eqOn = false;
+  List<double> eqGains = [0, 0, 0, 0, 0];
+  Map<String, List<double>> eqPresets = {};
   /// Shown as "Good evening, <name>".
   String userName = '';
   /// Sort order chosen per playlist (folder -> 'pc' | 'recent' | 'title' | 'artist').
@@ -300,6 +305,13 @@ class LibraryStore extends ChangeNotifier {
       glassSolid = ((j['glassSolid'] ?? 0.35) as num).toDouble().clamp(0.0, 1.0);
       playerLook = j['playerLook'] == 'focus' ? 'focus' : 'classic';
       trendCountry = (j['trendCountry'] as String?) ?? 'IN';
+      eqOn = j['eqOn'] == true;
+      final g = (j['eqGains'] as List?)?.map((x) => (x as num).toDouble()).toList();
+      if (g != null && g.length == 5) eqGains = g;
+      eqPresets = {
+        for (final e in ((j['eqPresets'] as Map?) ?? const {}).entries)
+          if (e.value is List && (e.value as List).length == 5) '${e.key}': [for (final x in e.value as List) (x as num).toDouble()],
+      };
       userName = j['userName'] ?? '';
       playlistSort.addAll(Map<String, String>.from(j['playlistSort'] ?? const {}));
       savedPhones = [for (final p in (j['savedPhones'] as List? ?? const [])) Map<String, dynamic>.from(p as Map)];
@@ -363,6 +375,9 @@ class LibraryStore extends ChangeNotifier {
           'glassSolid': glassSolid,
           'playerLook': playerLook,
           'trendCountry': trendCountry,
+          'eqOn': eqOn,
+          'eqGains': eqGains,
+          'eqPresets': eqPresets,
           'userName': userName,
           'playlistSort': playlistSort,
           'savedPhones': savedPhones,

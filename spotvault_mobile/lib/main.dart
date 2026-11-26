@@ -29,11 +29,13 @@ import 'recognize/recognize_sheet.dart';
 import 'ui/trending_view.dart';
 import 'ui/update_ui.dart';
 import 'windows_media.dart';
+import 'desktop/eq.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isWindows) {
     JustAudioMediaKit.ensureInitialized(windows: true);
+    Eq.instance.attach(); // the Windows equaliser hooks into each player
   }
   await store.load();
   if (!Platform.isWindows) {
@@ -262,7 +264,7 @@ class _HomeShellState extends State<HomeShell> {
             index: tab,
             // Tab numbers stay 0 Home, 1 Search, 2 Studio, 3 Sync; Trending (4) sits
             // between Search and Studio in the bar.
-            children: [const LibraryScreen(), const SearchScreen(), const LabScreen(), const SyncScreen(), TrendingView(backend: _trendBackend, actions: [RecognizeButton(backend: _trendBackend)])],
+            children: [const LibraryScreen(), const SearchScreen(), const LabScreen(), const SyncScreen(), TrendingView(backend: _trendBackend)],
           ),
         ),
         bottomNavigationBar: Column(

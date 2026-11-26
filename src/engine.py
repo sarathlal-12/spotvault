@@ -50,9 +50,10 @@ os.environ.setdefault("COLUMNS", "160")
 
 from phone_sync import PhoneSyncServer, generate_pin, get_lan_ips, HTTP_PORT  # noqa: E402
 import sources  # noqa: E402
+import dedupe  # noqa: E402
 import updater  # noqa: E402
 
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 CONFIG_FILE = "library_config.json"
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".spot_sync_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -147,9 +148,6 @@ class Engine:
         self.update_info = None
         self.update_progress = None
         self._tasks = []
-        self._task_pos = (0, 1)
-        self._songs_total = 0
-        self._songs_seen = 0
 
         self.phone = PhoneSyncServer(
             get_state=lambda: (self.master_folder, list(self.playlists)),
@@ -159,6 +157,7 @@ class Engine:
         self.phone.on_delete_playlist = self._delete_playlist_from_phone
         self.phone.engine = self
         self.version = APP_VERSION
+        self.dupes = None  # last result of the one-copy-per-song pass
 
     # ------------------------------------------------------------ config
     def _load_config(self):
@@ -223,30 +222,31 @@ class Engine:
             self.phone_events.append({"time": time.time(), "text": str(text)})
             del self.phone_events[:-300]
 
-    def _event(self, kind, title, detail="", path=""):
+    def _event(self, kind, title, detail="", path="", playlist=None):
         with self.lock:
+            pl = self.current_playlist if playlist is None else playlist
             self.seq += 1
             e = {"seq": self.seq, "kind": kind, "title": title, "detail": detail or "",
-                 "path": path or "", "playlist": self.current_playlist, "time": time.time()}
+                 "path": path or "", "playlist": pl, "time": time.time()}
             self.feed.append(e)
             del self.feed[:-FEED_KEEP]
             if kind in self.counts:
                 self.counts[kind] += 1
                 if self.report is not None and self.running and getattr(self, "_manual", False):
                     if kind == "done":
-                        self._tick_off(title, path)
+                        self._tick_off(title, path, pl)
                 elif self.report is not None and self.running:
                     self.report["entries"].append({
                         "kind": kind, "group": sources.group_for(kind, detail), "title": title,
-                        "detail": detail or "", "path": path or "", "playlist": self.current_playlist,
+                        "detail": detail or "", "path": path or "", "playlist": pl,
                     })
 
-    def _tick_off(self, title, path=""):
+    def _tick_off(self, title, path="", playlist=""):
         """Marks the failed/skipped report entry that a hand download just saved."""
         got = _words(title)
         best, score = None, 0.0
         for e in self.report.get("entries", []):
-            if e.get("kind") not in ("fail", "skip") or e.get("playlist") != self.current_playlist:
+            if e.get("kind") not in ("fail", "skip") or e.get("playlist") != playlist:
                 continue
             want = _words(e.get("title", ""))
             if not want:
@@ -306,6 +306,25 @@ class Engine:
         self._save_config()
         return item, None
 
+    def add_local_playlist(self, name):
+        """A playlist with no link (made by the AI connector): a folder songs are saved into."""
+        folder = clean_folder_name(name)
+        if not folder:
+            return None, "Give the playlist a name."
+        with self.lock:
+            for p in self.playlists:
+                if p.get("folder", "").lower() == folder.lower():
+                    return p, None
+        try:
+            os.makedirs(os.path.join(self.master_folder, folder), exist_ok=True)
+        except OSError as e:
+            return None, f"Couldn't create the folder: {e}"
+        item = {"url": "", "folder": folder, "title": name.strip()[:120] or folder, "img_path": "", "has_synced": True}
+        with self.lock:
+            self.playlists.append(item)
+        self._save_config()
+        return item, None
+
     def remove_playlist(self, folder, delete_files=False):
         with self.lock:
             before = len(self.playlists)
@@ -338,24 +357,27 @@ class Engine:
         with self.lock:
             if self.running:
                 return "A sync is already running."
-            pls = [p for p in self.playlists if folders is None or p.get("folder") in folders]
+            # Playlists without a link (made by the AI connector) have nothing to sync.
+            pls = [p for p in self.playlists if p.get("url") and (folders is None or p.get("folder") in folders)]
             if not pls:
                 return "No playlists to sync."
             tasks = [self._task_for(p) for p in pls]
         return self._start(tasks)
 
-    def download_songs(self, folder, urls):
+    def download_songs(self, folder, urls, also=()):
         with self.lock:
             if self.running:
                 return "A sync is already running."
-            if not any(p.get("folder") == folder for p in self.playlists):
+            mine = {p.get("folder") for p in self.playlists}
+            if folder not in mine:
                 return "Pick one of your playlists."
             urls = [u for u in urls if u][:200]
             if not urls:
                 return "Nothing to download."
-        return self._start([{"folder": folder, "urls": urls, "source": sources.YOUTUBE, "playlist": False}])
+            also = [c for c in (clean_folder_name(str(f)) for f in also) if c and c != folder]
+        return self._start([{"folder": folder, "urls": urls, "source": sources.YOUTUBE, "playlist": False, "also": also}])
 
-    def import_lists(self, lists):
+    def import_lists(self, lists, also=()):
         """Song list import: {playlist name: ["Title - Artist", ...]}.
 
         Each playlist becomes a folder in the music folder; every song is found by
@@ -369,35 +391,12 @@ class Engine:
             folder = clean_folder_name(str(name)) or "Imported"
             names = [str(x).strip() for x in songs if str(x).strip()][:3000]
             if names:
-                tasks.append({"folder": folder, "urls": [], "names": names, "source": sources.YOUTUBE, "playlist": False})
+                extra = [c for c in (clean_folder_name(str(f)) for f in also) if c and c != folder]
+                tasks.append({"folder": folder, "urls": [], "names": names, "source": sources.YOUTUBE, "playlist": False,
+                              "also": extra})
         if not tasks:
             return "There are no songs in that list."
         return self._start(tasks)
-
-    def _download_names(self, names, target_dir, ffmpeg_path):
-        """Find each "Title - Artist" online and download it, skipping songs already saved."""
-        have = []
-        try:
-            have = [_words(os.path.splitext(e.name)[0]) for e in os.scandir(target_dir) if e.is_file()]
-        except OSError:
-            pass
-        self._on_song_total(len(names))
-        for name in names:
-            if self.stop_requested:
-                break
-            want = _words(name)
-            if want and any(len(want & h) / len(want) >= 0.8 for h in have):
-                self._report("skip", name, "Already saved")
-                continue
-            try:
-                url = sources.best_url_for(name)
-            except Exception:
-                self._report("fail", name, "Couldn't find this song online")
-                continue
-            before = self._songs_seen
-            sources.download([url], target_dir, lambda kind, title, detail, path="": self._event(kind, title, detail, path), ffmpeg_path)
-            self._songs_seen = before + 1
-            self._song_progress()
 
     def _start(self, tasks):
         with self.lock:
@@ -421,36 +420,74 @@ class Engine:
     def stop(self):
         with self.lock:
             if self.running:
-                # Every download loop checks sources.stopped(), so the sync ends
-                # within a song or two; songs already saved are kept.
+                # Each playlist runs in its own child process; the worker kills
+                # them at once. Songs already saved are kept, half-saved files go.
                 self.stop_requested = True
                 self.status = "Stopping"
 
     def _worker(self):
-        real_signal = signal.signal
-
-        def safe_signal(signum, handler):
-            try:
-                return real_signal(signum, handler)
-            except ValueError:
-                return None
-
-        signal.signal = safe_signal
         try:
             self._run_tasks()
         except Exception as e:
             self._event("fail", "Sync crashed", f"{type(e).__name__}: {e}")
         finally:
-            signal.signal = real_signal
             with self.lock:
                 self.running = False
                 self.progress = 1.0
                 self.status = "Stopped" if self.stop_requested else "Done"
-                self.ring_label = "Done"
+                self.ring_label = "Stopped" if self.stop_requested else "Done"
+                self.current_playlist = ""
                 if self.report is not None:
                     self.report["finished"] = time.time()
                     self._save_report()
             self._save_config()
+            if not self.stop_requested:
+                self.link_copies()
+
+    # ------------------------------------------------------------ one copy per song
+    def _folders(self):
+        with self.lock:
+            return [p.get("folder", "") for p in self.playlists if p.get("folder")]
+
+    def link_copies(self):
+        """Songs saved in several playlists become one file on disk (hard links)."""
+        try:
+            n, freed, errors = dedupe.link_exact(self.master_folder, self._folders())
+        except Exception as e:
+            n, freed, errors = 0, 0, [f"{type(e).__name__}: {e}"]
+        with self.lock:
+            prev = self.dupes or {}
+            self.dupes = {"linked": prev.get("linked", 0) + n, "freed": prev.get("freed", 0) + freed,
+                          "errors": errors[:5], "time": time.time()}
+        if n:
+            self._event("info", f"{n} duplicate songs now share one copy", f"Freed {freed / 1e6:.0f} MB")
+        return n, freed, errors
+
+    def _inside_library(self, path):
+        master = os.path.realpath(self.master_folder)
+        try:
+            return os.path.isfile(path) and os.path.commonpath([os.path.realpath(path), master]) == master
+        except ValueError:
+            return False
+
+    def merge_copies(self, keep, others):
+        """The user approved: keep one copy of a song and link it in place of the others."""
+        if not self._inside_library(keep):
+            return "That song isn't in your music folder any more."
+        done, errors = 0, []
+        for o in others:
+            if not self._inside_library(o):
+                continue
+            try:
+                dedupe.link(keep, o, recycle=recycle)
+                done += 1
+            except OSError as e:
+                errors.append(f"{os.path.basename(o)}: {e.strerror or e}")
+        return "; ".join(errors) or None
+
+    # Playlists that sync at the same time. Each is its own process, so spotdl's
+    # working folder and console capture never mix, and Stop can kill it.
+    PARALLEL = 3
 
     def _run_tasks(self):
         if not sources.bundled_ffmpeg():
@@ -462,107 +499,165 @@ class Engine:
             return
         tasks = list(self._tasks)
         total = len(tasks)
-        sources.total_listener = self._on_song_total
-        sources.stop_check = lambda: self.stop_requested
+        run_dir = os.path.join(CACHE_DIR, "tasks")
+        os.makedirs(run_dir, exist_ok=True)
+        run_id = str(int(time.time() * 1000))
+        pending = list(enumerate(tasks))
+        running = []
+        launched = []
+        finished = 0
+        self.status = "Syncing"
+        while pending or running:
+            if self.stop_requested:
+                for job in running:
+                    _kill_tree(job["proc"])
+                for job in running:
+                    try:
+                        job["proc"].wait(timeout=10)
+                    except Exception:
+                        pass
+                    self._read_job(job)
+                    self._drop_half_saved(job)
+                    _quiet_remove(job["events"])
+                    _quiet_remove(job["spec"])
+                return
+            while pending and len(running) < self.PARALLEL:
+                i, task = pending.pop(0)
+                job = self._launch(task, i, run_dir, run_id, ffmpeg_path)
+                running.append(job)
+                launched.append(job)
+            for job in list(running):
+                self._read_job(job)
+                if job["proc"].poll() is not None:
+                    self._read_job(job)
+                    running.remove(job)
+                    finished += 1
+                    _quiet_remove(job["events"])
+                    _quiet_remove(job["spec"])
+                    if job["task"].get("playlist"):
+                        with self.lock:
+                            for pl in self.playlists:
+                                if pl.get("folder") == job["folder"]:
+                                    pl["has_synced"] = True
+            with self.lock:
+                part = sum(min(j["seen"] / j["n"], 0.99) if j["n"] else 0.0 for j in running)
+                self.progress = (finished + part) / max(total, 1)
+                names = [j["folder"] for j in running]
+                self.current_playlist = names[0] if len(names) == 1 else ""
+                n = sum(j["n"] for j in launched)
+                seen = sum(min(j["seen"], j["n"]) if j["n"] else j["seen"] for j in launched)
+                if len(names) > 1:
+                    self.status = f"{len(names)} playlists at once"
+                    self.ring_label = f"{seen} / {n} songs" if n else f"{len(names)} playlists"
+                elif names:
+                    self.status = f"{finished + 1}/{total}" if total > 1 else "Syncing"
+                    self.ring_label = f"{seen} / {n} songs" if n else names[0][:22]
+            time.sleep(0.3)
+
+    def _launch(self, task, i, run_dir, run_id, ffmpeg_path):
+        folder = task["folder"]
+        target_dir = os.path.join(self.master_folder, folder)
+        os.makedirs(target_dir, exist_ok=True)
         try:
-            for i, task in enumerate(tasks, 1):
-                if self.stop_requested:
-                    break
-                folder = task["folder"]
-                target_dir = os.path.join(self.master_folder, folder)
-                os.makedirs(target_dir, exist_ok=True)
-                with self.lock:
-                    self._task_pos = (i - 1, total)
-                    self._songs_total = 0
-                    self._songs_seen = 0
-                    self.progress = (i - 1) / total
-                    self.status = f"{i}/{total}" if total > 1 else "Syncing"
-                    self.current_playlist = folder
-                    self.ring_label = folder[:22]
-                self._event("start", folder, target_dir)
-                try:
-                    if task.get("names"):
-                        self._download_names(task["names"], target_dir, ffmpeg_path)
-                    elif task["source"] == sources.SPOTIFY:
-                        self._run_spotdl(task["urls"][0], target_dir)
-                    elif task["source"] == sources.YOUTUBE and task.get("playlist"):
-                        sources.sync_youtube(task["urls"][0], target_dir, self._report, ffmpeg_path)
-                    else:
-                        sources.download(task["urls"], target_dir, self._report, ffmpeg_path)
-                except Exception as e:
-                    self._event("fail", f"Error on {folder}", f"{type(e).__name__}: {e}")
-                if task.get("playlist"):
-                    with self.lock:
-                        for pl in self.playlists:
-                            if pl.get("folder") == folder:
-                                pl["has_synced"] = True
-                self.progress = i / total
-        finally:
-            sources.total_listener = None
-            sources.stop_check = None
+            before = {e.name for e in os.scandir(target_dir)}
+        except OSError:
+            before = set()
+        events = os.path.join(run_dir, f"{run_id}_{i}.jsonl")
+        spec = os.path.join(run_dir, f"{run_id}_{i}.json")
+        with open(spec, "w", encoding="utf-8") as f:
+            json.dump({"task": task, "target_dir": target_dir, "ffmpeg": ffmpeg_path, "events": events,
+                       "spotify_id": self.spotify_id, "spotify_secret": self.spotify_secret,
+                       "master_folder": self.master_folder, "parent": os.getpid()}, f)
+        open(events, "w").close()
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable, "--task", spec]
+        else:
+            cmd = [sys.executable, os.path.abspath(__file__), "--task", spec]
+        proc = subprocess.Popen(cmd, cwd=os.getcwd(), stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self._event("start", folder, target_dir, playlist=folder)
+        return {"proc": proc, "task": task, "folder": folder, "target_dir": target_dir, "before": before,
+                "events": events, "spec": spec, "offset": 0, "tail": b"", "n": 0, "seen": 0, "saved": set(), "stems": set()}
 
-    def _report(self, kind, title, detail, path=""):
-        self._event(kind, title, detail, path)
-        self._songs_seen += 1
-        self._song_progress()
-
-    def _on_song_total(self, n):
-        self._songs_total = max(int(n), 0)
-        self._song_progress()
-
-    def _song_progress(self):
-        done, total = self._task_pos
-        n, seen = self._songs_total, self._songs_seen
-        if n:
-            seen = min(seen, n)
-            self.progress = (done + seen / n) / max(total, 1)
-            self.ring_label = f"{seen} / {n} songs"
-
-    def _raw_log(self, text):
-        if "Skipping track" in text and "local tracks" in text:
-            m = re.search(r"Skipping track:\s*(\S+)", text)
-            ident = m.group(1) if m and m.group(1) not in ("None", "") else "unknown"
-            self._event("skip", "Local file or podcast episode",
-                        f"Local file or podcast in the Spotify playlist (id {ident}): nothing to download")
-
-    def _run_spotdl(self, url, target_dir):
+    def _read_job(self, job):
         try:
-            from spotdl.console import console_entry_point
-        except ImportError:
-            from spotdl.__main__ import console_entry_point
-        from spotdl.utils.spotify import SpotifyClient
-
-        sources.apply_spotdl_clean_rules()
-        sources.spotdl_failures.clear()
-        sources.spotdl_listener = self._report
-        SpotifyClient._instance = None
-        spotdl_logger = logging.getLogger("spotdl")
-        for h in list(spotdl_logger.handlers):
-            spotdl_logger.removeHandler(h)
-
-        orig_cwd, orig_argv = os.getcwd(), sys.argv
-        old_stdout, old_stderr = sys.stdout, sys.stderr
-        stream = _LogStream(self._raw_log)
-        try:
-            os.chdir(target_dir)
-            sys.argv = ["spotdl", "download", url, "--audio", *sources.SPOTDL_AUDIO_ORDER, "--threads", "8",
-                        "--format", "m4a", "--respect-skip-file", "--lyrics", "--simple-tui"]
-            if self.spotify_id and self.spotify_secret:
-                sys.argv += ["--client-id", self.spotify_id, "--client-secret", self.spotify_secret]
-            sys.stdout = sys.stderr = stream
-            console_entry_point()
-        except SystemExit:
-            pass
-        finally:
+            with open(job["events"], "rb") as f:
+                f.seek(job["offset"])
+                data = f.read()
+        except OSError:
+            return
+        if not data:
+            return
+        job["offset"] += len(data)
+        lines = (job["tail"] + data).split(b"\n")
+        job["tail"] = lines.pop()
+        for line in lines:
             try:
-                stream.flush()
-            except Exception:
-                pass
-            sys.stdout, sys.stderr = old_stdout, old_stderr
-            sys.argv = orig_argv
-            os.chdir(orig_cwd)
-            sources.spotdl_listener = None
-            sources.spotdl_failures.clear()
+                ev = json.loads(line.decode("utf-8"))
+            except ValueError:
+                continue
+            if ev.get("t") == "total":
+                job["n"] = max(int(ev.get("n") or 0), 0)
+            elif ev.get("t") == "ev":
+                kind = ev.get("kind", "info")
+                if kind in ("done", "skip", "fail"):
+                    job["seen"] += 1
+                if ev.get("path"):
+                    job["saved"].add(os.path.basename(ev["path"]))
+                if kind in ("done", "skip"):
+                    # yt-dlp reports a saved song by its file name without a path.
+                    job["stems"].add(ev.get("title", ""))
+                    if job["task"].get("also"):
+                        # Save to several playlists: one file, linked into the other folders.
+                        p = ev.get("path") or os.path.join(job["target_dir"], ev.get("title", "") + ".m4a")
+                        dedupe.place(p, [os.path.join(self.master_folder, f) for f in job["task"]["also"]])
+                self._event(kind, ev.get("title", ""), ev.get("detail", ""), ev.get("path", ""), playlist=job["folder"])
+
+    def _drop_half_saved(self, job):
+        """After Stop: delete files the killed sync left half-written."""
+        audio = (".m4a", ".mp3", ".opus", ".ogg", ".flac", ".wav", ".webm")
+        temp = (".part", ".ytdl", ".temp", ".tmp")
+        try:
+            entries = list(os.scandir(job["target_dir"]))
+        except OSError:
+            return
+        for e in entries:
+            if not e.is_file() or e.name in job["before"] or e.name in job["saved"]                     or os.path.splitext(e.name)[0] in job["stems"]:
+                continue
+            low = e.name.lower()
+            if low.endswith(temp) or ".part-frag" in low or ".temp." in low or low.endswith(audio):
+                _quiet_remove(e.path)
+
+
+    # ------------------------------------------------------------ AI connector
+    def build_mcpb(self):
+        """A one-click Claude Desktop extension (.mcpb) that runs this PC's engine as the MCP server."""
+        import zipfile
+        import mcp_server
+        exe = sys.executable if getattr(sys, "frozen", False) else ""
+        if not exe:
+            return None, "Install SpotVault first: the extension points at the installed engine."
+        manifest = {
+            "manifest_version": "0.2",
+            "name": "spotvault",
+            "display_name": "SpotVault",
+            "version": APP_VERSION,
+            "description": "Find new music (songs like one you love, new releases, albums, charts) and save it into your SpotVault playlists.",
+            "author": {"name": "Sarath Lal", "url": "https://sarath-apps.vercel.app/spotvault"},
+            "homepage": "https://sarath-apps.vercel.app/spotvault",
+            "server": {"type": "binary", "entry_point": "launch.cmd",
+                       "mcp_config": {"command": exe, "args": ["--mcp"]}},
+            "tools": [{"name": t["name"], "description": t["description"]} for t in mcp_server.TOOLS],
+            "compatibility": {"platforms": ["win32"]},
+        }
+        out = os.path.join(CACHE_DIR, "SpotVault.mcpb")
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("manifest.json", json.dumps(manifest, indent=2))
+            z.writestr("launch.cmd", '@"' + exe + '" --mcp' + chr(13) + chr(10))
+            icon = os.path.join(os.path.dirname(os.path.dirname(exe)), "app_icon.ico")
+            if os.path.isfile(icon):
+                z.write(icon, "icon.ico")
+        return out, None
 
     # ------------------------------------------------------------ updates
     def check_update(self):
@@ -656,14 +751,26 @@ class Engine:
         if r == "/stop":
             self.stop()
             return 200, {"ok": True}
+        if r == "/dupes":
+            found = dedupe.scan(self.master_folder, self._folders())
+            return 200, {"exact": len(found["exact"]), "exact_bytes": found["exact_bytes"],
+                         "review": found["review"], "done": self.dupes}
+        if r == "/dupes/link":
+            n, freed, errors = self.link_copies()
+            return 200, {"ok": True, "linked": n, "freed": freed, "errors": errors[:5]}
+        if r == "/dupes/merge":
+            err = self.merge_copies(str(data.get("keep", "")), [str(x) for x in data.get("others") or []])
+            return (400, {"error": err}) if err else (200, {"ok": True})
         if r == "/download":
-            err = self.download_songs(str(data.get("folder", "")), [str(u) for u in data.get("urls") or []])
+            err = self.download_songs(str(data.get("folder", "")), [str(u) for u in data.get("urls") or []],
+                                      [str(f) for f in data.get("also") or []])
             return (400, {"error": err}) if err else (200, {"ok": True})
         if r == "/import":
             lists = data.get("lists")
             if not isinstance(lists, dict):
                 return 400, {"error": "Bad list"}
-            err = self.import_lists({str(k): [str(x) for x in (v or [])] for k, v in lists.items() if isinstance(v, list)})
+            err = self.import_lists({str(k): [str(x) for x in (v or [])] for k, v in lists.items() if isinstance(v, list)},
+                                    [str(f) for f in data.get("also") or []])
             return (400, {"error": err}) if err else (200, {"ok": True})
         if r == "/add":
             item, err = self.add_playlist(str(data.get("url", "")), str(data.get("folder", "")))
@@ -690,6 +797,9 @@ class Engine:
                 self.skip_update = str(data["skip_update"])
             self._save_config()
             return 200, {"ok": True}
+        if r == "/mcpb":
+            path, err = self.build_mcpb()
+            return (400, {"error": err}) if err else (200, {"ok": True, "path": path})
         if r == "/new_pin":
             self.sync_pin = generate_pin()
             self._save_config()
@@ -708,11 +818,180 @@ class Engine:
         return 404, {"error": "Not found"}
 
 
+def _kill_tree(proc):
+    if proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=15)
+        else:
+            proc.kill()
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _quiet_remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+class _TaskRun:
+    """One playlist sync, run inside a child process (SpotVaultEngine.exe --task spec.json).
+
+    Every result is written as a JSON line to the events file the engine reads.
+    """
+
+    def __init__(self, spec):
+        self.spec = spec
+        self.task = spec["task"]
+        self.target_dir = spec["target_dir"]
+        self.ffmpeg = spec.get("ffmpeg") or sources.ensure_ffmpeg()
+        self.spotify_id = spec.get("spotify_id", "")
+        self.spotify_secret = spec.get("spotify_secret", "")
+        self.stop_requested = False
+        self._out = open(spec["events"], "a", encoding="utf-8")
+        self._lock = threading.Lock()
+
+    def _emit(self, **kw):
+        with self._lock:
+            self._out.write(json.dumps(kw) + "\n")
+            self._out.flush()
+
+    def _event(self, kind, title, detail="", path=""):
+        self._emit(t="ev", kind=kind, title=title, detail=detail or "", path=path or "")
+
+    _report = _event
+
+    def _on_song_total(self, n):
+        self._emit(t="total", n=int(n))
+
+    def run(self):
+        task, target_dir = self.task, self.target_dir
+        os.makedirs(target_dir, exist_ok=True)
+        sources.total_listener = self._on_song_total
+        try:
+            if task.get("names"):
+                self._download_names(task["names"], target_dir, self.ffmpeg)
+            elif task["source"] == sources.SPOTIFY:
+                self._run_spotdl(task["urls"][0], target_dir)
+            elif task["source"] == sources.YOUTUBE and task.get("playlist"):
+                sources.sync_youtube(task["urls"][0], target_dir, self._report, self.ffmpeg)
+            else:
+                sources.download(task["urls"], target_dir, self._report, self.ffmpeg)
+        except Exception as e:
+            self._event("fail", f"Error on {task['folder']}", f"{type(e).__name__}: {e}")
+        finally:
+            sources.total_listener = None
+            self._emit(t="end")
+
+    def _download_names(self, names, target_dir, ffmpeg_path):
+        """Find each "Title - Artist" online and download it, skipping songs already saved."""
+        have = []
+        try:
+            have = [_words(os.path.splitext(e.name)[0]) for e in os.scandir(target_dir) if e.is_file()]
+        except OSError:
+            pass
+        self._on_song_total(len(names))
+        sources.total_listener = None  # each single download would reset the count to 1
+        for name in names:
+            want = _words(name)
+            if want and any(len(want & h) / len(want) >= 0.8 for h in have):
+                self._report("skip", name, "Already saved")
+                continue
+            try:
+                url = sources.best_url_for(name)
+            except Exception:
+                self._report("fail", name, "Couldn't find this song online")
+                continue
+            sources.download([url], target_dir, self._event, ffmpeg_path)
+
+    def _raw_log(self, text):
+        if "Skipping track" in text and "local tracks" in text:
+            m = re.search(r"Skipping track:\s*(\S+)", text)
+            ident = m.group(1) if m and m.group(1) not in ("None", "") else "unknown"
+            self._event("skip", "Local file or podcast episode",
+                        f"Local file or podcast in the Spotify playlist (id {ident}): nothing to download")
+
+    def _run_spotdl(self, url, target_dir):
+        try:
+            from spotdl.console import console_entry_point
+        except ImportError:
+            from spotdl.__main__ import console_entry_point
+        from spotdl.utils.spotify import SpotifyClient
+
+        real_signal = signal.signal
+
+        def safe_signal(signum, handler):
+            try:
+                return real_signal(signum, handler)
+            except ValueError:
+                return None
+
+        signal.signal = safe_signal
+        sources.apply_spotdl_clean_rules()
+        sources.spotdl_failures.clear()
+        sources.spotdl_listener = self._report
+        SpotifyClient._instance = None
+        spotdl_logger = logging.getLogger("spotdl")
+        for h in list(spotdl_logger.handlers):
+            spotdl_logger.removeHandler(h)
+
+        orig_cwd, orig_argv = os.getcwd(), sys.argv
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        stream = _LogStream(self._raw_log)
+        try:
+            os.chdir(target_dir)
+            sys.argv = ["spotdl", "download", url, "--audio", *sources.SPOTDL_AUDIO_ORDER, "--threads", "8",
+                        "--format", "m4a", "--respect-skip-file", "--lyrics", "--simple-tui"]
+            if self.spotify_id and self.spotify_secret:
+                sys.argv += ["--client-id", self.spotify_id, "--client-secret", self.spotify_secret]
+            sys.stdout = sys.stderr = stream
+            console_entry_point()
+        except SystemExit:
+            pass
+        finally:
+            try:
+                stream.flush()
+            except Exception:
+                pass
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+            sys.argv = orig_argv
+            os.chdir(orig_cwd)
+            signal.signal = real_signal
+            sources.spotdl_listener = None
+            sources.spotdl_failures.clear()
+
+
+def run_task_child(spec_path):
+    with open(spec_path, encoding="utf-8") as f:
+        spec = json.load(f)
+    parent = int(spec.get("parent") or 0)
+
+    def watch_parent():
+        # The engine quit (or crashed): stop downloading too.
+        while True:
+            time.sleep(1)
+            if parent and not _pid_alive(parent):
+                os._exit(0)
+
+    threading.Thread(target=watch_parent, daemon=True).start()
+    _TaskRun(spec).run()
+
+
 def main():
     # Run from the install folder so library_config.json is the 1.x file.
     if getattr(sys, "frozen", False):
         os.chdir(os.path.dirname(os.path.dirname(sys.executable)) if os.path.basename(
             os.path.dirname(sys.executable)).lower() == "engine" else os.path.dirname(sys.executable))
+    if "--task" in sys.argv:
+        # One playlist sync, started by the engine (see Engine._launch).
+        run_task_child(sys.argv[sys.argv.index("--task") + 1])
+        return
     if "--mcp" in sys.argv:
         # AI assistants (MCP): charts, search, save songs; no engine server here.
         import mcp_server
@@ -724,6 +1003,8 @@ def main():
         print(f"SpotVault engine could not start: {engine.phone.error}", flush=True)
         sys.exit(2)
     print(f"SpotVault engine {APP_VERSION} ready on {HTTP_PORT}", flush=True)
+    # Exact copies of a song in several playlists share one file (runs once a start).
+    threading.Timer(15, lambda: engine.running or engine.link_copies()).start()
     parent = os.environ.get("SV_PARENT_PID")
     while True:
         time.sleep(2)

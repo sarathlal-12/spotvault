@@ -56,6 +56,46 @@ class RecognizeButton extends StatelessWidget {
       );
 }
 
+/// The big "What's this song?" in the middle of an empty Search tab.
+class RecognizeHero extends StatelessWidget {
+  final TrendingBackend backend;
+  const RecognizeHero({super.key, required this.backend});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pal;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Semantics(
+            button: true,
+            label: "What's this song?",
+            child: InkResponse(
+              onTap: () => showRecognizeSheet(context, backend),
+              radius: 80,
+              child: Container(
+                width: 132,
+                height: 132,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: p.accent.withValues(alpha: 0.14),
+                  border: Border.all(color: p.accent.withValues(alpha: 0.35), width: 2),
+                ),
+                child: Icon(Icons.graphic_eq_rounded, size: 64, color: p.accent),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text("What's this song?", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: p.text)),
+          const SizedBox(height: 6),
+          Text('Tap to listen, or type above to search', textAlign: TextAlign.center, style: TextStyle(color: p.muted)),
+        ]),
+      ),
+    );
+  }
+}
+
 enum _Stage { pick, listening, thinking, found, none, error }
 
 class _RecognizeSheet extends StatefulWidget {

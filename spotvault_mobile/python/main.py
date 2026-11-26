@@ -446,7 +446,15 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/suggest":
                 return self._suggest(q.get("q", [""])[0])
             if route == "/api/preview":
-                return self._preview(q.get("url", [""])[0])
+                url = q.get("url", [""])[0]
+                name = q.get("q", [""])[0]
+                if not url and name:
+                    # Trending queue: a song known only by name -> its best match.
+                    try:
+                        url = sources.best_url_for(name)
+                    except Exception as e:
+                        return self._error(502, f"No match: {type(e).__name__}")
+                return self._preview(url)
             if route == "/api/trending":
                 try:
                     country = q.get("country", ["IN"])[0]

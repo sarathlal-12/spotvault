@@ -267,6 +267,8 @@ class SyncService extends ChangeNotifier {
     final toFetch = <Track>[];
     for (final pl in remotePlaylists) {
       for (final raw in (pl['tracks'] as List).cast<Map<String, dynamic>>()) {
+        // A song in several playlists is one file on the PC: copy it once.
+        if (remoteTracks.containsKey(raw['id'])) continue;
         final prev = store.tracks[raw['id']];
         final t = Track.fromServer(raw, previous: prev);
         remoteTracks[t.id] = t;

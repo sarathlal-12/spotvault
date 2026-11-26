@@ -13,7 +13,7 @@ if not os.path.isfile('assets/ffmpeg.exe'):
 
 datas = []
 binaries = [('assets/ffmpeg.exe', '.')]
-hiddenimports = ['phone_sync', 'sources', 'updater', 'loudness', 'mutagen', 'ytmusicapi']
+hiddenimports = ['phone_sync', 'sources', 'updater', 'loudness', 'dedupe', 'mutagen', 'ytmusicapi']
 tmp_ret = collect_all('spotdl')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('PIL')

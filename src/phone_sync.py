@@ -290,13 +290,27 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send_json(200, self.sync.delete_from_phone(
                     [str(x) for x in data.get("paths") or []][:5000],
                     [str(x) for x in data.get("folders") or []][:500]))
+            if route == "/api/playlist":
+                # AI connector (MCP): a new, empty playlist.
+                engine = getattr(self.sync, "engine", None)
+                if engine is None:
+                    return self._error(400, "Make playlists in the SpotVault app")
+                try:
+                    data = json.loads(body or b"{}")
+                except ValueError:
+                    return self._error(400, "Bad JSON")
+                item, err = engine.add_local_playlist(str(data.get("name", "")))
+                if err:
+                    return self._error(400, err)
+                return self._send_json(200, {"ok": True, "folder": item["folder"]})
             if route == "/api/download":
                 try:
                     data = json.loads(body or b"{}")
                 except ValueError:
                     return self._error(400, "Bad JSON")
                 job, err = self.sync.start_download(str(data.get("url", "")), str(data.get("folder", "")),
-                                                    str(data.get("title", "")))
+                                                    str(data.get("title", "")),
+                                                    [str(x) for x in data.get("also") or []][:50])
                 if err:
                     return self._error(400, err)
                 return self._send_json(200, job)
@@ -584,6 +598,21 @@ class PhoneSyncServer:
     def build_library(self):
         master, playlists = self._snapshot()
         out = []
+        # One copy per song: files linked together (dedupe.py) go to the phone as one
+        # track (same id and path), so the phone stores the song once.
+        canon = {}
+        for pl in playlists:
+            folder = pl.get("folder", "")
+            try:
+                for entry in os.scandir(os.path.join(master, folder)):
+                    if folder and entry.is_file() and os.path.splitext(entry.name)[1].lower() in AUDIO_MIME:
+                        st = os.stat(entry.path)
+                        if st.st_nlink > 1:
+                            rel = f"{folder}/{entry.name}"
+                            key = (st.st_dev, st.st_ino)
+                            canon[key] = min(canon.get(key, rel), rel)
+            except OSError:
+                pass
         for pl in playlists:
             folder = pl.get("folder", "")
             folder_path = os.path.join(master, folder)
@@ -596,8 +625,8 @@ class PhoneSyncServer:
                         entries.append(entry)
                 entries.sort(key=lambda e: e.name.casefold())
                 for entry in entries:
-                    st = entry.stat()
-                    rel = f"{folder}/{entry.name}"
+                    st = os.stat(entry.path)
+                    rel = canon.get((st.st_dev, st.st_ino), f"{folder}/{entry.name}") if st.st_nlink > 1 else f"{folder}/{entry.name}"
                     meta = read_track_meta(entry.path, st.st_size, int(st.st_mtime))
                     tracks.append({
                         "id": hashlib.sha1(rel.encode("utf-8")).hexdigest()[:16],
@@ -687,7 +716,7 @@ class PhoneSyncServer:
         return None
 
     # --- downloads requested by the phone ------------------------
-    def start_download(self, url, folder, title=""):
+    def start_download(self, url, folder, title="", also=()):
         import sources
         source, clean = sources.normalize_url(url)
         if not clean or source == sources.SPOTIFY:
@@ -696,7 +725,9 @@ class PhoneSyncServer:
         if folder not in {p.get("folder") for p in playlists}:
             return None, "That playlist is not on this PC"
         job = {"id": uuid.uuid4().hex[:12], "state": "queued", "url": clean, "folder": folder,
-               "title": title[:200], "path": "", "error": "", "created": int(time.time())}
+               "title": title[:200], "path": "", "error": "", "created": int(time.time()),
+               # Save to several playlists: downloaded once, then linked into these folders too.
+               "also": [f for f in also if f != folder and f in {p.get("folder") for p in playlists}]}
         with self._job_cv:
             # Forget finished jobs older than an hour.
             now = time.time()
@@ -753,6 +784,9 @@ class PhoneSyncServer:
                 name = saved[0]
                 job["path"] = f"{job['folder']}/{name}.m4a" if name else ""
                 job["already"] = name is None
+                if name and job.get("also"):
+                    import dedupe
+                    dedupe.place(os.path.join(target, f"{name}.m4a"), [os.path.join(master, f) for f in job["also"]])
             else:
                 job["state"] = "failed"
                 job["error"] = (errors[0] if errors else "Download failed")[:200]

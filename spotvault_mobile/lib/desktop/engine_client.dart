@@ -177,7 +177,29 @@ class EngineClient extends ChangeNotifier {
   }
 
   /// Song list import: {playlist: ["Title - Artist", ...]}; each song is found and downloaded.
-  Future<String?> importLists(Map<String, List<String>> lists) => _post('/import', {'lists': lists});
+  Future<String?> importLists(Map<String, List<String>> lists, {List<String> also = const []}) => _post('/import', {'lists': lists, 'also': also});
+
+  /// Songs stored more than once: {exact, exact_bytes, review: [{files: [{path, folder, name, size, seconds, bitrate}], keep, title, artist}], done}.
+  Future<Map<String, dynamic>> dupes() async {
+    final r = await http.post(_u('/api/engine/dupes'), headers: _h, body: '{}').timeout(const Duration(minutes: 3));
+    final j = (jsonDecode(r.body) as Map).cast<String, dynamic>();
+    if (r.statusCode != 200) throw Exception('${j['error'] ?? "Couldn't check for duplicates"}');
+    return j;
+  }
+
+  Future<String?> linkCopies() => _post('/dupes/link', {});
+
+  /// Builds the one-click Claude Desktop extension: (path, error).
+  Future<(String?, String?)> mcpb() async {
+    try {
+      final r = await http.post(_u('/api/engine/mcpb'), headers: _h, body: '{}').timeout(const Duration(seconds: 30));
+      final j = (jsonDecode(r.body) as Map).cast<String, dynamic>();
+      return r.statusCode == 200 ? ('${j['path']}', null) : (null, '${j['error'] ?? 'Something went wrong'}');
+    } catch (e) {
+      return (null, "The downloader didn't answer ($e).");
+    }
+  }
+  Future<String?> mergeCopies(String keep, List<String> others) => _post('/dupes/merge', {'keep': keep, 'others': others});
 
   Future<String?> syncAll() => _post('/sync', {});
   Future<String?> syncFolders(List<String> folders) => _post('/sync', {'folders': folders});
@@ -185,7 +207,8 @@ class EngineClient extends ChangeNotifier {
   Future<String?> addPlaylist(String url) => _post('/add', {'url': url});
   Future<String?> removePlaylist(String folder, {bool deleteFiles = false}) => _post('/remove', {'folder': folder, 'delete_files': deleteFiles});
   Future<String?> renamePlaylist(String folder, String title) => _post('/rename', {'folder': folder, 'title': title});
-  Future<String?> downloadSongs(String folder, List<String> urls) => _post('/download', {'folder': folder, 'urls': urls});
+  Future<String?> downloadSongs(String folder, List<String> urls, {List<String> also = const []}) =>
+      _post('/download', {'folder': folder, 'urls': urls, 'also': also});
   Future<String?> setMasterFolder(String path) => _post('/settings', {'master_folder': path});
   Future<String?> setSpotifyKey(String id, String secret) => _post('/settings', {'spotify_id': id, 'spotify_secret': secret});
   Future<String?> skipUpdate(String version) => _post('/settings', {'skip_update': version});

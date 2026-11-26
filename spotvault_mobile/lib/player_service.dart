@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show BuildContext;
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart' show MediaItem;
 
@@ -645,11 +646,33 @@ class PlayerService extends ChangeNotifier {
   /// Windows "Play online": a whole playlist streamed song after song.
   bool onlineList = false;
 
+  /// Cover art (a web link) of the online songs playing now, by track id.
+  final Map<String, String> onlineArt = {};
+
+  /// Online songs that can be saved from the player (Trending): track id -> song,
+  /// and how to save one. Null when the online list can't be saved.
+  final Map<String, Map<String, dynamic>> onlineSongs = {};
+  Future<void> Function(BuildContext context, Map<String, dynamic> song)? onlineSave;
+
+  Map<String, dynamic>? get currentOnlineSong => onlineList ? onlineSongs[current?.id] : null;
+
   /// Plays [songs] from the internet in order, starting at [start]. Each song is a
   /// stream URL plus a [Track] for its title and artist. The user's own queue comes
   /// back with [stopPreview], or is dropped when they play a downloaded song.
-  Future<void> playOnline(List<(Uri, Track)> songs, {int start = 0, required String key}) async {
+  Future<void> playOnline(List<(Uri, Track)> songs,
+      {int start = 0,
+      required String key,
+      List<String>? arts,
+      List<Map<String, dynamic>>? saveable,
+      Future<void> Function(BuildContext context, Map<String, dynamic> song)? onSave}) async {
     if (songs.isEmpty) return;
+    onlineArt.clear();
+    onlineSongs.clear();
+    onlineSave = onSave;
+    for (final (i, (_, t)) in songs.indexed) {
+      if (arts != null && i < arts.length && arts[i].isNotEmpty) onlineArt[t.id] = arts[i];
+      if (saveable != null && i < saveable.length) onlineSongs[t.id] = saveable[i];
+    }
     _fadeFactor = 1;
     _gainFactor = 1;
     _applyVolume();
@@ -673,7 +696,15 @@ class PlayerService extends ChangeNotifier {
     try {
       await player.setLoopMode(LoopMode.off);
       await player.setAudioSources(
-        [for (final (u, t) in songs) AudioSource.uri(u, tag: MediaItem(id: t.id, title: t.title, artist: t.artist.isEmpty ? null : t.artist))],
+        [
+          for (final (u, t) in songs)
+            AudioSource.uri(u,
+                tag: MediaItem(
+                    id: t.id,
+                    title: t.title,
+                    artist: t.artist.isEmpty ? null : t.artist,
+                    artUri: onlineArt[t.id] == null ? null : Uri.tryParse(onlineArt[t.id]!))),
+        ],
         initialIndex: start.clamp(0, songs.length - 1),
       );
       player.play();

@@ -1,4 +1,4 @@
-import 'dart:io' show File, Platform;
+import 'dart:io' show File, Platform, Process;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -20,6 +20,7 @@ import '../ui/nearby_ui.dart' show JamScreen;
 import '../ui/qr.dart' show pcLinkFor;
 import 'desktop_shell.dart';
 import 'desktop_trending.dart';
+import 'eq.dart';
 import '../recognize/recognize_sheet.dart';
 import 'engine_client.dart';
 
@@ -32,7 +33,7 @@ Widget pageFor(DPage page) => switch (page) {
       DPage.jam => const _Nested(child: JamScreen()),
       DPage.studio => const _Nested(child: LabScreen()),
       DPage.settings => const SettingsPage(),
-      DPage.trending => TrendingPage(actions: [RecognizeButton(backend: DesktopTrendingBackend())]),
+      DPage.trending => const TrendingPage(),
     };
 
 /// The engine exe next to the installed app (it is also the MCP server).
@@ -153,22 +154,32 @@ Future<void> importSongListDialog(BuildContext context) async {
         content: SizedBox(
           width: 560,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Paste the list from your phone (Studio, Song list, Copy), or open a .txt file. Each "## name" becomes a playlist; songs you already have are skipped.', style: _muted(13)),
+            Text(
+                'Paste the list from your phone (Studio, Song list, Copy), or open a .txt file. Each "## name" becomes a playlist; songs you already have are skipped.',
+                style: _muted(13)),
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
               minLines: 8,
               maxLines: 12,
               onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(hintText: '## Drive mix\nMidnight Drive - Night Cassette', errorText: err, errorMaxLines: 3, border: const OutlineInputBorder()),
+              decoration: InputDecoration(
+                  hintText: '## Drive mix\nMidnight Drive - Night Cassette', errorText: err, errorMaxLines: 3, border: const OutlineInputBorder()),
               style: const TextStyle(fontSize: 13, fontFamily: 'Consolas'),
             ),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: Text(songs == 0 ? 'No songs yet.' : '$songs songs in ${lists.length} playlist${lists.length == 1 ? '' : 's'}: ${lists.keys.take(4).join(', ')}${lists.length > 4 ? '…' : ''}', style: _muted(12))),
+              Expanded(
+                  child: Text(
+                      songs == 0
+                          ? 'No songs yet.'
+                          : '$songs songs in ${lists.length} playlist${lists.length == 1 ? '' : 's'}: ${lists.keys.take(4).join(', ')}${lists.length > 4 ? '…' : ''}',
+                      style: _muted(12))),
               TextButton.icon(
                 onPressed: () async {
-                  final f = await openFile(acceptedTypeGroups: const [XTypeGroup(label: 'Text', extensions: ['txt'])]);
+                  final f = await openFile(acceptedTypeGroups: const [
+                    XTypeGroup(label: 'Text', extensions: ['txt'])
+                  ]);
                   if (f == null) return;
                   ctrl.text = await f.readAsString();
                   setState(() {});
@@ -187,6 +198,129 @@ Future<void> importSongListDialog(BuildContext context) async {
     }),
   );
 }
+
+/// Duplicate songs: exact copies get linked (one file on disk), near copies (the
+/// same song downloaded twice) are listed here for the user to approve.
+Future<void> duplicatesDialog(BuildContext context) async {
+  Map<String, dynamic>? found;
+  String? err;
+  var busy = false;
+  final picked = <int, String>{}; // group -> path to keep
+  final skip = <int>{};
+  await showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(builder: (context, setState) {
+      Future<void> load() async {
+        try {
+          found = await engine.dupes();
+          err = null;
+        } catch (e) {
+          err = '$e';
+        }
+        if (context.mounted) setState(() {});
+      }
+
+      if (found == null && err == null && !busy) {
+        busy = true;
+        load().whenComplete(() => busy = false);
+      }
+      final review = [for (final g in (found?['review'] as List? ?? const [])) (g as Map).cast<String, dynamic>()];
+      final exact = (found?['exact'] as num? ?? 0).toInt();
+      final exactBytes = (found?['exact_bytes'] as num? ?? 0);
+
+      Future<void> apply() async {
+        setState(() => busy = true);
+        final problems = <String>[];
+        if (exact > 0) {
+          final e = await engine.linkCopies();
+          if (e != null) problems.add(e);
+        }
+        for (var i = 0; i < review.length; i++) {
+          if (skip.contains(i)) continue;
+          final files = [for (final f in (review[i]['files'] as List)) '${(f as Map)['path']}'];
+          final keep = picked[i] ?? '${review[i]['keep']}';
+          final e = await engine.mergeCopies(keep, files.where((p) => p != keep).toList());
+          if (e != null) problems.add(e);
+        }
+        if (!context.mounted) return;
+        Navigator.pop(context);
+        dToast(context, problems.isEmpty ? 'Done: each song is now stored once.' : 'Done, with problems: ${problems.first}');
+      }
+
+      Widget row(int i) {
+        final g = review[i];
+        final files = [for (final f in (g['files'] as List)) (f as Map).cast<String, dynamic>()];
+        final keep = picked[i] ?? '${g['keep']}';
+        final off = skip.contains(i);
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(
+                    child: Text('${g['title']}  ·  ${g['artist']}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: pal.text, fontWeight: FontWeight.w600))),
+                Text(off ? 'Leave both' : 'Merge', style: _muted(12)),
+                Switch(value: !off, onChanged: (v) => setState(() => v ? skip.remove(i) : skip.add(i))),
+              ]),
+              for (final f in files)
+                RadioListTile<String>(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: '${f['path']}',
+                  groupValue: keep,
+                  onChanged: off ? null : (v) => setState(() => picked[i] = v!),
+                  title: Text('${f['folder']}  /  ${f['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                  subtitle: Text(
+                      '${_mb(f['size'] as num)} · ${(f['bitrate'] as num? ?? 0) > 0 ? '${f['bitrate']} kbps · ' : ''}${_dur((f['seconds'] as num? ?? 0).toDouble())}${'${f['path']}' == keep && !off ? '  ·  keep this one' : ''}',
+                      style: _muted(12)),
+                ),
+            ]),
+          ),
+        );
+      }
+
+      return AlertDialog(
+        title: const Text('Duplicate songs'),
+        content: SizedBox(
+          width: 640,
+          height: 520,
+          child: err != null
+              ? Center(child: Text(err!, style: _muted(13)))
+              : found == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(
+                          exact > 0
+                              ? '$exact songs are saved as identical copies in more than one place (${_mb(exactBytes)}). They will be linked: the song stays in every playlist but is stored once.'
+                              : 'No identical copies left: every song in several playlists is stored once.',
+                          style: _muted(13)),
+                      const SizedBox(height: 10),
+                      if (review.isNotEmpty) ...[
+                        Text(
+                            'Same song, different download (${review.length}). Pick the copy to keep; the other goes to the Recycle Bin and the kept one shows in both places.',
+                            style: _muted(13)),
+                        const SizedBox(height: 8),
+                        Expanded(child: ListView(children: [for (var i = 0; i < review.length; i++) row(i)])),
+                      ] else
+                        Text('No near copies found.', style: _muted(13)),
+                    ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            style: _primary(),
+            onPressed: busy || found == null || (exact == 0 && review.length == skip.length) ? null : apply,
+            child: Text(busy && found != null ? 'Working…' : 'Free up space'),
+          ),
+        ],
+      );
+    }),
+  );
+}
+
+String _dur(double s) => s <= 0 ? '' : '${s ~/ 60}:${(s.round() % 60).toString().padLeft(2, '0')}';
 
 /// "Add a playlist": paste a Spotify, YouTube or SoundCloud link.
 Future<void> addPlaylistDialog(BuildContext context, {bool syncNow = true}) async {
@@ -228,20 +362,27 @@ Future<void> addPlaylistDialog(BuildContext context, {bool syncNow = true}) asyn
           content: SizedBox(
             width: 460,
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Paste a Spotify, YouTube, YouTube Music or SoundCloud playlist link. Download it to this PC, or play it online for now and download later.', style: _muted(13)),
+              Text('Paste a Spotify, YouTube, YouTube Music or SoundCloud playlist link. Download it to this PC, or play it online for now and download later.',
+                  style: _muted(13)),
               const SizedBox(height: 14),
               TextField(
                 controller: ctrl,
                 autofocus: true,
                 onSubmitted: (_) => busy ? null : go(),
-                decoration: InputDecoration(hintText: 'https://open.spotify.com/playlist/…', errorText: err, errorMaxLines: 3, prefixIcon: const Icon(Icons.link_rounded)),
+                decoration: InputDecoration(
+                    hintText: 'https://open.spotify.com/playlist/…', errorText: err, errorMaxLines: 3, prefixIcon: const Icon(Icons.link_rounded)),
               ),
             ]),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            OutlinedButton.icon(style: _outline(), onPressed: busy ? null : () => go(online: true), icon: const Icon(Icons.wifi_rounded, size: 16), label: const Text('Play online')),
-            FilledButton.icon(style: _primary(), onPressed: busy ? null : go, icon: const Icon(Icons.download_rounded, size: 16), label: Text(busy ? 'Adding…' : 'Download')),
+            OutlinedButton.icon(
+                style: _outline(),
+                onPressed: busy ? null : () => go(online: true),
+                icon: const Icon(Icons.wifi_rounded, size: 16),
+                label: const Text('Play online')),
+            FilledButton.icon(
+                style: _primary(), onPressed: busy ? null : go, icon: const Icon(Icons.download_rounded, size: 16), label: Text(busy ? 'Adding…' : 'Download')),
           ],
         );
       },
@@ -310,7 +451,8 @@ class HomePage extends StatelessWidget {
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 190, mainAxisSpacing: 18, crossAxisSpacing: 18, childAspectRatio: 0.72),
+              gridDelegate:
+                  const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 190, mainAxisSpacing: 18, crossAxisSpacing: 18, childAspectRatio: 0.72),
               itemCount: math.min(lists.length, 12),
               itemBuilder: (context, i) => _PlaylistCard(lists[i]),
             ),
@@ -367,7 +509,8 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                     decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), boxShadow: [
                       BoxShadow(color: Colors.black.withValues(alpha: hover ? 0.32 : 0.2), blurRadius: hover ? 30 : 18, offset: const Offset(0, 12)),
                     ]),
-                    child: LayoutBuilder(builder: (c, b) => ArtImage(file: store.coverFor(pl), size: b.maxWidth, radius: 18, fallback: Icons.queue_music_rounded)),
+                    child:
+                        LayoutBuilder(builder: (c, b) => ArtImage(file: store.coverFor(pl), size: b.maxWidth, radius: 18, fallback: Icons.queue_music_rounded)),
                   ),
                 ),
                 Positioned(
@@ -439,7 +582,8 @@ class _TrackRowState extends State<TrackRow> {
               Expanded(
                 flex: 5,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: playing ? p.accent : p.text, fontWeight: FontWeight.w500)),
+                  Text(t.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: playing ? p.accent : p.text, fontWeight: FontWeight.w500)),
                   Text(t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: _muted(12)),
                 ]),
               ),
@@ -589,10 +733,14 @@ class _PlaylistPageState extends State<PlaylistPage> {
                   ),
                   _pill('Shuffle', icon: Icons.shuffle_rounded, onTap: tracks.isEmpty ? null : () => playerService.playTracks(tracks, shuffle: true)),
                   if (onPc)
-                    _pill(engine.syncing ? 'Syncing…' : 'Sync now', icon: Icons.sync_rounded, onTap: engine.syncing ? null : () async {
-                      final e = await engine.syncFolders([folder]);
-                      if (e != null && context.mounted) dToast(context, e);
-                    }),
+                    _pill(engine.syncing ? 'Syncing…' : 'Sync now',
+                        icon: Icons.sync_rounded,
+                        onTap: engine.syncing
+                            ? null
+                            : () async {
+                                final e = await engine.syncFolders([folder]);
+                                if (e != null && context.mounted) dToast(context, e);
+                              }),
                   if (onPc) _PlaylistMore(folder: folder, title: pl.name),
                 ]),
               ]),
@@ -750,10 +898,8 @@ class _SearchPageState extends State<SearchPage> {
       error = '';
     });
     try {
-      final r = await http
-          .get(Uri(scheme: 'http', host: '127.0.0.1', port: EngineClient.port, path: '/api/search', queryParameters: {'q': q}),
-              headers: {'X-SpotVault-Pin': engine.token})
-          .timeout(const Duration(seconds: 40));
+      final r = await http.get(Uri(scheme: 'http', host: '127.0.0.1', port: EngineClient.port, path: '/api/search', queryParameters: {'q': q}),
+          headers: {'X-SpotVault-Pin': engine.token}).timeout(const Duration(seconds: 40));
       final j = jsonDecode(r.body) as Map<String, dynamic>;
       results = [for (final x in (j['results'] as List? ?? const [])) (x as Map).cast<String, dynamic>()];
       if (r.statusCode != 200) error = '${j['error'] ?? 'Search failed'}';
@@ -779,11 +925,12 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _save() async {
-    if (folder == null) {
-      dToast(context, 'Pick a playlist to save into.');
-      return;
-    }
-    final e = await engine.downloadSongs(folder!, picked.toList());
+    final targets = await pickPcPlaylists(context, title: 'Save ${picked.length} song${picked.length == 1 ? '' : 's'} into', preselect: folder);
+    if (targets == null || targets.isEmpty || !mounted) return;
+    folder = targets.first;
+    final e = engine.playlists.any((x) => x['folder'] == targets.first)
+        ? await engine.downloadSongs(targets.first, picked.toList(), also: targets.skip(1).toList())
+        : 'Pick one of your playlists first (a new playlist works from Trending or a song list).';
     if (!mounted) return;
     if (e != null) {
       dToast(context, e);
@@ -796,7 +943,6 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     final p = pal;
-    final pcLists = engine.playlists;
     return ListenableBuilder(
       listenable: playerService,
       builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -813,7 +959,15 @@ class _SearchPageState extends State<SearchPage> {
                   controller: ctrl,
                   autofocus: true,
                   onSubmitted: (_) => _search(),
-                  decoration: const InputDecoration(hintText: 'Song, artist or link', prefixIcon: Icon(Icons.search_rounded)),
+                  decoration: InputDecoration(
+                    hintText: 'Song, artist or link',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: IconButton(
+                      tooltip: "What's this song?",
+                      icon: Icon(Icons.graphic_eq_rounded, color: pal.accent),
+                      onPressed: () => showRecognizeSheet(context, DesktopTrendingBackend()),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -822,47 +976,51 @@ class _SearchPageState extends State<SearchPage> {
           ]),
         ),
         if (error.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(horizontal: 30), child: Text(error, style: TextStyle(color: p.danger))),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            itemCount: results.length,
-            itemBuilder: (context, i) {
-              final r = results[i];
-              final url = '${r['url']}';
-              final on = picked.contains(url);
-              final previewing = playerService.previewing && playerService.previewKey == url;
-              return InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => setState(() => on ? picked.remove(url) : picked.add(url)),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  child: Row(children: [
-                    Checkbox(value: on, onChanged: (_) => setState(() => on ? picked.remove(url) : picked.add(url))),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: (r['thumb'] ?? '') == ''
-                          ? Container(width: 44, height: 44, color: p.card)
-                          : Image.network('${r['thumb']}', width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 44, height: 44, color: p.card)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('${r['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w500)),
-                        Text('${r['artist'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _muted(12)),
-                      ]),
-                    ),
-                    Text('${r['duration'] ?? ''}', style: _muted(12)),
-                    IconButton(
-                      tooltip: previewing ? 'Stop preview' : 'Preview',
-                      onPressed: () => _preview(r),
-                      icon: Icon(previewing ? Icons.stop_circle_outlined : Icons.play_circle_outline_rounded),
-                    ),
-                  ]),
-                ),
-              );
-            },
+        if (results.isEmpty && !busy && error.isEmpty)
+          Expanded(child: RecognizeHero(backend: DesktopTrendingBackend()))
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              itemCount: results.length,
+              itemBuilder: (context, i) {
+                final r = results[i];
+                final url = '${r['url']}';
+                final on = picked.contains(url);
+                final previewing = playerService.previewing && playerService.previewKey == url;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => setState(() => on ? picked.remove(url) : picked.add(url)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Row(children: [
+                      Checkbox(value: on, onChanged: (_) => setState(() => on ? picked.remove(url) : picked.add(url))),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: (r['thumb'] ?? '') == ''
+                            ? Container(width: 44, height: 44, color: p.card)
+                            : Image.network('${r['thumb']}',
+                                width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: 44, height: 44, color: p.card)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('${r['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w500)),
+                          Text('${r['artist'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _muted(12)),
+                        ]),
+                      ),
+                      Text('${r['duration'] ?? ''}', style: _muted(12)),
+                      IconButton(
+                        tooltip: previewing ? 'Stop preview' : 'Preview',
+                        onPressed: () => _preview(r),
+                        icon: Icon(previewing ? Icons.stop_circle_outlined : Icons.play_circle_outline_rounded),
+                      ),
+                    ]),
+                  ),
+                );
+              },
+            ),
           ),
-        ),
         AnimatedSize(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
@@ -873,16 +1031,8 @@ class _SearchPageState extends State<SearchPage> {
                   child: Row(children: [
                     Text('${picked.length} picked', style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
                     const Spacer(),
-                    Text('Save into', style: _muted(13)),
-                    const SizedBox(width: 10),
-                    DropdownButton<String>(
-                      value: pcLists.any((e) => e['folder'] == folder) ? folder : null,
-                      hint: const Text('Pick a playlist'),
-                      items: [for (final e in pcLists) DropdownMenuItem(value: '${e['folder']}', child: Text('${e['title']}'))],
-                      onChanged: (v) => setState(() => folder = v),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton(style: _primary(), onPressed: _save, child: const Text('Save songs')),
+                    FilledButton.icon(
+                        style: _primary(), onPressed: _save, icon: const Icon(Icons.playlist_add_rounded, size: 18), label: const Text('Save to playlists…')),
                   ]),
                 ),
         ),
@@ -1007,15 +1157,20 @@ class _SyncPageState extends State<SyncPage> {
             Expanded(
               child: _Card(
                 child: Row(children: [
-                  _Ring(value: engine.syncing ? engine.progress : (lr == null ? 0 : 1), label: engine.syncing ? '${(engine.progress * 100).round()}%' : 'Ready'),
+                  _Ring(
+                      value: engine.syncing ? engine.progress : (lr == null ? 0 : 1), label: engine.syncing ? '${(engine.progress * 100).round()}%' : 'Ready'),
                   const SizedBox(width: 22),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(engine.syncing ? 'SYNCING NOW' : 'IDLE', style: TextStyle(color: p.accent, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
+                      Text(engine.syncing ? 'SYNCING NOW' : 'IDLE',
+                          style: TextStyle(color: p.accent, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
                       const SizedBox(height: 6),
                       Text(engine.syncing ? '${s['playlist'] ?? ''}' : 'Everything is saved', style: _h2()),
                       const SizedBox(height: 4),
-                      Text(engine.syncing ? '${s['label'] ?? ''}  ·  ${counts['done'] ?? 0} saved, ${counts['skip'] ?? 0} skipped, ${counts['fail'] ?? 0} failed' : 'Press Sync all to check every playlist for new songs.',
+                      Text(
+                          engine.syncing
+                              ? '${s['label'] ?? ''}  ·  ${counts['done'] ?? 0} saved, ${counts['skip'] ?? 0} skipped, ${counts['fail'] ?? 0} failed'
+                              : 'Press Sync all to check every playlist for new songs.',
                           style: _muted(13)),
                     ]),
                   ),
@@ -1161,7 +1316,8 @@ class _ReportCard extends StatelessWidget {
             tooltip: 'Copy the list',
             onPressed: () {
               final text = [
-                for (final e in entries.where((e) => e['kind'] != 'done')) '${e['kind'] == 'fail' ? 'FAILED' : 'SKIPPED'}  ${e['title']}  (${e['playlist']}): ${e['detail']}'
+                for (final e in entries.where((e) => e['kind'] != 'done'))
+                  '${e['kind'] == 'fail' ? 'FAILED' : 'SKIPPED'}  ${e['title']}  (${e['playlist']}): ${e['detail']}'
               ].join('\n');
               Clipboard.setData(ClipboardData(text: text));
               dToast(context, 'Copied');
@@ -1171,7 +1327,9 @@ class _ReportCard extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         if (report == null || entries.isEmpty)
-          Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Text('No sync yet. After a sync, every saved, skipped and failed song is listed here with the reason.', style: _muted(13)))
+          Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Text('No sync yet. After a sync, every saved, skipped and failed song is listed here with the reason.', style: _muted(13)))
         else if (rows.isEmpty)
           Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Text(tab == 'fail' ? 'Nothing failed.' : 'Nothing here.', style: _muted(13)))
         else
@@ -1190,7 +1348,10 @@ class _ReportCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 _Dot('${e['kind']}'),
                 const SizedBox(width: 8),
-                Expanded(flex: 5, child: Text('${e['detail']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text.withValues(alpha: 0.8), fontSize: 13))),
+                Expanded(
+                    flex: 5,
+                    child: Text('${e['detail']}',
+                        maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text.withValues(alpha: 0.8), fontSize: 13))),
                 const SizedBox(width: 10),
                 if (e['kind'] == 'done' && '${e['path']}'.isNotEmpty)
                   _pill('Show file', onTap: () => engine.open('${e['path']}'))
@@ -1277,58 +1438,25 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
   /// Downloads the ticked songs into a playlist the user picks (or a new one).
   Future<void> _downloadPicked(String title) async {
     final list = songs ?? const [];
-    final chosen = [for (final i in (picked ?? <int>{}).toList()..sort()) if (i < list.length) list[i]];
+    final chosen = [
+      for (final i in (picked ?? <int>{}).toList()..sort())
+        if (i < list.length) list[i]
+    ];
     if (chosen.isEmpty) return;
-    final target = await _pickTarget(title);
-    if (target == null || !mounted) return;
-    final urls = [for (final t in chosen) '${t['url'] ?? ''}'];
+    final targets = await pickPcPlaylists(context, title: 'Save the songs into', preselect: title, action: 'Download');
+    if (targets == null || targets.isEmpty || !mounted) return;
     // Links we have (YouTube, SoundCloud) are downloaded as they are; Spotify
     // songs have no link, so they are found by name, like a song list import.
-    final existing = engine.playlists.any((x) => x['folder'] == target);
-    final err = existing && urls.every((u) => u.isNotEmpty)
-        ? await engine.downloadSongs(target, urls)
-        : await engine.importLists({target: [for (final t in chosen) '${t['title']} - ${t['artist'] ?? ''}'.trim()]});
+    final err = await downloadSongsInto(targets, chosen);
     if (!mounted) return;
     if (err != null) {
       dToast(context, err);
       return;
     }
     setState(() => picked = null);
-    dToast(context, 'Downloading ${chosen.length} song${chosen.length == 1 ? '' : 's'} into "$target"');
+    dToast(context,
+        'Downloading ${chosen.length} song${chosen.length == 1 ? '' : 's'} into ${targets.length == 1 ? '"${targets.first}"' : '${targets.length} playlists'}');
     dPage.value = DPage.sync;
-  }
-
-  Future<String?> _pickTarget(String current) {
-    final ctrl = TextEditingController();
-    final names = <String>{current, for (final x in engine.playlists) '${x['folder']}'}.where((n) => n.isNotEmpty).toList();
-    return showDialog<String>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Save the songs into'),
-        content: SizedBox(
-          width: 420,
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            TextField(
-              controller: ctrl,
-              decoration: const InputDecoration(labelText: 'New playlist name', prefixIcon: Icon(Icons.add_rounded)),
-              onSubmitted: (v) => v.trim().isEmpty ? null : Navigator.pop(c, v.trim()),
-            ),
-            const SizedBox(height: 10),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 300),
-              child: ListView(shrinkWrap: true, children: [
-                for (final n in names)
-                  ListTile(leading: const Icon(Icons.queue_music_rounded), title: Text(n, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => Navigator.pop(c, n)),
-              ]),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-          FilledButton(onPressed: () => ctrl.text.trim().isEmpty ? null : Navigator.pop(c, ctrl.text.trim()), child: const Text('Create and download')),
-        ],
-      ),
-    );
   }
 
   @override
@@ -1357,7 +1485,11 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
             Text(list == null ? 'Loading the songs…' : '${list.length} songs · streaming, not downloaded yet', style: _muted()),
             const SizedBox(height: 16),
             Wrap(spacing: 10, runSpacing: 10, children: [
-              FilledButton.icon(style: _primary(), onPressed: (list ?? const []).isEmpty ? null : () => _play(0), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play online')),
+              FilledButton.icon(
+                  style: _primary(),
+                  onPressed: (list ?? const []).isEmpty ? null : () => _play(0),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Play online')),
               _pill(engine.syncing ? 'Syncing…' : 'Download all', icon: Icons.download_rounded, onTap: engine.syncing ? null : _download),
               if (sel == null)
                 _pill('Pick songs', icon: Icons.checklist_rounded, onTap: (list ?? const []).isEmpty ? null : () => setState(() => picked = {}))
@@ -1370,7 +1502,8 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
                 ),
                 _pill(sel.length == (list ?? const []).length ? 'Clear all' : 'Select all',
                     icon: Icons.select_all_rounded,
-                    onTap: () => setState(() => picked = sel.length == (list ?? const []).length ? {} : {for (var i = 0; i < (list ?? const []).length; i++) i})),
+                    onTap: () =>
+                        setState(() => picked = sel.length == (list ?? const []).length ? {} : {for (var i = 0; i < (list ?? const []).length; i++) i})),
                 _pill('Cancel', icon: Icons.close_rounded, onTap: () => setState(() => picked = null)),
               ],
               _PlaylistMore(folder: widget.folder, title: title),
@@ -1393,13 +1526,13 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
             leading: sel != null
                 ? Checkbox(value: sel.contains(i), onChanged: (v) => setState(() => v == true ? sel.add(i) : sel.remove(i)))
                 : SizedBox(
-              width: 28,
-              child: Center(
-                child: playingId == 'online:${widget.folder}:$i'
-                    ? Icon(Icons.graphic_eq_rounded, color: p.accent, size: 20)
-                    : Text('${i + 1}', style: _muted(13)),
-              ),
-            ),
+                    width: 28,
+                    child: Center(
+                      child: playingId == 'online:${widget.folder}:$i'
+                          ? Icon(Icons.graphic_eq_rounded, color: p.accent, size: 20)
+                          : Text('${i + 1}', style: _muted(13)),
+                    ),
+                  ),
             title: Text('${t['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w500)),
             subtitle: Text('${t['artist'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _muted(12)),
             trailing: Text(fmtTime(Duration(seconds: ((t['secs'] as num?) ?? 0).toInt())), style: _muted(12)),
@@ -1409,11 +1542,8 @@ class _OnlinePlaylistState extends State<_OnlinePlaylist> {
   }
 }
 
-String _queryFor(String title) => title
-    .replaceAll(RegExp(r'\(\s*from[^)]*\)', caseSensitive: false), '')
-    .replaceAll(RegExp(r'[\[\(][^\]\)]*[\]\)]'), '')
-    .replaceAll(' - ', ' ')
-    .trim();
+String _queryFor(String title) =>
+    title.replaceAll(RegExp(r'\(\s*from[^)]*\)', caseSensitive: false), '').replaceAll(RegExp(r'[\[\(][^\]\)]*[\]\)]'), '').replaceAll(' - ', ' ').trim();
 
 class _PlaylistsCard extends StatelessWidget {
   @override
@@ -1438,7 +1568,8 @@ class _PlaylistsCard extends StatelessWidget {
                 color: p.muted,
               ),
               const SizedBox(width: 12),
-              Expanded(child: Text('${pl['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w500))),
+              Expanded(
+                  child: Text('${pl['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.text, fontWeight: FontWeight.w500))),
               SizedBox(width: 110, child: Text('${pl['songs']} songs', style: _muted(12))),
               SizedBox(width: 90, child: Text(_mb((pl['bytes'] as num?) ?? 0), style: _muted(12))),
               IconButton(tooltip: 'Open', onPressed: () => openPlaylist('${pl['folder']}'), icon: const Icon(Icons.chevron_right_rounded)),
@@ -1625,27 +1756,73 @@ class _SettingsPageState extends State<SettingsPage> {
                 dToast(context, 'Copied ${store.tracks.length} songs');
               }),
               _pill('Save as .txt', icon: Icons.save_alt_rounded, onTap: () async {
-                final loc = await getSaveLocation(suggestedName: 'SpotVault song list.txt', acceptedTypeGroups: const [XTypeGroup(label: 'Text', extensions: ['txt'])]);
+                final loc = await getSaveLocation(suggestedName: 'SpotVault song list.txt', acceptedTypeGroups: const [
+                  XTypeGroup(label: 'Text', extensions: ['txt'])
+                ]);
                 if (loc == null) return;
                 await File(loc.path).writeAsString(buildSongList(store));
                 if (context.mounted) dToast(context, 'Saved');
               }),
-              FilledButton.icon(style: _primary(), onPressed: () => importSongListDialog(context), icon: const Icon(Icons.download_rounded, size: 16), label: const Text('Import a list')),
+              FilledButton.icon(
+                  style: _primary(),
+                  onPressed: () => importSongListDialog(context),
+                  icon: const Icon(Icons.download_rounded, size: 16),
+                  label: const Text('Import a list')),
             ]),
           ]),
-          _Section('AI assistants (MCP)', [
-            Text('Let Claude, Cursor or other AI apps see trending songs, search, and save songs into your playlists. '
-                'Add SpotVault as an MCP server in the AI app (copy the setup below). SpotVault must be open to save songs.',
+          _Section('Equaliser', [
+            Text('Shape the sound: 5 bands, presets like Bass boost and Vocal, and your own presets.', style: _muted(13)),
+            const SizedBox(height: 12),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              FilledButton.icon(style: _primary(), onPressed: () => showEqDialog(context), icon: const Icon(Icons.equalizer_rounded, size: 16), label: Text(store.eqOn ? 'Equaliser: on' : 'Equaliser: off')),
+            ]),
+          ]),
+          _Section('Duplicate songs', [
+            Text(
+                'A song saved in several playlists is stored once and shows in each of them, so it takes no extra space. '
+                'SpotVault links exact copies by itself; check here for the same song downloaded twice.',
                 style: _muted(13)),
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
-              _pill('Copy Claude Desktop setup', icon: Icons.copy_rounded, onTap: () {
-                Clipboard.setData(ClipboardData(text: mcpConfigJson()));
-                dToast(context, 'Copied. Paste it into claude_desktop_config.json (Settings, Developer, Edit config).');
+              FilledButton.icon(
+                  style: _primary(),
+                  onPressed: () => duplicatesDialog(context),
+                  icon: const Icon(Icons.layers_clear_rounded, size: 16),
+                  label: const Text('Find duplicates')),
+            ]),
+          ]),
+          _Section('AI assistants (MCP)', [
+            Text(
+                'Ask Claude, Cursor or any AI app with MCP for new music: songs like one you love, an artist’s new releases, '
+                'whole albums, charts. It sees your library, makes playlists and saves songs into them (SpotVault opens '
+                'minimised by itself when it needs to save).',
+                style: _muted(13)),
+            const SizedBox(height: 12),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              FilledButton.icon(
+                style: _primary(),
+                icon: const Icon(Icons.extension_rounded, size: 16),
+                label: const Text('Add to Claude Desktop'),
+                onPressed: () async {
+                  final r = await engine.mcpb();
+                  if (!context.mounted) return;
+                  if (r.$2 != null) return dToast(context, r.$2!);
+                  // Opening the .mcpb shows Claude Desktop's own "Install" window.
+                  await Process.run('cmd', ['/c', 'start', '', r.$1!]);
+                  if (context.mounted) dToast(context, 'Claude Desktop opens an install window: press Install.');
+                },
+              ),
+              _pill('Add to Cursor', icon: Icons.open_in_new_rounded, onTap: () async {
+                final cfg = base64Encode(utf8.encode(jsonEncode({'command': mcpExePath(), 'args': ['--mcp']})));
+                await Process.run('cmd', ['/c', 'start', '', 'cursor://anysphere.cursor-deeplink/mcp/install?name=spotvault&config=$cfg']);
               }),
               _pill('Copy Claude Code command', icon: Icons.terminal_rounded, onTap: () {
                 Clipboard.setData(ClipboardData(text: 'claude mcp add spotvault -- "${mcpExePath()}" --mcp'));
                 dToast(context, 'Copied. Run it in a terminal.');
+              }),
+              _pill('Copy setup for other apps', icon: Icons.copy_rounded, onTap: () {
+                Clipboard.setData(ClipboardData(text: mcpConfigJson()));
+                dToast(context, 'Copied. Paste it into the AI app’s MCP settings (the "mcpServers" JSON).');
               }),
             ]),
           ]),
@@ -1691,9 +1868,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 style: _muted(13)),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: TextField(controller: keyId, decoration: InputDecoration(labelText: engine.state['spotify_key'] == true ? 'Client ID (your key is in use)' : 'Client ID', isDense: true))),
+              Expanded(
+                  child: TextField(
+                      controller: keyId,
+                      decoration:
+                          InputDecoration(labelText: engine.state['spotify_key'] == true ? 'Client ID (your key is in use)' : 'Client ID', isDense: true))),
               const SizedBox(width: 10),
-              Expanded(child: TextField(controller: keySecret, obscureText: true, decoration: const InputDecoration(labelText: 'Client secret', isDense: true))),
+              Expanded(
+                  child: TextField(controller: keySecret, obscureText: true, decoration: const InputDecoration(labelText: 'Client secret', isDense: true))),
             ]),
             const SizedBox(height: 10),
             Row(children: [
@@ -1728,7 +1910,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 FilledButton(
                   style: _primary(),
                   onPressed: engine.state['update_progress'] != null ? null : () => engine.installUpdate(),
-                  child: Text(engine.state['update_progress'] != null ? 'Downloading ${(((engine.state['update_progress'] as num?) ?? 0) * 100).round()}%' : 'Install update'),
+                  child: Text(engine.state['update_progress'] != null
+                      ? 'Downloading ${(((engine.state['update_progress'] as num?) ?? 0) * 100).round()}%'
+                      : 'Install update'),
                 )
               else
                 _pill('Check for updates', onTap: _checkUpdate),
@@ -1748,6 +1932,7 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 16),
-        child: _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: _h2()), const SizedBox(height: 12), ...children])),
+        child:
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: _h2()), const SizedBox(height: 12), ...children])),
       );
 }

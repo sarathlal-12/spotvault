@@ -9,6 +9,8 @@ import '../pc_link.dart';
 import 'aurora.dart';
 import 'common.dart';
 import 'menus.dart';
+import 'trending_view.dart' show PhoneTrendingBackend;
+import '../recognize/recognize_sheet.dart';
 
 enum _Mode { library, online }
 
@@ -148,20 +150,21 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
     final target = searchTarget.value == null ? null : store.playlistByFolder(searchTarget.value!);
-    final pl = target ??
-        await showModalBottomSheet<PlaylistInfo>(
-          context: context,
-          showDragHandle: true,
-          isScrollControlled: true,
-          builder: (ctx) => _PlaylistPicker(song: song),
-        );
-    if (pl == null) return;
+    final pls = target != null
+        ? [target]
+        : await showModalBottomSheet<List<PlaylistInfo>>(
+            context: context,
+            showDragHandle: true,
+            isScrollControlled: true,
+            builder: (ctx) => _PlaylistPicker(song: song),
+          );
+    if (pls == null || pls.isEmpty) return;
     store.addRecentSearch(song.toJson());
     final ghost = store.ghostQueue;
     _snack(ghost
         ? '"${song.title}" is in your Ghost Queue. It plays next once it reaches the phone.'
-        : 'Saving "${song.title}" to ${pl.name}…');
-    pcLink.download(song, pl, playWhenReady: ghost);
+        : 'Saving "${song.title}" to ${_plNames(pls)}…');
+    pcLink.download(song, pls.first, also: pls.skip(1).toList(), playWhenReady: ghost);
   }
 
   void _snack(String text) {
@@ -233,7 +236,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 hintText: online ? 'Search any song or artist' : 'Songs, artists or albums',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: ctrl.text.isEmpty
-                    ? null
+                    ? IconButton(
+                        tooltip: "What's this song?",
+                        icon: Icon(Icons.graphic_eq_rounded, color: kAccent),
+                        onPressed: () => showRecognizeSheet(context, _recognizer),
+                      )
                     : IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () {
@@ -310,9 +317,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _libraryBody() {
     final results = store.search(ctrl.text);
-    if (ctrl.text.isEmpty) {
-      return const _Hint(icon: Icons.library_music_outlined, text: 'Search the music on this phone');
-    }
+    if (ctrl.text.isEmpty) return RecognizeHero(backend: _recognizer);
     if (results.isEmpty) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -376,7 +381,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               )
+            else if (results.isEmpty && lastQuery.isEmpty && store.recentSearches.isEmpty)
+              SliverFillRemaining(hasScrollBody: false, child: RecognizeHero(backend: _recognizer))
             else if (results.isEmpty && lastQuery.isEmpty && store.recentSearches.isNotEmpty) ...[
+              SliverToBoxAdapter(child: SizedBox(height: 260, child: RecognizeHero(backend: _recognizer))),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(22, 8, 12, 4),
@@ -726,17 +734,28 @@ class _NetArt extends StatelessWidget {
   }
 }
 
-/// Bottom sheet: which playlist should the song go into?
-class _PlaylistPicker extends StatelessWidget {
+/// Bottom sheet: which playlists should the song go into? Tick one or more;
+/// the song is downloaded once and shows in each of them.
+class _PlaylistPicker extends StatefulWidget {
   final OnlineSong song;
   const _PlaylistPicker({required this.song});
 
   @override
+  State<_PlaylistPicker> createState() => _PlaylistPickerState();
+}
+
+class _PlaylistPickerState extends State<_PlaylistPicker> {
+  final ticked = <String>{};
+  final extra = <PlaylistInfo>[]; // made here with "New playlist"
+
+  @override
   Widget build(BuildContext context) {
-    final lists = store.sortedPlaylists;
+    final song = widget.song;
+    final lists = [...extra, ...store.sortedPlaylists.where((p) => !extra.any((x) => x.folder == p.folder))];
+    final chosen = [for (final p in lists) if (ticked.contains(p.folder)) p];
     return SafeArea(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.75),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -759,9 +778,13 @@ class _PlaylistPicker extends StatelessWidget {
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 6),
-              child: Text('Save to playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 2),
+              child: Text('Save to playlists', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kText)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+              child: Text('Tick one or more. The song is saved once and shows in each.', style: TextStyle(color: kMuted, fontSize: 12)),
             ),
             Flexible(
               child: ListView.builder(
@@ -769,7 +792,7 @@ class _PlaylistPicker extends StatelessWidget {
                 itemCount: lists.length + (pcLink.onPhone ? 1 : 0),
                 itemBuilder: (_, i) {
                   if (pcLink.onPhone) {
-                    if (i == 0) {
+                    if (i == lists.length) {
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                         leading: Container(
@@ -782,30 +805,48 @@ class _PlaylistPicker extends StatelessWidget {
                         subtitle: Text('Keep it on this phone', style: TextStyle(color: kMuted, fontSize: 12)),
                         onTap: () async {
                           final p = await createPlaylistFlow(context);
-                          if (p != null && context.mounted) Navigator.pop(context, p);
+                          if (p != null && mounted) {
+                            setState(() {
+                              extra.add(p);
+                              ticked.add(p.folder);
+                            });
+                          }
                         },
                       );
                     }
-                    i -= 1;
                   }
                   final p = lists[i];
-                  return ListTile(
+                  final on = ticked.contains(p.folder);
+                  return CheckboxListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    leading: ArtImage(file: store.coverFor(p), size: 48, fallback: Icons.queue_music),
+                    value: on,
+                    onChanged: (v) => setState(() => v == true ? ticked.add(p.folder) : ticked.remove(p.folder)),
+                    secondary: ArtImage(file: store.coverFor(p), size: 48, fallback: Icons.queue_music),
                     title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text('${p.trackIds.length} songs', style: TextStyle(color: kMuted, fontSize: 12)),
-                    onTap: () => Navigator.pop(context, p),
                   );
                 },
               ),
             ),
-            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: chosen.isEmpty ? null : () => Navigator.pop(context, chosen),
+                  icon: const Icon(Icons.download_rounded),
+                  label: Text(chosen.length > 1 ? 'Save to ${chosen.length} playlists' : 'Save'),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 }
+
+String _plNames(List<PlaylistInfo> l) => l.length == 1 ? l.first.name : '${l.length} playlists';
 
 /// Save an online song into a playlist the user picks (used by Trending and
 /// song recognition too).
@@ -814,19 +855,22 @@ Future<void> saveOnlineSongFlow(BuildContext context, OnlineSong song) async {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No playlists yet. Sync your playlists from the PC first.')));
     return;
   }
-  final pl = await showModalBottomSheet<PlaylistInfo>(
+  final pls = await showModalBottomSheet<List<PlaylistInfo>>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (ctx) => _PlaylistPicker(song: song),
   );
-  if (pl == null || !context.mounted) return;
+  if (pls == null || pls.isEmpty || !context.mounted) return;
   final ghost = store.ghostQueue;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(ghost ? '"${song.title}" is in your Ghost Queue. It plays next once it reaches the phone.' : 'Saving "${song.title}" to ${pl.name}…')));
-  pcLink.download(song, pl, playWhenReady: ghost);
+    ..showSnackBar(SnackBar(content: Text(ghost ? '"${song.title}" is in your Ghost Queue. It plays next once it reaches the phone.' : 'Saving "${song.title}" to ${_plNames(pls)}…')));
+  pcLink.download(song, pls.first, also: pls.skip(1).toList(), playWhenReady: ghost);
 }
+
+/// Song recognition on the Search tab (results play and save like Trending).
+final _recognizer = PhoneTrendingBackend();
 
 /// Download progress for songs the user saved from search.
 class _JobsPanel extends StatelessWidget {
