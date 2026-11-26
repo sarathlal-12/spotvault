@@ -4,8 +4,8 @@ import '../app_state.dart';
 import '../library_store.dart';
 import '../phone_dedupe.dart';
 
-/// Sync tab > More > Clean up duplicates: songs saved on the phone more than
-/// once. Identical copies merge in one tap; for the same song downloaded twice
+/// Sync tab > More > Clean up duplicates: songs stored on the phone more than
+/// once (downloaded on the phone or synced from the PC). Identical copies merge in one tap; for the same song downloaded twice
 /// you pick the copy to keep (the best quality one is picked for you).
 class DupesScreen extends StatefulWidget {
   const DupesScreen({super.key});
@@ -56,7 +56,8 @@ class _DupesScreenState extends State<DupesScreen> {
 
   String _quality(Track t) {
     final kbps = t.duration > 0 ? (t.size * 8 / t.duration / 1000).round() : 0;
-    return [formatBytes(t.size), if (kbps > 0) '$kbps kbps', if (t.duration > 0) formatDuration(t.length)].join(' · ');
+    return [if (!t.phoneOnly) 'from PC', formatBytes(t.size), if (kbps > 0) '$kbps kbps', if (t.duration > 0) formatDuration(t.length)]
+        .join(' · ');
   }
 
   @override
@@ -71,8 +72,8 @@ class _DupesScreenState extends State<DupesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 32), children: [
               Text(
-                'Songs you saved on this phone more than once. One copy stays and shows up in every playlist it was in. '
-                'Songs that came from your PC are left alone: the PC cleans those up.',
+                'Songs stored on this phone more than once, including ones that came from your PC. One copy stays and shows up in '
+                'every playlist it was in. A later PC sync keeps it that way.',
                 style: TextStyle(color: kMuted, fontSize: 13),
               ),
               const SizedBox(height: 16),

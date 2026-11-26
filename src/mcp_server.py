@@ -17,7 +17,7 @@ import urllib.request
 import sources
 
 PORT = 50505
-SERVER_INFO = {"name": "spotvault", "version": "2.4.3"}
+SERVER_INFO = {"name": "spotvault", "version": "2.4.4"}
 
 _PL = {"type": "array", "items": {"type": "string"},
        "description": "Playlist folder names from list_playlists (one or more). A song saved into several playlists is stored once."}

@@ -279,7 +279,7 @@ class _SyncScreenState extends State<SyncScreen> {
             _MoreTile(
               icon: Icons.cleaning_services_outlined,
               title: 'Clean up duplicates',
-              subtitle: 'Songs saved on this phone more than once',
+              subtitle: 'Songs stored on this phone more than once',
               onTap: () async {
                 await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DupesScreen()));
                 _refreshStorage();

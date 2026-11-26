@@ -28,6 +28,7 @@ Track _song(String id, String title, String artist, List<int> bytes, {double sec
 
 void main() {
   setUp(() {
+    debugDedupeOnWindows = true;
     store.baseDir = Directory.systemTemp.createTempSync('sv_dupes');
     store.musicDir = Directory('${store.baseDir.path}/Music')..createSync();
     store.artDir = Directory('${store.baseDir.path}/art')..createSync();
@@ -53,12 +54,12 @@ void main() {
     _song('c', 'Kesariya', 'Arijit Singh', List.filled(100000, 1), secs: 268);
     _song('d', 'Kesariya [Lyrical]', 'Arijit Singh', List.filled(300000, 2), secs: 269); // better quality
     _song('e', 'Other Song', 'Someone', List.filled(1000, 3));
-    _song('f', 'Tum Hi Ho', 'Arijit Singh', same, phone: false); // from the PC: left alone
+    _song('f', 'Tum Hi Ho', 'Arijit Singh', same, phone: false); // from the PC: counts too (2.4.4)
 
     final groups = await findPhoneDupes();
     expect(groups.length, 2);
     final exact = groups.firstWhere((g) => g.exact);
-    expect({for (final t in exact.copies) t.id}, {'a', 'b'});
+    expect({for (final t in exact.copies) t.id}, {'a', 'b', 'f'});
     final near = groups.firstWhere((g) => !g.exact);
     expect(near.keep.id, 'd');
     expect(near.freeBytes, 100000);

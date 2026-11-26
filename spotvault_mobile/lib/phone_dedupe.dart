@@ -2,14 +2,16 @@
 //
 // A phone song is one file plus one entry; playlists only point at entries. So
 // "one copy per song" here means: keep one entry, point every playlist at it,
-// and delete the other files. Only songs downloaded on the phone are touched:
-// songs from the PC are cleaned up by the PC, and the next PC sync would bring
-// a removed one back.
+// and delete the other files. Songs from the PC count too: the merge is kept in
+// store.mergedInto, which the PC sync follows, so the other copy doesn't come back.
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'app_state.dart';
 import 'library_store.dart';
+
+/// Tests run on Windows: lets them use the phone clean-up there.
+bool debugDedupeOnWindows = false;
 
 /// The same song stored more than once.
 class DupeGroup {
@@ -87,9 +89,12 @@ Track _best(List<Track> l) => (List.of(l)
 /// Finds songs downloaded on the phone that are stored more than once.
 Future<List<DupeGroup>> findPhoneDupes([LibraryStore? s]) async {
   final st = s ?? store;
+  if (Platform.isWindows && !debugDedupeOnWindows) return []; // the PC has its own clean-up (hard links)
+  // Songs from the PC count too (2.4.4): a merge is remembered, so a PC sync
+  // doesn't bring the other copy back.
   final songs = [
     for (final t in st.tracks.values)
-      if (t.phoneOnly && st.localFile(t).existsSync()) t,
+      if (st.localFile(t).existsSync()) t,
   ];
   final byTitle = <String, List<Track>>{};
   for (final t in songs) {
@@ -154,6 +159,10 @@ Future<int> mergeDupes(DupeGroup g, [LibraryStore? s]) async {
         st.artFile(o).copySync(st.artFile(st.tracks[keep]!).path);
         st.tracks[keep]!.hasArt = true;
       } catch (_) {}
+    }
+    if (!o.phoneOnly) {
+      st.mergedInto[o.id] = keep;
+      st.mergedInto.updateAll((k, v) => v == o.id ? keep : v);
     }
     freed += o.size;
     // Phone-only songs are the app's own files (deleteTrack leaves files alone on Windows).

@@ -234,6 +234,23 @@ class LibraryStore extends ChangeNotifier {
   List<double> eqCustom = []; // dB per band for the "custom" preset
   /// PC songs and playlists removed on the phone: syncs skip them.
   final Set<String> excludedTracks = {};
+
+  /// Copies merged by "Clean up duplicates": removed song id -> the id kept.
+  /// A PC sync follows this, so a merged copy never comes back (2.4.4).
+  final Map<String, String> mergedInto = {};
+
+  /// The song [id] was merged into, if that song is still on the phone.
+  String? keptFor(String id) {
+    var cur = id;
+    for (var i = 0; i < 10; i++) {
+      final next = mergedInto[cur];
+      if (next == null) break;
+      cur = next;
+    }
+    if (cur == id) return null;
+    final t = tracks[cur];
+    return t != null && localFile(t).existsSync() ? cur : null;
+  }
   final Set<String> excludedFolders = {};
 
   /// Deletions to send to the PC at the next sync (song paths, playlist folders).
@@ -331,6 +348,7 @@ class LibraryStore extends ChangeNotifier {
       eqPreset = j['eqPreset'] ?? 'off';
       eqCustom = [for (final v in (j['eqCustom'] as List? ?? const [])) (v as num).toDouble()];
       excludedTracks.addAll(List<String>.from(j['excludedTracks'] ?? const []));
+      mergedInto.addAll(Map<String, String>.from(j['mergedInto'] ?? const {}));
       excludedFolders.addAll(List<String>.from(j['excludedFolders'] ?? const []));
       pcDeletePaths.addAll(List<String>.from(j['pcDeletePaths'] ?? const []));
       pcDeleteFolders.addAll(List<String>.from(j['pcDeleteFolders'] ?? const []));
@@ -399,6 +417,7 @@ class LibraryStore extends ChangeNotifier {
           'eqCustom': eqCustom,
           'recentSearches': recentSearches,
           'excludedTracks': excludedTracks.toList(),
+          'mergedInto': mergedInto,
           'excludedFolders': excludedFolders.toList(),
           'pcDeletePaths': pcDeletePaths.toList(),
           'pcDeleteFolders': pcDeleteFolders.toList(),

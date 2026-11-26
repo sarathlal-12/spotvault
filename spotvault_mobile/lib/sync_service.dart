@@ -267,6 +267,12 @@ class SyncService extends ChangeNotifier {
     final toFetch = <Track>[];
     for (final pl in remotePlaylists) {
       for (final raw in (pl['tracks'] as List).cast<Map<String, dynamic>>()) {
+        // Merged on the phone (Clean up duplicates): keep using that copy.
+        final kept = store.keptFor(raw['id'] as String);
+        if (kept != null) {
+          remoteTracks.putIfAbsent(kept, () => store.tracks[kept]!);
+          continue;
+        }
         // A song in several playlists is one file on the PC: copy it once.
         if (remoteTracks.containsKey(raw['id'])) continue;
         final prev = store.tracks[raw['id']];
@@ -298,7 +304,7 @@ class SyncService extends ChangeNotifier {
       final fresh = PlaylistInfo(
         folder: folder,
         title: pl['title'] ?? folder,
-        trackIds: [for (final t in (pl['tracks'] as List)) t['id'] as String],
+        trackIds: {for (final t in (pl['tracks'] as List)) store.keptFor(t['id'] as String) ?? t['id'] as String}.toList(),
         hasCover: hasCover,
       );
       final old = store.playlistByFolder(folder);
