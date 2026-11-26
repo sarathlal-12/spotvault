@@ -42,9 +42,11 @@ class Eq {
       for (final (i, (hz, _)) in bands.indexed)
         if (store.eqGains[i] != 0) 'equalizer=f=$hz:t=o:w=${i == 0 || i == bands.length - 1 ? 2 : 1.5}:g=${store.eqGains[i].toStringAsFixed(1)}',
     ];
-    // A little headroom when boosting, so loud songs don't clip.
+    // A little headroom when boosting, so loud songs don't clip. The libmpv the
+    // app ships has no "volume" filter (using it broke playback in 2.4.0), so a
+    // very wide equalizer band lowers everything a little instead.
     final boost = store.eqGains.reduce((a, b) => a > b ? a : b);
-    if (boost > 0) parts.add('volume=${(-boost * 0.6).toStringAsFixed(1)}dB');
+    if (boost > 0) parts.add('equalizer=f=1000:t=o:w=12:g=${(-boost * 0.6).toStringAsFixed(1)}');
     return 'lavfi=[${parts.join(',')}]';
   }
 
